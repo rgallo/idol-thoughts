@@ -218,6 +218,18 @@ def outcome_matters(outcome):
     return "is now Unstable" not in outcome
 
 
+def already_ran_for_day(season_number, day):
+    if os.path.isfile('lastday.txt'):
+        with open("lastday.txt", "r") as f:
+            file_season_number, file_day = (int(n) for n in f.read().split("-"))
+            return file_season_number == season_number and file_day == day
+    return False
+
+def write_day(season_number, day):
+    with open("lastday.txt", "w") as f:
+        f.write("{}-{}".format(season_number, day))
+
+
 def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--print', help="print to screen", action='store_true')
@@ -228,6 +240,7 @@ def handle_args():
     parser.add_argument('--today', help="run for today instead of tomorrow", action='store_true')
     parser.add_argument('--skipupdate', help="skip csv update, even if there should be one", action='store_true')
     parser.add_argument('--forceupdate', help="force csv update, even if it doesn't need it", action='store_true')
+    parser.add_argument('--forcerun', help="force running for day, even if it was already run last", action='store_true')
     args = parser.parse_args()
     if not args.print and not args.discord and not args.airtable and not args.discordprint:
         print("No output specified")
@@ -242,9 +255,19 @@ def main():
     channelID, botToken = os.getenv("DISCORD_CHANNEL_ID"), os.getenv("DISCORD_BOT_TOKEN")
     streamdata = get_stream_snapshot()
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
-    day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0 indexed, add another for tomorrow
+    day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
+    tomorrowgames = streamdata['value']['games'][('schedule' if args.today else 'tomorrowSchedule')]
+    if not tomorrowgames:
+        print("No games found for Season {} Day {}, exiting.".format(season_number+1, day))
+        sys.exit(0)
+    if already_ran_for_day(season_number, day) and not args.forcerun:
+        print("Already ran for Season {} Day {}, exiting.".format(season_number+1, day))
+        sys.exit(0)
+    else:
+        write_day(season_number, day)
     outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
-    if (outcomes or args.forceupdate or ((day == 0 and args.today) or day == 1)) and not args.skipupdate:
+    stat_file_exists = os.path.isfile(args.statfile)
+    if (outcomes or not stat_file_exists or args.forceupdate or ((day == 0 and args.today) or day == 1)) and not args.skipupdate:
         if args.discord:
             message = "Generating new stat file, please stand by.\n\n{}".format("\n".join("`{}`".format(outcome) for outcome in outcomes))
             send_discord_message(channelID, botToken, "Sorry!", message[:DISCORD_SPLIT_LIMIT])
@@ -252,7 +275,6 @@ def main():
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile)
     team_stat_data, pitcher_stat_data = load_stat_data(args.statfile)
-    tomorrowgames = streamdata['value']['games'][('schedule' if args.today else 'tomorrowSchedule')]
     results = []
     for game in tomorrowgames:
         results.extend(process_game(game, season_number, day, team_stat_data, pitcher_stat_data))
