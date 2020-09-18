@@ -10,6 +10,7 @@ from collections import namedtuple
 import sys
 import time
 import os
+import traceback
 
 from airtable import Airtable
 import argparse
@@ -33,7 +34,7 @@ StlatData = namedtuple("StlatData", ["overpowerment", "ruthlessness", "unthwacka
                                      "meanomniscience", "meantenaciousness", "meanwatchfulness", "meanchasiness",  # Defense
                                      "meanbaseThirst"])  # Baserunning
 
-BR_URL = None
+BR_URL = "https://blaseball-reference.nyc3.digitaloceanspaces.com/public/json-data/pitching/{}/summary.json"
 
 PLAYERNAME_SUBS = {
     "wyatt-owens": "emmett-owens",
@@ -107,17 +108,6 @@ def load_stat_data(filepath):
                     teamstatdata[row["team"]][key].append(float(row[key]))
     return teamstatdata, pitcherstardata
 
-def get_br_url():
-    global BR_URL
-    if not BR_URL:
-        leader_page = requests.get("https://blaseball-reference.com/leaders")
-        build_id_label = '"buildId":"'
-        start_idx = leader_page.text.index(build_id_label) + len(build_id_label)
-        id_length = leader_page.text[start_idx:].index('","')
-        token = leader_page.text[start_idx:start_idx+id_length]
-        BR_URL = "https://blaseball-reference.com/_next/data/{}/players/{{}}.json".format(token)
-    return BR_URL
-
 def get_player_slug(playername):
     playerslug = playername.lower().replace(" ", "-")
     playerslug = PLAYERNAME_SUBS.get(playerslug, playerslug)
@@ -126,13 +116,12 @@ def get_player_slug(playername):
 
 def get_pitcher_stats(pitchername, season):
     playerslug = get_player_slug(pitchername)
-    brurl = get_br_url()
-    requrl = brurl.format(playerslug)
+    requrl = BR_URL.format(playerslug)
     try:
         time.sleep(3)
         response = requests.get(requrl)
         resjson = response.json()
-        return resjson["pageProps"]["pitchingStats"]["seasons"][str(season)]
+        return resjson["seasons"][str(season)]
     except:
         print("Error on {}, {}".format(pitchername, requrl))
         return {}
