@@ -1,0 +1,299 @@
+from __future__ import print_function
+from __future__ import division
+
+import requests
+import json
+import collections
+import csv
+from functools import reduce
+from collections import namedtuple
+import sys
+import time
+import os
+
+from airtable import Airtable
+import argparse
+import blaseball_stat_csv
+from dotenv import load_dotenv
+
+
+MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "gameid", "so9", "era", "defemoji", "vsteam", 
+                                         "offemoji", "defoff", "battingstars", "bng", "stardata", "ballcount", "strikecount"])
+
+StarData = namedtuple("StarData", ["pitchingstars", "maxbatstars", "meanbatstars", "maxdefstars", "meandefstars", 
+                                   "maxrunstars", "meanrunstars"])
+
+PITCHING_STLATS = ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness"]
+BATTING_STLATS = ["patheticism", "thwackability", "musclitude"]
+DEFENSE_STLATS = ["omniscience", "tenaciousness", "watchfulness", "chasiness"]
+BASERUNNING_STLATS = ["baseThirst"]
+
+StlatData = namedtuple("StlatData", ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness",  # Pitching
+                                     "minpatheticism", "meanthwackability", "meanmusclitude",  # Batting
+                                     "meanomniscience", "meantenaciousness", "meanwatchfulness", "meanchasiness",  # Defense
+                                     "meanbaseThirst"])  # Baserunning
+
+BR_URL = None
+
+PLAYERNAME_SUBS = {
+    "wyatt-owens": "emmett-owens",
+    "peanut-bong": "dan-bong",
+    "sexton-wheerer": "sexton-wheeler"
+}
+
+BNG_FLOOR = 100.0
+BNG_CEILING = 9.34e+45
+LAST_SEASON_STAT_CUTOFF = 11
+DISCORD_SPLIT_LIMIT = 1900
+
+def send_discord_message(channelID, botToken, title, message):
+    baseURL = "https://discordapp.com/api/channels/{}/messages".format(channelID)
+    headers = {"Authorization":"Bot {}".format(botToken),
+               "User-Agent":"myBotThing (http://some.url, v0.1)",
+               "Content-Type":"application/json"}
+    if (len(message) + len(title)) >= DISCORD_SPLIT_LIMIT:  # If message exceeds length, split in two (hopefully no more than that is needed)
+        message_parts = message.split("\n\n")
+        half_idx = len(message_parts) // 2
+        responses = []
+        for halfmessageparts, islast in ((message_parts[:half_idx], False), (message_parts[half_idx:], True)):
+            time.sleep(2)
+            POSTedJSON =  json.dumps({"embed": {"title": "{}{}".format(title, " (cont.)" if islast else ""), 
+                                                "description": "{}{}".format("\n\n".join(halfmessageparts),
+                                                                             "\n\nmore..." if not islast else "")}})
+            responses.append(requests.post(baseURL, headers = headers, data = POSTedJSON))
+        return responses
+    else:
+        POSTedJSON =  json.dumps({"embed": {"title": title, "description": message}})
+        return [requests.post(baseURL, headers = headers, data = POSTedJSON)]
+
+
+def geomean(numbers):
+    correction = .001 if 0.0 in numbers else 0.0
+    return (reduce(lambda x, y: x*y, [(n + correction) for n in numbers])**(1.0/len(numbers))) - correction
+
+
+def get_stream_snapshot():
+    snapshot = None
+    response = requests.get("https://www.blaseball.com/events/streamData", stream=True)
+    for line in response.iter_lines():
+        snapshot = line
+        break
+    return json.loads(snapshot.decode("utf-8")[6:])
+
+
+def get_def_off_ratio(pitcher, defenseteamname, offenseteamname, team_stat_data, pitcher_stat_data):
+    pitchingstars = pitcher_stat_data[pitcher]["pitchingStars"]
+    meandefstars = geomean(team_stat_data[defenseteamname]["defenseStars"])
+    meanbatstars = geomean(team_stat_data[offenseteamname]["battingStars"])
+    meanrunstars = geomean(team_stat_data[offenseteamname]["baserunningStars"])
+    return (pitchingstars+meandefstars)/((meanbatstars+meanrunstars) ** 2)
+
+
+def load_stat_data(filepath):
+    filedata = {}
+    with open(filepath) as f:
+        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
+    pitcherstardata = collections.defaultdict(lambda: {})
+    teamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: []))
+    for row in filedata:
+        if row["position"] == "rotation":
+            for key in (PITCHING_STLATS + ["pitchingStars"]):
+                pitcherstardata[row["name"]][key] = float(row[key])
+        elif row["position"] == "lineup":
+            if "SHELLED" not in row["permAttr"]:
+                for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
+                    teamstatdata[row["team"]][key].append(float(row[key]))
+            for key in (DEFENSE_STLATS + ["defenseStars"]):
+                    teamstatdata[row["team"]][key].append(float(row[key]))
+    return teamstatdata, pitcherstardata
+
+def get_br_url():
+    global BR_URL
+    if not BR_URL:
+        leader_page = requests.get("https://blaseball-reference.com/leaders")
+        build_id_label = '"buildId":"'
+        start_idx = leader_page.text.index(build_id_label) + len(build_id_label)
+        id_length = leader_page.text[start_idx:].index('","')
+        token = leader_page.text[start_idx:start_idx+id_length]
+        BR_URL = "https://blaseball-reference.com/_next/data/{}/players/{{}}.json".format(token)
+    return BR_URL
+
+def get_player_slug(playername):
+    playerslug = playername.lower().replace(" ", "-")
+    playerslug = PLAYERNAME_SUBS.get(playerslug, playerslug)
+    return playerslug
+
+
+def get_pitcher_stats(pitchername, season):
+    playerslug = get_player_slug(pitchername)
+    brurl = get_br_url()
+    requrl = brurl.format(playerslug)
+    try:
+        time.sleep(3)
+        response = requests.get(requrl)
+        resjson = response.json()
+        return resjson["pageProps"]["pitchingStats"]["seasons"][str(season)]
+    except:
+        print("Error on {}, {}".format(pitchername, requrl))
+        return {}
+
+
+def calc_bng(stlatdata):
+    factor = 2.09816813865559
+    pitching = ((1+stlatdata.overpowerment) ** 128.2118705) * ((1+stlatdata.ruthlessness) ** 210.2687919) * 304.4067104 * stlatdata.unthwackability * stlatdata.shakespearianism * stlatdata.coldness
+    batting = ((2 - stlatdata.minpatheticism) ** 274.5053073) * stlatdata.meanthwackability * stlatdata.meanmusclitude
+    defense = 165.2147522 * stlatdata.meanomniscience * stlatdata.meantenaciousness * stlatdata.meanwatchfulness * stlatdata.meanchasiness
+    blaserunning = stlatdata.meanbaseThirst
+    return factor * ((pitching / batting) + (defense / blaserunning))
+
+
+def calc_star_max_mean_stats(pitcher, defenseteamname, offenseteamname, team_stat_data, pitcher_stat_data):
+    pitchingstars = pitcher_stat_data[pitcher]["pitchingStars"]
+    maxbatstars = max(team_stat_data[offenseteamname]["battingStars"])
+    meanbatstars = geomean(team_stat_data[offenseteamname]["battingStars"])
+    maxdefstars = max(team_stat_data[defenseteamname]["defenseStars"])
+    meandefstars = geomean(team_stat_data[defenseteamname]["defenseStars"])
+    maxrunstars = max(team_stat_data[offenseteamname]["baserunningStars"])
+    meanrunstars = geomean(team_stat_data[offenseteamname]["baserunningStars"])
+    return StarData(pitchingstars, maxbatstars, meanbatstars, maxdefstars, meandefstars, maxrunstars, meanrunstars)
+
+
+def calc_stlat_stats(pitcher, defenseteamname, offenseteamname, team_stat_data, pitcher_stat_data):
+    ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness",  # Pitching
+                                     "minpatheticism", "meanthwackability", "meanmusclitude",  # Batting
+                                     "meanomniscience", "meantenaciousness", "meanwatchfulness", "meanchasiness",  # Defense
+                                     "meanbaseThirst"]  # Baserunning
+    stlatdata = [pitcher_stat_data[pitcher][stlat] for stlat in ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness"]]
+    stlatdata.extend((min(team_stat_data[offenseteamname]["patheticism"]), geomean(team_stat_data[offenseteamname]["thwackability"]), 
+                     geomean(team_stat_data[offenseteamname]["musclitude"])))
+    stlatdata.extend((geomean(team_stat_data[defenseteamname]["omniscience"]), geomean(team_stat_data[defenseteamname]["tenaciousness"]),
+                      geomean(team_stat_data[defenseteamname]["watchfulness"]), geomean(team_stat_data[defenseteamname]["chasiness"])))
+    stlatdata.append(geomean(team_stat_data[offenseteamname]["baseThirst"]))
+    return StlatData(*stlatdata)
+
+
+def get_dict_from_matchupdata(matchup, season_number, day):
+    return {"Pitcher Name": matchup.pitchername, "Season": season_number, "Day": day,
+            "SO9": matchup.so9, "ERA": matchup.era, "Opposing Team": matchup.vsteam,
+            "D/O": matchup.defoff, "Batting Stars": matchup.battingstars,
+            "Game ID": matchup.gameid, "Pitcher ID": matchup.pitcherid,
+            "Pitching Stars": matchup.stardata.pitchingstars, "Max Batting": matchup.stardata.maxbatstars,
+            "Mean Batting": matchup.stardata.meanbatstars, "Max Defense": matchup.stardata.maxdefstars, 
+            "Mean Defense": matchup.stardata.meandefstars, "Max Baserunning": matchup.stardata.maxrunstars, 
+            "Mean Baserunning": matchup.stardata.meanrunstars, "Ball Count": matchup.ballcount,
+            "Strike Count": matchup.strikecount}
+
+def insert_into_airtable(results, season_number, day):
+    airtable = Airtable(os.getenv("AIRTABLE_BASE_KEY"), os.getenv("AIRTABLE_TABLE_NAME"), os.getenv("AIRTABLE_API_KEY"))
+    airtable.batch_insert([get_dict_from_matchupdata(matchup, season_number, day) for matchup in results])
+
+
+def process_game(game, season_number, day, team_stat_data, pitcher_stat_data):
+    results = []
+    gameId = game["id"]
+    awayPitcher, homePitcher = game["awayPitcherName"], game["homePitcherName"]
+    awayPitcherId, homePitcherId = game["awayPitcher"], game["homePitcher"]
+    awayTeam, homeTeam = game["awayTeamName"], game["homeTeamName"]
+    awayEmoji, homeEmoji = game['awayTeamEmoji'], game['homeTeamEmoji']
+    stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
+    awayPitcherStats, homePitcherStats = get_pitcher_stats(awayPitcher, stat_season_number), get_pitcher_stats(homePitcher, stat_season_number)
+    awayStarStats = calc_star_max_mean_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
+    homeStarStats = calc_star_max_mean_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
+    awayStlatStats = calc_stlat_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
+    homeStlatStats = calc_stlat_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
+    results.append(MatchupData(awayPitcher, awayPitcherId, gameId, awayPitcherStats.get("strikeoutsPerNine", -1.0), 
+                                awayPitcherStats.get("earnedRunAverage", -1.0), awayEmoji, homeTeam, homeEmoji,
+                                get_def_off_ratio(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data),
+                                sum(team_stat_data[homeTeam]["battingStars"]), calc_bng(awayStlatStats), awayStarStats,
+                                4, game["homeStrikes"]))
+    results.append(MatchupData(homePitcher, homePitcherId, gameId, homePitcherStats.get("strikeoutsPerNine", -1.0), 
+                                homePitcherStats.get("earnedRunAverage", -1.0), homeEmoji, awayTeam, awayEmoji,
+                                get_def_off_ratio(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data),
+                                sum(team_stat_data[awayTeam]["battingStars"]), calc_bng(homeStlatStats), homeStarStats,
+                                4, game["awayStrikes"]))
+    return results
+
+
+def sort_results(results, so9_pitchers=None, bng_pitchers=None):
+    sorted_results = sorted(results, key=lambda res: res.so9, reverse=True)
+    if so9_pitchers and bng_pitchers:
+        grouped_results = [res for res in sorted_results if res.pitchername in so9_pitchers and res.pitchername in bng_pitchers]
+        grouped_results.extend([res for res in sorted_results if res.pitchername in so9_pitchers and res.pitchername not in bng_pitchers])
+        grouped_results.extend([res for res in sorted_results if res.pitchername not in so9_pitchers and res.pitchername in bng_pitchers])
+        grouped_results.extend([res for res in sorted_results if res.pitchername not in so9_pitchers and res.pitchername not in bng_pitchers])
+        sorted_results = grouped_results
+    return sorted_results
+
+
+def outcome_matters(outcome):
+    return "is now Unstable" not in outcome
+
+
+def handle_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--print', help="print to screen", action='store_true')
+    parser.add_argument('--discord', help="output to discord", action='store_true')
+    parser.add_argument('--discordprint', help="print discord output to screen", action='store_true')
+    parser.add_argument('--airtable', help="insert into airtable", action='store_true')
+    parser.add_argument('--statfile', default='output.csv', help="stats filepath")
+    parser.add_argument('--today', help="run for today instead of tomorrow", action='store_true')
+    parser.add_argument('--skipupdate', help="skip csv update, even if there should be one", action='store_true')
+    parser.add_argument('--forceupdate', help="force csv update, even if it doesn't need it", action='store_true')
+    args = parser.parse_args()
+    if not args.print and not args.discord and not args.airtable and not args.discordprint:
+        print("No output specified")
+        parser.print_help()
+        sys.exit(-1)
+    return args
+
+
+def main():
+    args = handle_args()
+    load_dotenv()
+    channelID, botToken = os.getenv("DISCORD_CHANNEL_ID"), os.getenv("DISCORD_BOT_TOKEN")
+    streamdata = get_stream_snapshot()
+    season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
+    day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0 indexed, add another for tomorrow
+    outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
+    if (outcomes or args.forceupdate or ((day == 0 and args.today) or day == 1)) and not args.skipupdate:
+        if args.discord:
+            message = "Generating new stat file, please stand by.\n\n{}".format("\n".join("`{}`".format(outcome) for outcome in outcomes))
+            send_discord_message(channelID, botToken, "Sorry!", message[:DISCORD_SPLIT_LIMIT])
+        else:
+            print("Generating new stat file, please stand by.")
+        blaseball_stat_csv.generate_file(args.statfile)
+    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile)
+    tomorrowgames = streamdata['value']['games'][('schedule' if args.today else 'tomorrowSchedule')]
+    results = []
+    for game in tomorrowgames:
+        results.extend(process_game(game, season_number, day, team_stat_data, pitcher_stat_data))
+    if results:
+        if args.discord or args.discordprint:
+            output = []
+            so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}
+            bng_pitchers = {res.pitchername for res in results if BNG_FLOOR <= res.bng <= BNG_CEILING}
+            for result in sort_results(results, so9_pitchers, bng_pitchers):
+                if result.pitchername in so9_pitchers or result.pitchername in bng_pitchers:
+                    so9 = "__{:.2f} SO9__".format(result.so9) if result.pitchername in so9_pitchers else "{:.2f} SO9".format(result.so9)
+                    formatted_bng = "{:.2f}".format(result.bng) if result.bng <= 1000000 else "{:.2e}".format(result.bng)
+                    bng = "__{} BNG__".format(formatted_bng) if result.pitchername in bng_pitchers else "{} BNG".format(formatted_bng)
+                    fmtstr = "{} **[{}](https://blaseball-reference.com/players/{})** ({}, {:.2f} ERA, {}) *vs.*\n {} **{}** ({:.2f} Bat★, {:.2f} MaxBat), {:.2f} D/O^2"
+                    output.append(fmtstr.format(chr(int(result.defemoji, 16)), result.pitchername, get_player_slug(result.pitchername), so9, result.era, bng, chr(int(result.offemoji, 16)), result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
+            title = "__**Day {}**__".format(day)
+            message = "\n\n".join(output)
+            if args.discord:
+                send_discord_message(channelID, botToken, title, message)
+            if args.discordprint:
+                print("{}\n{}".format(title, message))
+        if args.airtable:
+            insert_into_airtable(results, season_number+1, day)
+        if args.print:
+            print("Day {}".format(day))
+            for result in sort_results(results):
+                print("{} ({:.2f} SO9, {:.2f} ERA, {:.2f} BNG) vs. {} ({:.2f} Bat*, {:.2f} MaxBat), {:.2f} D/O^2".format(result.pitchername, result.so9, result.era, result.bng, result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
+    else:
+        print("No results")
+
+
+if __name__ == "__main__":
+    main()
