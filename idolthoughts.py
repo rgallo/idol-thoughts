@@ -263,8 +263,6 @@ def main():
     if already_ran_for_day(season_number, day) and not args.forcerun:
         print("Already ran for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
-    else:
-        write_day(season_number, day)
     outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
     stat_file_exists = os.path.isfile(args.statfile)
     if (outcomes or not stat_file_exists or args.forceupdate or ((day == 0 and args.today) or day == 1)) and not args.skipupdate:
@@ -304,6 +302,7 @@ def main():
                 print("{} ({:.2f} SO9, {:.2f} ERA, {:.2f} BNG) vs. {} ({:.2f} Bat*, {:.2f} MaxBat), {:.2f} D/O^2".format(result.pitchername, result.so9, result.era, result.bng, result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
     else:
         print("No results")
+    write_day(season_number, day)
 
 
 if __name__ == "__main__":
