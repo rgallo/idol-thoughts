@@ -218,15 +218,15 @@ def outcome_matters(outcome):
     return "is now Unstable" not in outcome
 
 
-def already_ran_for_day(season_number, day):
-    if os.path.isfile('lastday.txt'):
-        with open("lastday.txt", "r") as f:
+def already_ran_for_day(filepath, season_number, day):
+    if os.path.isfile(filepath):
+        with open(filepath, "r") as f:
             file_season_number, file_day = (int(n) for n in f.read().split("-"))
             return file_season_number == season_number and file_day == day
     return False
 
-def write_day(season_number, day):
-    with open("lastday.txt", "w") as f:
+def write_day(filepath, season_number, day):
+    with open(filepath, "w") as f:
         f.write("{}-{}".format(season_number, day))
 
 
@@ -237,6 +237,7 @@ def handle_args():
     parser.add_argument('--discordprint', help="print discord output to screen", action='store_true')
     parser.add_argument('--airtable', help="insert into airtable", action='store_true')
     parser.add_argument('--statfile', default='output.csv', help="stats filepath")
+    parser.add_argument('--dayfile', default='lastday.txt', help="stats filepath")
     parser.add_argument('--today', help="run for today instead of tomorrow", action='store_true')
     parser.add_argument('--skipupdate', help="skip csv update, even if there should be one", action='store_true')
     parser.add_argument('--forceupdate', help="force csv update, even if it doesn't need it", action='store_true')
@@ -260,7 +261,7 @@ def main():
     if not tomorrowgames:
         print("No games found for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
-    if already_ran_for_day(season_number, day) and not args.forcerun:
+    if already_ran_for_day(args.dayfile, season_number, day) and not args.forcerun:
         print("Already ran for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
     outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
@@ -302,7 +303,7 @@ def main():
                 print("{} ({:.2f} SO9, {:.2f} ERA, {:.2f} BNG) vs. {} ({:.2f} Bat*, {:.2f} MaxBat), {:.2f} D/O^2".format(result.pitchername, result.so9, result.era, result.bng, result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
     else:
         print("No results")
-    write_day(season_number, day)
+    write_day(args.dayfile, season_number, day)
 
 
 if __name__ == "__main__":
