@@ -43,7 +43,7 @@ PLAYERNAME_SUBS = {
 }
 
 BNG_FLOOR = 100.0
-BNG_CEILING = 9.34e+45
+BNG_CEILING = 943097
 LAST_SEASON_STAT_CUTOFF = 11
 DISCORD_SPLIT_LIMIT = 1900
 
@@ -128,10 +128,10 @@ def get_pitcher_stats(pitchername, season):
 
 
 def calc_bng(stlatdata):
-    factor = 2.09816813865559
-    pitching = ((1+stlatdata.overpowerment) ** 128.2118705) * ((1+stlatdata.ruthlessness) ** 210.2687919) * 304.4067104 * stlatdata.unthwackability * stlatdata.shakespearianism * stlatdata.coldness
-    batting = ((2 - stlatdata.minpatheticism) ** 274.5053073) * stlatdata.meanthwackability * stlatdata.meanmusclitude
-    defense = 165.2147522 * stlatdata.meanomniscience * stlatdata.meantenaciousness * stlatdata.meanwatchfulness * stlatdata.meanchasiness
+    factor = 13.30944112
+    pitching = ((1.096087859+stlatdata.overpowerment) ** 18.26327946) * ((0.971743351+stlatdata.ruthlessness) ** 26.77231877) * 16.57479715 * (1.099229426 + stlatdata.unthwackability) * (0.948936632 + stlatdata.shakespearianism) * (0.90582522 + stlatdata.coldness)
+    batting = ((3 - stlatdata.minpatheticism) ** 25.17059875) * (1+stlatdata.meanthwackability) * (1+stlatdata.meanmusclitude)
+    defense = 25.85703303 * stlatdata.meanomniscience * stlatdata.meantenaciousness * stlatdata.meanwatchfulness * stlatdata.meanchasiness
     blaserunning = stlatdata.meanbaseThirst
     return factor * ((pitching / batting) + (defense / blaserunning))
 
@@ -203,6 +203,27 @@ def process_game(game, season_number, day, team_stat_data, pitcher_stat_data):
     return results
 
 
+def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data):
+    with open(filepath, "r") as json_file:
+        json_data = json.load(json_file)
+        for matchup in json_data:
+            result = process_pitcher_vs_team(matchup["pitcherName"], matchup["pitcherTeam"], matchup["otherTeam"],
+                                             matchup["seasonNumber"], team_stat_data, pitcher_stat_data)
+            print("{} ({:.2f} SO9, {:.2f} ERA, {:.2f} BNG) vs. {} ({:.2f} Bat*, {:.2f} MaxBat), {:.2f} D/O^2".format(result.pitchername, result.so9, result.era, result.bng, result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
+
+
+
+def process_pitcher_vs_team(pitcherName, pitcherTeam, otherTeam, season_number, team_stat_data, pitcher_stat_data):
+    pitcherStats = get_pitcher_stats(pitcherName, season_number)
+    starStats = calc_star_max_mean_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
+    stlatStats = calc_stlat_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
+    return MatchupData(pitcherName, None, None, pitcherStats.get("strikeoutsPerNine", -1.0), 
+                       pitcherStats.get("earnedRunAverage", -1.0), None, otherTeam, None,
+                       get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
+                       sum(team_stat_data[otherTeam]["battingStars"]), calc_bng(stlatStats), starStats,
+                       4, 3)
+
+
 def sort_results(results, so9_pitchers=None, bng_pitchers=None):
     sorted_results = sorted(results, key=lambda res: res.so9, reverse=True)
     if so9_pitchers and bng_pitchers:
@@ -242,8 +263,9 @@ def handle_args():
     parser.add_argument('--skipupdate', help="skip csv update, even if there should be one", action='store_true')
     parser.add_argument('--forceupdate', help="force csv update, even if it doesn't need it", action='store_true')
     parser.add_argument('--forcerun', help="force running for day, even if it was already run last", action='store_true')
+    parser.add_argument('--lineupfile', help="json file with array of {pitcherName, pitcherTeam, awayTeam} lineups")
     args = parser.parse_args()
-    if not args.print and not args.discord and not args.airtable and not args.discordprint:
+    if not args.print and not args.discord and not args.airtable and not args.discordprint and not args.lineupfile:
         print("No output specified")
         parser.print_help()
         sys.exit(-1)
@@ -253,6 +275,10 @@ def handle_args():
 def main():
     args = handle_args()
     load_dotenv()
+    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile)
+    if args.lineupfile:
+        run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data)
+        sys.exit(0)
     channelID, botToken = os.getenv("DISCORD_CHANNEL_ID"), os.getenv("DISCORD_BOT_TOKEN")
     streamdata = get_stream_snapshot()
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
@@ -273,7 +299,6 @@ def main():
         else:
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile)
-    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile)
     results = []
     for game in tomorrowgames:
         results.extend(process_game(game, season_number, day, team_stat_data, pitcher_stat_data))
