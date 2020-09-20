@@ -303,10 +303,10 @@ def main():
     for game in tomorrowgames:
         results.extend(process_game(game, season_number, day, team_stat_data, pitcher_stat_data))
     if results:
+        so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}
+        bng_pitchers = {res.pitchername for res in results if BNG_FLOOR <= res.bng <= BNG_CEILING}
         if args.discord or args.discordprint:
             output = []
-            so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}
-            bng_pitchers = {res.pitchername for res in results if BNG_FLOOR <= res.bng <= BNG_CEILING}
             for result in sort_results(results, so9_pitchers, bng_pitchers):
                 if result.pitchername in so9_pitchers or result.pitchername in bng_pitchers:
                     so9 = "__{:.2f} SO9__".format(result.so9) if result.pitchername in so9_pitchers else "{:.2f} SO9".format(result.so9)
@@ -324,7 +324,7 @@ def main():
             insert_into_airtable(results, season_number+1, day)
         if args.print:
             print("Day {}".format(day))
-            for result in sort_results(results):
+            for result in sort_results(results, so9_pitchers, bng_pitchers):
                 print("{} ({:.2f} SO9, {:.2f} ERA, {:.2f} BNG) vs. {} ({:.2f} Bat*, {:.2f} MaxBat), {:.2f} D/O^2".format(result.pitchername, result.so9, result.era, result.bng, result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
     else:
         print("No results")
