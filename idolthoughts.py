@@ -51,16 +51,18 @@ DISCORD_SPLIT_LIMIT = 1900
 DISCORD_RESULT_PER_BATCH = 10
 
 
-def send_discord_message(webhook_url, title, message):
-    webhook = DiscordWebhook(url=webhook_url)
+def send_discord_message(title, message):
+    discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
+    webhook = DiscordWebhook(url=discord_webhook_url)
     webhook.add_embed(DiscordEmbed(title=title, description=message))
     return webhook.execute()
 
 
-def send_matchup_data_to_discord_webhook(webhook_url, day, matchups, so9_pitchers, bng_pitchers):
+def send_matchup_data_to_discord_webhook(day, matchups, so9_pitchers, bng_pitchers):
+    discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     good_results = [result for result in sort_results(matchups, so9_pitchers, bng_pitchers) if result.pitchername in so9_pitchers or result.pitchername in bng_pitchers]
     batches = math.ceil(len(good_results) / DISCORD_RESULT_PER_BATCH)
-    webhooks = [DiscordWebhook(url=webhook_url, content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
+    webhooks = [DiscordWebhook(url=discord_webhook_url, content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
     for idx, result in enumerate(good_results):
         so9 = "__{:.2f} SO9__".format(result.so9) if result.pitchername in so9_pitchers else "{:.2f} SO9".format(result.so9)
         formatted_bng = "{:.2f}".format(result.bng) if result.bng <= 1000000 else "{:.2e}".format(result.bng)
@@ -259,15 +261,15 @@ def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--print', help="print to screen", action='store_true')
     parser.add_argument('--discord', help="output to discord", action='store_true')
-    parser.add_argument('--discordprint', help="print discord output to screen", action='store_true')
+    parser.add_argument('--discordprint', help="print discord-formatted output to screen", action='store_true')
     parser.add_argument('--airtable', help="insert into airtable", action='store_true')
     parser.add_argument('--statfile', default='output.csv', help="stats filepath")
-    parser.add_argument('--dayfile', default='lastday.txt', help="stats filepath")
+    parser.add_argument('--dayfile', default='lastday.txt', help="dayfile filepath")
     parser.add_argument('--today', help="run for today instead of tomorrow", action='store_true')
     parser.add_argument('--skipupdate', help="skip csv update, even if there should be one", action='store_true')
     parser.add_argument('--forceupdate', help="force csv update, even if it doesn't need it", action='store_true')
     parser.add_argument('--forcerun', help="force running for day, even if it was already run last", action='store_true')
-    parser.add_argument('--lineupfile', help="json file with array of {pitcherName, pitcherTeam, awayTeam} lineups")
+    parser.add_argument('--lineupfile', help="json file with array of {pitcherName, pitcherTeam, awayTeam} lineups, print mode only")
     args = parser.parse_args()
     if not args.print and not args.discord and not args.airtable and not args.discordprint and not args.lineupfile:
         print("No output specified")
@@ -283,7 +285,6 @@ def main():
     if args.lineupfile:
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data)
         sys.exit(0)
-    discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     streamdata = get_stream_snapshot()
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
     day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
@@ -299,7 +300,7 @@ def main():
     if (outcomes or not stat_file_exists or args.forceupdate or ((day == 1 and args.today) or day == 2)) and not args.skipupdate:
         if args.discord:
             message = "Generating new stat file, please stand by.\n\n{}".format("\n".join("`{}`".format(outcome) for outcome in outcomes))
-            send_discord_message(discord_webhook_url, "Sorry!", message[:DISCORD_SPLIT_LIMIT])
+            send_discord_message("Sorry!", message[:DISCORD_SPLIT_LIMIT])
         else:
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile)
@@ -310,7 +311,7 @@ def main():
         so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}
         bng_pitchers = {res.pitchername for res in results if BNG_FLOOR <= res.bng <= BNG_CEILING}
         if args.discord:
-            send_matchup_data_to_discord_webhook(discord_webhook_url, day, results, so9_pitchers, bng_pitchers)
+            send_matchup_data_to_discord_webhook(day, results, so9_pitchers, bng_pitchers)
         if args.discordprint:
             output = []
             for result in sort_results(results, so9_pitchers, bng_pitchers):
