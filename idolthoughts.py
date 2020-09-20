@@ -296,7 +296,7 @@ def main():
         sys.exit(0)
     outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
     stat_file_exists = os.path.isfile(args.statfile)
-    if (outcomes or not stat_file_exists or args.forceupdate or ((day == 0 and args.today) or day == 1)) and not args.skipupdate:
+    if (outcomes or not stat_file_exists or args.forceupdate or ((day == 1 and args.today) or day == 2)) and not args.skipupdate:
         if args.discord:
             message = "Generating new stat file, please stand by.\n\n{}".format("\n".join("`{}`".format(outcome) for outcome in outcomes))
             send_discord_message(discord_webhook_url, "Sorry!", message[:DISCORD_SPLIT_LIMIT])
