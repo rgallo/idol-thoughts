@@ -16,6 +16,8 @@ from airtable import Airtable
 import argparse
 import blaseball_stat_csv
 from dotenv import load_dotenv
+from discord_webhook import DiscordWebhook, DiscordEmbed
+import math
 
 
 MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "gameid", "so9", "era", "defemoji", "vsteam", 
@@ -46,26 +48,28 @@ BNG_FLOOR = 100.0
 BNG_CEILING = 943097
 LAST_SEASON_STAT_CUTOFF = 11
 DISCORD_SPLIT_LIMIT = 1900
+DISCORD_RESULT_PER_BATCH = 10
 
-def send_discord_message(channelID, botToken, title, message):
-    baseURL = "https://discordapp.com/api/channels/{}/messages".format(channelID)
-    headers = {"Authorization":"Bot {}".format(botToken),
-               "User-Agent":"myBotThing (http://some.url, v0.1)",
-               "Content-Type":"application/json"}
-    if (len(message) + len(title)) >= DISCORD_SPLIT_LIMIT:  # If message exceeds length, split in two (hopefully no more than that is needed)
-        message_parts = message.split("\n\n")
-        half_idx = len(message_parts) // 2
-        responses = []
-        for halfmessageparts, islast in ((message_parts[:half_idx], False), (message_parts[half_idx:], True)):
-            time.sleep(2)
-            POSTedJSON =  json.dumps({"embed": {"title": "{}{}".format(title, " (cont.)" if islast else ""), 
-                                                "description": "{}{}".format("\n\n".join(halfmessageparts),
-                                                                             "\n\nmore..." if not islast else "")}})
-            responses.append(requests.post(baseURL, headers = headers, data = POSTedJSON))
-        return responses
-    else:
-        POSTedJSON =  json.dumps({"embed": {"title": title, "description": message}})
-        return [requests.post(baseURL, headers = headers, data = POSTedJSON)]
+
+def send_discord_message(webhook_url, title, message):
+    webhook = DiscordWebhook(url=webhook_url)
+    webhook.add_embed(DiscordEmbed(title=title, description=message))
+    return webhook.execute()
+
+
+def send_matchup_data_to_discord_webhook(webhook_url, day, matchups, so9_pitchers, bng_pitchers):
+    good_results = [result for result in sort_results(matchups, so9_pitchers, bng_pitchers) if result.pitchername in so9_pitchers or result.pitchername in bng_pitchers]
+    batches = math.ceil(len(good_results) / DISCORD_RESULT_PER_BATCH)
+    webhooks = [DiscordWebhook(url=webhook_url, content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
+    for idx, result in enumerate(good_results):
+        so9 = "__{:.2f} SO9__".format(result.so9) if result.pitchername in so9_pitchers else "{:.2f} SO9".format(result.so9)
+        formatted_bng = "{:.2f}".format(result.bng) if result.bng <= 1000000 else "{:.2e}".format(result.bng)
+        bng = "__{} BNG__".format(formatted_bng) if result.pitchername in bng_pitchers else "{} BNG".format(formatted_bng)
+        fmtstr = "{} **[{}](https://blaseball-reference.com/players/{})** ({}, {:.2f} ERA, {}) *vs.*\n {} **{}** ({:.2f} Bat★, {:.2f} MaxBat), {:.2f} D/O^2"
+        description = fmtstr.format(chr(int(result.defemoji, 16)), result.pitchername, get_player_slug(result.pitchername), so9, result.era, bng, chr(int(result.offemoji, 16)), result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff)
+        embed = DiscordEmbed(description=description)
+        webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
+    return [webhook.execute() for webhook in webhooks]
 
 
 def geomean(numbers):
@@ -279,7 +283,7 @@ def main():
     if args.lineupfile:
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data)
         sys.exit(0)
-    channelID, botToken = os.getenv("DISCORD_CHANNEL_ID"), os.getenv("DISCORD_BOT_TOKEN")
+    discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     streamdata = get_stream_snapshot()
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
     day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
@@ -295,7 +299,7 @@ def main():
     if (outcomes or not stat_file_exists or args.forceupdate or ((day == 0 and args.today) or day == 1)) and not args.skipupdate:
         if args.discord:
             message = "Generating new stat file, please stand by.\n\n{}".format("\n".join("`{}`".format(outcome) for outcome in outcomes))
-            send_discord_message(channelID, botToken, "Sorry!", message[:DISCORD_SPLIT_LIMIT])
+            send_discord_message(discord_webhook_url, "Sorry!", message[:DISCORD_SPLIT_LIMIT])
         else:
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile)
@@ -305,21 +309,20 @@ def main():
     if results:
         so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}
         bng_pitchers = {res.pitchername for res in results if BNG_FLOOR <= res.bng <= BNG_CEILING}
-        if args.discord or args.discordprint:
+        if args.discord:
+            send_matchup_data_to_discord_webhook(discord_webhook_url, day, results, so9_pitchers, bng_pitchers)
+        if args.discordprint:
             output = []
             for result in sort_results(results, so9_pitchers, bng_pitchers):
                 if result.pitchername in so9_pitchers or result.pitchername in bng_pitchers:
                     so9 = "__{:.2f} SO9__".format(result.so9) if result.pitchername in so9_pitchers else "{:.2f} SO9".format(result.so9)
                     formatted_bng = "{:.2f}".format(result.bng) if result.bng <= 1000000 else "{:.2e}".format(result.bng)
                     bng = "__{} BNG__".format(formatted_bng) if result.pitchername in bng_pitchers else "{} BNG".format(formatted_bng)
-                    fmtstr = "{} **[{}](https://blaseball-reference.com/players/{})** ({}, {:.2f} ERA, {}) *vs.*\n {} **{}** ({:.2f} Bat★, {:.2f} MaxBat), {:.2f} D/O^2"
-                    output.append(fmtstr.format(chr(int(result.defemoji, 16)), result.pitchername, get_player_slug(result.pitchername), so9, result.era, bng, chr(int(result.offemoji, 16)), result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
+                    fmtstr = "{} **{}** ({}, {:.2f} ERA, {}) *vs.*\n {} **{}** ({:.2f} Bat★, {:.2f} MaxBat), {:.2f} D/O^2"
+                    output.append(fmtstr.format(chr(int(result.defemoji, 16)), result.pitchername, so9, result.era, bng, chr(int(result.offemoji, 16)), result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
             title = "__**Day {}**__".format(day)
             message = "\n\n".join(output)
-            if args.discord:
-                send_discord_message(channelID, botToken, title, message)
-            if args.discordprint:
-                print("{}\n{}".format(title, message))
+            print("{}\n{}".format(title, message))
         if args.airtable:
             insert_into_airtable(results, season_number+1, day)
         if args.print:
