@@ -269,7 +269,8 @@ def handle_args():
     parser.add_argument('--skipupdate', help="skip csv update, even if there should be one", action='store_true')
     parser.add_argument('--forceupdate', help="force csv update, even if it doesn't need it", action='store_true')
     parser.add_argument('--forcerun', help="force running for day, even if it was already run last", action='store_true')
-    parser.add_argument('--lineupfile', help="json file with array of {pitcherName, pitcherTeam, awayTeam} lineups, print mode only")
+    parser.add_argument('--lineupfile', help="json file with array of {pitcherName, pitcherTeam, awayTeam, seasonNumber} lineups, print mode only")
+    parser.add_argument('--archive', help="move csv file if a new one is regenerated before writing")
     args = parser.parse_args()
     if not args.print and not args.discord and not args.airtable and not args.discordprint and not args.lineupfile:
         print("No output specified")
@@ -282,9 +283,6 @@ def main():
     args = handle_args()
     load_dotenv()
     team_stat_data, pitcher_stat_data = load_stat_data(args.statfile)
-    if args.lineupfile:
-        run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data)
-        sys.exit(0)
     streamdata = get_stream_snapshot()
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
     day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
@@ -303,7 +301,12 @@ def main():
             send_discord_message("Sorry!", message[:DISCORD_SPLIT_LIMIT])
         else:
             print("Generating new stat file, please stand by.")
+        if args.archive and stat_file_exists:
+            os.rename(args.statfile, args.statfile.replace(".csv", "S{}preD{}.csv".format(season_number+1, day)))
         blaseball_stat_csv.generate_file(args.statfile)
+    if args.lineupfile:
+        run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data)
+        sys.exit(0)
     results = []
     for game in tomorrowgames:
         results.extend(process_game(game, season_number, day, team_stat_data, pitcher_stat_data))
