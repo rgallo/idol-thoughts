@@ -242,7 +242,7 @@ def sort_results(results, so9_pitchers=None, bng_pitchers=None):
 
 
 def outcome_matters(outcome):
-    return "is now Unstable" not in outcome
+    return "is now Unstable" not in outcome and "is now Flickering" not in outcome
 
 
 def already_ran_for_day(filepath, season_number, day):
@@ -282,7 +282,6 @@ def handle_args():
 def main():
     args = handle_args()
     load_dotenv()
-    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile)
     streamdata = get_stream_snapshot()
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
     day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
@@ -303,7 +302,8 @@ def main():
             print("Generating new stat file, please stand by.")
         if args.archive and stat_file_exists:
             os.rename(args.statfile, args.statfile.replace(".csv", "S{}preD{}.csv".format(season_number+1, day)))
-        blaseball_stat_csv.generate_file(args.statfile)
+        blaseball_stat_csv.generate_file(args.statfile, False)
+    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile)
     if args.lineupfile:
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data)
         sys.exit(0)

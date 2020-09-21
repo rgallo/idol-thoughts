@@ -4,6 +4,7 @@ import requests
 import time
 import sys
 import json
+import argparse
 
 JSON_COLUMNS = ['id', 'anticapitalism', 'baseThirst', 'buoyancy', 'chasiness', 'coldness', 'continuation', 'divinity', 'groundFriction', 'indulgence', 'laserlikeness', 'martyrdom', 'moxie', 'musclitude', 'bat', 'omniscience', 'overpowerment', 'patheticism', 'ruthlessness', 'shakespearianism', 'suppression', 'tenaciousness', 'thwackability', 'tragicness', 'unthwackability', 'watchfulness', 'pressurization', 'totalFingers', 'soul', 'deceased', 'peanutAllergy', 'cinnamon', 'fate', 'armor', 'ritual', 'blood', 'coffee', 'permAttr', 'seasAttr', 'weekAttr', 'gameAttr']
 COLUMNS = ['team', 'league', 'division', 'name', 'position', 'turnOrder'] + JSON_COLUMNS + ["battingStars", "pitchingStars", "baserunningStars", "defenseStars"]
@@ -49,12 +50,13 @@ def defense_stars(player):
     return (player["omniscience"] ** .2) * (player["tenaciousness"] ** .2) * (player["watchfulness"] ** .1) * (player["anticapitalism"] ** .1) * (player["chasiness"] ** .1) * 5.0
 
 
-def generate_file(filename):
+def generate_file(filename, inactive):
     team_leagues = get_team_leagues()
     alldata = []
     allTeams = requests.get("https://blaseball.com/database/allTeams").json()
+    positions = ('lineup', 'rotation', 'bench', 'bullpen') if inactive else ('lineup', 'rotation')
     for team in sorted(allTeams, key=lambda x: x['nickname']):
-        for position in ('lineup', 'rotation'):
+        for position in positions:
             playerids = team[position]
             playerdata = requests.get("https://blaseball.com/database/players?ids={}".format(",".join(playerids))).json()
             playerdata_by_id = {player["id"]: player for player in playerdata}
@@ -71,5 +73,14 @@ def generate_file(filename):
         f.write("\n".join(",".join(['"{}"'.format(d) for d in datarow]) for datarow in alldata))
 
 
+def handle_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--output', default='output.csv', help="output filepath")
+    parser.add_argument('--inactive', help="include inactive players(bench/bullpen)", action='store_true')
+    args = parser.parse_args()
+    return args
+
+
 if __name__ == "__main__":
-    generate_file(sys.argv[1] if len(sys.argv) > 1 else "output.csv")
+    args = handle_args()
+    generate_file(args.output, args.inactive)
