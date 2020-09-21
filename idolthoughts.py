@@ -270,7 +270,7 @@ def handle_args():
     parser.add_argument('--forceupdate', help="force csv update, even if it doesn't need it", action='store_true')
     parser.add_argument('--forcerun', help="force running for day, even if it was already run last", action='store_true')
     parser.add_argument('--lineupfile', help="json file with array of {pitcherName, pitcherTeam, awayTeam, seasonNumber} lineups, print mode only")
-    parser.add_argument('--archive', help="move csv file if a new one is regenerated before writing")
+    parser.add_argument('--archive', help="move csv file if a new one is regenerated before writing", action='store_true')
     args = parser.parse_args()
     if not args.print and not args.discord and not args.airtable and not args.discordprint and not args.lineupfile:
         print("No output specified")
