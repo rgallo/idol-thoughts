@@ -26,13 +26,11 @@ def get_strikout_count(pitcher_id, game_id):
 
 
 def is_game_shutout_for_pitcher(pitcher_id, game_id):
-    game_request = requests.get("https://api.blaseball-reference.com/v1/events?gameId={}&sortBy=event_index&sortDirection=desc".format(game_id))
+    game_request = requests.get("https://api.blaseball-reference.com/v1/events?gameId={}".format(game_id))
     game_results = game_request.json()["results"]
     if not game_results:
         return None
-    last_game_event = game_results[0]
-    pitcher_is_home = (pitcher_id == last_game_event["pitcher_id"] and last_game_event["top_of_inning"]) or (pitcher_id != last_game_event["pitcher_id"] and not last_game_event["top_of_inning"])
-    return (pitcher_is_home and not bool(last_game_event["away_score"])) or (not pitcher_is_home and not bool(last_game_event["home_score"]))
+    return not bool(max([event["runs_batted_in"] for event in game_results if event['pitcher_id'] == pitcher_id]))
 
 
 def did_pitcher_win(pitcher_id, game_id):
