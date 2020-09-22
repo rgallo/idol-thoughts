@@ -20,7 +20,7 @@ from discord_webhook import DiscordWebhook, DiscordEmbed
 import math
 
 
-MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "gameid", "so9", "era", "defemoji", "vsteam", 
+MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "so9", "era", "defemoji", "vsteam", 
                                          "offemoji", "defoff", "battingstars", "bng", "stardata", "ballcount", "strikecount"])
 
 StarData = namedtuple("StarData", ["pitchingstars", "maxbatstars", "meanbatstars", "maxdefstars", "meandefstars", 
@@ -58,7 +58,7 @@ def send_discord_message(title, message):
     return webhook.execute()
 
 
-def send_matchup_data_to_discord_webhook(day, matchups, so9_pitchers, bng_pitchers):
+def send_matchup_data_to_discord_webhook(day, matchups, so9_pitchers, bng_pitchers, shame_results):
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     good_results = [result for result in sort_results(matchups, so9_pitchers, bng_pitchers) if result.pitchername in so9_pitchers or result.pitchername in bng_pitchers]
     batches = math.ceil(len(good_results) / DISCORD_RESULT_PER_BATCH)
@@ -69,6 +69,9 @@ def send_matchup_data_to_discord_webhook(day, matchups, so9_pitchers, bng_pitche
         bng = "__{} BNG__".format(formatted_bng) if result.pitchername in bng_pitchers else "{} BNG".format(formatted_bng)
         fmtstr = "{} **[{}](https://blaseball-reference.com/players/{})** ({}, {:.2f} ERA, {}) *vs.*\n {} **{}** ({:.2f} Bat★, {:.2f} MaxBat), {:.2f} D/O^2"
         description = fmtstr.format(chr(int(result.defemoji, 16)), result.pitchername, get_player_slug(result.pitchername), so9, result.era, bng, chr(int(result.offemoji, 16)), result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff)
+        for team in (result.pitcherteam, result.vsteam):
+            if team in shame_results:
+                description += "\n:rotating_light::rotating_light: *{} Shame: -{}* :rotating_light::rotating_light:".format(team, shame_results[team])
         embed = DiscordEmbed(description=description)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
     return [webhook.execute() for webhook in webhooks]
@@ -196,12 +199,12 @@ def process_game(game, season_number, day, team_stat_data, pitcher_stat_data):
     homeStarStats = calc_star_max_mean_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
     awayStlatStats = calc_stlat_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
     homeStlatStats = calc_stlat_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
-    results.append(MatchupData(awayPitcher, awayPitcherId, gameId, awayPitcherStats.get("strikeoutsPerNine", -1.0), 
+    results.append(MatchupData(awayPitcher, awayPitcherId, awayTeam, gameId, awayPitcherStats.get("strikeoutsPerNine", -1.0), 
                                 awayPitcherStats.get("earnedRunAverage", -1.0), awayEmoji, homeTeam, homeEmoji,
                                 get_def_off_ratio(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data),
                                 sum(team_stat_data[homeTeam]["battingStars"]), calc_bng(awayStlatStats), awayStarStats,
                                 4, game["homeStrikes"]))
-    results.append(MatchupData(homePitcher, homePitcherId, gameId, homePitcherStats.get("strikeoutsPerNine", -1.0), 
+    results.append(MatchupData(homePitcher, homePitcherId, homeTeam, gameId, homePitcherStats.get("strikeoutsPerNine", -1.0), 
                                 homePitcherStats.get("earnedRunAverage", -1.0), homeEmoji, awayTeam, awayEmoji,
                                 get_def_off_ratio(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data),
                                 sum(team_stat_data[awayTeam]["battingStars"]), calc_bng(homeStlatStats), homeStarStats,
@@ -223,7 +226,7 @@ def process_pitcher_vs_team(pitcherName, pitcherTeam, otherTeam, season_number, 
     pitcherStats = get_pitcher_stats(pitcherName, season_number)
     starStats = calc_star_max_mean_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
     stlatStats = calc_stlat_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    return MatchupData(pitcherName, None, None, pitcherStats.get("strikeoutsPerNine", -1.0), 
+    return MatchupData(pitcherName, None, None, None, pitcherStats.get("strikeoutsPerNine", -1.0), 
                        pitcherStats.get("earnedRunAverage", -1.0), None, otherTeam, None,
                        get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
                        sum(team_stat_data[otherTeam]["battingStars"]), calc_bng(stlatStats), starStats,
@@ -241,6 +244,12 @@ def sort_results(results, so9_pitchers=None, bng_pitchers=None):
     return sorted_results
 
 
+def get_shame_results(today_schedule):
+    allTeams = requests.get("https://blaseball.com/database/allTeams").json()
+    shameable_teams = set([team['fullName'] for team in allTeams if 'SHAME_PIT' in team['seasAttr'] or 'SHAME_PIT' in team['permAttr']])
+    return {game["awayTeamName"]: (game["homeScore"] - game["awayScore"]) for game in today_schedule if game['shame'] and game["awayTeamName"] in shameable_teams}
+    
+
 def outcome_matters(outcome):
     return "is now Unstable" not in outcome and "is now Flickering" not in outcome
 
@@ -255,6 +264,33 @@ def already_ran_for_day(filepath, season_number, day):
 def write_day(filepath, season_number, day):
     with open(filepath, "w") as f:
         f.write("{}-{}".format(season_number, day))
+
+
+def discord_print_results(day, results, so9_pitchers, bng_pitchers, shame_results):
+    output = []
+    for result in sort_results(results, so9_pitchers, bng_pitchers):
+        if result.pitchername in so9_pitchers or result.pitchername in bng_pitchers:
+            so9 = "__{:.2f} SO9__".format(result.so9) if result.pitchername in so9_pitchers else "{:.2f} SO9".format(result.so9)
+            formatted_bng = "{:.2f}".format(result.bng) if result.bng <= 1000000 else "{:.2e}".format(result.bng)
+            bng = "__{} BNG__".format(formatted_bng) if result.pitchername in bng_pitchers else "{} BNG".format(formatted_bng)
+            fmtstr = "{} **{}** ({}, {:.2f} ERA, {}) *vs.*\n {} **{}** ({:.2f} Bat★, {:.2f} MaxBat), {:.2f} D/O^2"
+            outputstr = fmtstr.format(chr(int(result.defemoji, 16)), result.pitchername, so9, result.era, bng, chr(int(result.offemoji, 16)), result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff)
+            for team in (result.pitcherteam, result.vsteam):
+                if team in shame_results:
+                    outputstr += "\n:rotating_light::rotating_light: *{} Shame: -{}* :rotating_light::rotating_light:".format(team, shame_results[team])
+            output.append(outputstr)
+    title = "__**Day {}**__".format(day)
+    message = "\n\n".join(output)
+    print("{}\n{}".format(title, message))
+
+
+def print_results(day, results, so9_pitchers, bng_pitchers, shame_results):
+    print("Day {}".format(day))
+    for result in sort_results(results, so9_pitchers, bng_pitchers):
+        print("{} ({:.2f} SO9, {:.2f} ERA, {:.2f} BNG) vs. {} ({:.2f} Bat*, {:.2f} MaxBat), {:.2f} D/O^2".format(result.pitchername, result.so9, result.era, result.bng, result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
+        for team in (result.pitcherteam, result.vsteam):
+            if team in shame_results:
+                print("-- {} Shame: -{}".format(team, shame_results[team]))
 
 
 def handle_args():
@@ -308,31 +344,21 @@ def main():
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data)
         sys.exit(0)
     results = []
+    if not args.today: # can't check for targeted shame without both today and tomorrow schedules
+        shame_results = get_shame_results(streamdata['value']['games']['schedule'])
     for game in tomorrowgames:
         results.extend(process_game(game, season_number, day, team_stat_data, pitcher_stat_data))
     if results:
         so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}
         bng_pitchers = {res.pitchername for res in results if BNG_FLOOR <= res.bng <= BNG_CEILING}
         if args.discord:
-            send_matchup_data_to_discord_webhook(day, results, so9_pitchers, bng_pitchers)
+            send_matchup_data_to_discord_webhook(day, results, so9_pitchers, bng_pitchers, shame_results)
         if args.discordprint:
-            output = []
-            for result in sort_results(results, so9_pitchers, bng_pitchers):
-                if result.pitchername in so9_pitchers or result.pitchername in bng_pitchers:
-                    so9 = "__{:.2f} SO9__".format(result.so9) if result.pitchername in so9_pitchers else "{:.2f} SO9".format(result.so9)
-                    formatted_bng = "{:.2f}".format(result.bng) if result.bng <= 1000000 else "{:.2e}".format(result.bng)
-                    bng = "__{} BNG__".format(formatted_bng) if result.pitchername in bng_pitchers else "{} BNG".format(formatted_bng)
-                    fmtstr = "{} **{}** ({}, {:.2f} ERA, {}) *vs.*\n {} **{}** ({:.2f} Bat★, {:.2f} MaxBat), {:.2f} D/O^2"
-                    output.append(fmtstr.format(chr(int(result.defemoji, 16)), result.pitchername, so9, result.era, bng, chr(int(result.offemoji, 16)), result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
-            title = "__**Day {}**__".format(day)
-            message = "\n\n".join(output)
-            print("{}\n{}".format(title, message))
+            discord_print_results(day, results, so9_pitchers, bng_pitchers, shame_results)
         if args.airtable:
             insert_into_airtable(results, season_number+1, day)
         if args.print:
-            print("Day {}".format(day))
-            for result in sort_results(results, so9_pitchers, bng_pitchers):
-                print("{} ({:.2f} SO9, {:.2f} ERA, {:.2f} BNG) vs. {} ({:.2f} Bat*, {:.2f} MaxBat), {:.2f} D/O^2".format(result.pitchername, result.so9, result.era, result.bng, result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
+            print_results(day, results, so9_pitchers, bng_pitchers, shame_results)
     else:
         print("No results")
     write_day(args.dayfile, season_number, day)
