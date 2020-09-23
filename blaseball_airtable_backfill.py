@@ -10,6 +10,7 @@ import argparse
 import os
 from dotenv import load_dotenv
 
+RBI_CACHE = {}
 
 AirtableGame = namedtuple("AirtableGame", ["airtable_id", "pitcher_id", "game_id", "season", "day"])
 
@@ -25,23 +26,25 @@ def get_strikout_count(pitcher_id, game_id):
     return len([res for res in game_results["results"] if res["event_type"] == "STRIKEOUT"])
 
 
-def is_game_shutout_for_pitcher(pitcher_id, game_id):
+def pitcher_team_earned_runs_shutout(pitcher_id, game_id):
+    if (pitcher_id, game_id) in RBI_CACHE:
+        return RBI_CACHE[(pitcher_id, game_id)]
     game_request = requests.get("https://api.blaseball-reference.com/v1/events?gameId={}".format(game_id))
     game_results = game_request.json()["results"]
     if not game_results:
-        return None
-    return not bool(max([event["runs_batted_in"] for event in game_results if event['pitcher_id'] == pitcher_id]))
-
-
-def did_pitcher_win(pitcher_id, game_id):
-    game_request = requests.get("https://api.blaseball-reference.com/v1/events?gameId={}&sortBy=event_index&sortDirection=desc".format(game_id))
-    game_results = game_request.json()["results"]
-    if not game_results:
-        return None
-    last_game_event = game_results[0]
-    away_score, home_score = last_game_event["away_score"], last_game_event["home_score"]
-    pitcher_is_home = (pitcher_id == last_game_event["pitcher_id"] and last_game_event["top_of_inning"]) or (pitcher_id != last_game_event["pitcher_id"] and not last_game_event["top_of_inning"])
-    return (pitcher_is_home and home_score > away_score) or (not pitcher_is_home and away_score > home_score)
+        RBI_CACHE[(pitcher_id, game_id)] = (None, None)
+        return None, None
+    pitchers = set([event['pitcher_id'] for event in game_results])
+    if pitcher_id not in pitchers or len(pitchers) != 2:
+        RBI_CACHE[(pitcher_id, game_id)] = (None, None)
+        return None, None
+    pitcher_team_rbi = sum([event["runs_batted_in"] for event in game_results if event['pitcher_id'] != pitcher_id])
+    other_team_rbi = sum([event["runs_batted_in"] for event in game_results if event['pitcher_id'] == pitcher_id])
+    RBI_CACHE[(pitcher_id, game_id)] = (pitcher_team_rbi, not other_team_rbi)
+    # Get other side and cache it while we're here
+    other_pitcher_id = (pitchers - {pitcher_id}).pop()
+    RBI_CACHE[(other_pitcher_id, game_id)] = (other_team_rbi, not pitcher_team_rbi)
+    return (pitcher_team_rbi, not other_team_rbi)
 
 
 def update_column(airtable, airtable_id, column, result):
@@ -52,9 +55,9 @@ def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--strikeouts', help="backfill strikeouts", action='store_true')
     parser.add_argument('--shutouts', help="backfill strikeouts", action='store_true')
-    parser.add_argument('--wins', help="backfill wins", action='store_true')
+    parser.add_argument('--earnedruns', help="backfill earned runs", action='store_true')
     args = parser.parse_args()
-    if not args.strikeouts and not args.shutouts and not args.wins:
+    if not args.strikeouts and not args.shutouts and not args.earnedruns:
         print("Nothing to do, that was easy")
         parser.print_help()
         sys.exit(-1)
@@ -81,10 +84,10 @@ def main():
                         get_strikout_count, lambda count: count >= 0)
     if args.shutouts:
         handle_backfill(airtable, "Shutouts", lambda result: "Pitcher ID" in result['fields'] and ("Shutouts" not in result['fields'] or result['fields']['Shutouts'] not in (0, 1)),
-                        is_game_shutout_for_pitcher, lambda is_shutout: is_shutout is not None, transform_result=lambda res: 1 if res else 0)
-    if args.wins:
-        handle_backfill(airtable, "Win", lambda result: "Pitcher ID" in result['fields'] and ("Win" not in result['fields'] or result['fields']['Win'] not in (0, 1)),
-                        did_pitcher_win, lambda is_win: is_win is not None, transform_result=lambda res: 1 if res else 0)
+                        lambda pid, gid: pitcher_team_earned_runs_shutout(pid, gid)[1], lambda is_shutout: is_shutout is not None, transform_result=lambda res: 1 if res else 0)
+    if args.earnedruns:
+        handle_backfill(airtable, "Pitcher Team Earned Runs", lambda result: "Pitcher ID" in result['fields'],
+                        lambda pid, gid: pitcher_team_earned_runs_shutout(pid, gid)[0], lambda result: result is not None)
 
 
 if __name__ == "__main__":
