@@ -36,12 +36,11 @@ StlatData = namedtuple("StlatData", ["overpowerment", "ruthlessness", "unthwacka
                                      "meanomniscience", "meantenaciousness", "meanwatchfulness", "meanchasiness",  # Defense
                                      "meanbaseThirst"])  # Baserunning
 
-BR_URL = "https://blaseball-reference.nyc3.digitaloceanspaces.com/public/json-data/pitching/{}/summary.json"
-
-PLAYERNAME_SUBS = {
+BR_PLAYERNAME_SUBS = {
     "wyatt-owens": "emmett-owens",
     "peanut-bong": "dan-bong"
 }
+
 
 BNG_FLOOR = 100.0
 BNG_CEILING = 994975
@@ -116,23 +115,17 @@ def load_stat_data(filepath):
                     teamstatdata[row["team"]][key].append(float(row[key]))
     return teamstatdata, pitcherstardata
 
+
 def get_player_slug(playername):
     playerslug = playername.lower().replace(" ", "-")
-    playerslug = PLAYERNAME_SUBS.get(playerslug, playerslug)
+    playerslug = BR_PLAYERNAME_SUBS.get(playerslug, playerslug)
     return playerslug
 
 
-def get_pitcher_stats(pitchername, season):
-    playerslug = get_player_slug(pitchername)
-    requrl = BR_URL.format(playerslug)
-    try:
-        time.sleep(3)
-        response = requests.get(requrl)
-        resjson = response.json()
-        return resjson["seasons"][str(season)]
-    except:
-        print("Error on {}, {}".format(pitchername, requrl))
-        return {}
+def get_all_pitcher_performance_stats(pitcher_ids, season):
+    response = requests.get("https://api.blaseball-reference.com/v1/playerStats?category=pitching&season={}&playerIds={}".format(season, ",".join(pitcher_ids)))
+    resjson = response.json()
+    return {pitcher["player_id"]: pitcher for pitcher in resjson}
 
 
 def calc_bng(stlatdata):
@@ -185,26 +178,25 @@ def insert_into_airtable(results, season_number, day):
     airtable.batch_insert([get_dict_from_matchupdata(matchup, season_number, day) for matchup in results])
 
 
-def process_game(game, season_number, day, team_stat_data, pitcher_stat_data):
+def process_game(game, stat_season_number, day, team_stat_data, pitcher_stat_data, pitcher_performance_stats):
     results = []
     gameId = game["id"]
     awayPitcher, homePitcher = game["awayPitcherName"], game["homePitcherName"]
     awayPitcherId, homePitcherId = game["awayPitcher"], game["homePitcher"]
     awayTeam, homeTeam = game["awayTeamName"], game["homeTeamName"]
     awayEmoji, homeEmoji = game['awayTeamEmoji'], game['homeTeamEmoji']
-    stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
-    awayPitcherStats, homePitcherStats = get_pitcher_stats(awayPitcher, stat_season_number), get_pitcher_stats(homePitcher, stat_season_number)
+    awayPitcherStats, homePitcherStats = pitcher_performance_stats.get(awayPitcherId, {}), pitcher_performance_stats.get(homePitcherId, {})
     awayStarStats = calc_star_max_mean_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
     homeStarStats = calc_star_max_mean_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
     awayStlatStats = calc_stlat_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
     homeStlatStats = calc_stlat_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
-    results.append(MatchupData(awayPitcher, awayPitcherId, awayTeam, gameId, awayPitcherStats.get("strikeoutsPerNine", -1.0), 
-                                awayPitcherStats.get("earnedRunAverage", -1.0), awayEmoji, homeTeam, homeEmoji,
+    results.append(MatchupData(awayPitcher, awayPitcherId, awayTeam, gameId, float(awayPitcherStats.get("k_per_9", -1.0)), 
+                                float(awayPitcherStats.get("era", -1.0)), awayEmoji, homeTeam, homeEmoji,
                                 get_def_off_ratio(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data),
                                 sum(team_stat_data[homeTeam]["battingStars"]), calc_bng(awayStlatStats), awayStarStats,
                                 4, game["homeStrikes"]))
-    results.append(MatchupData(homePitcher, homePitcherId, homeTeam, gameId, homePitcherStats.get("strikeoutsPerNine", -1.0), 
-                                homePitcherStats.get("earnedRunAverage", -1.0), homeEmoji, awayTeam, awayEmoji,
+    results.append(MatchupData(homePitcher, homePitcherId, homeTeam, gameId, float(homePitcherStats.get("k_per_9", -1.0)), 
+                                float(homePitcherStats.get("era", -1.0)), homeEmoji, awayTeam, awayEmoji,
                                 get_def_off_ratio(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data),
                                 sum(team_stat_data[awayTeam]["battingStars"]), calc_bng(homeStlatStats), homeStarStats,
                                 4, game["awayStrikes"]))
@@ -222,14 +214,15 @@ def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data):
 
 
 def process_pitcher_vs_team(pitcherName, pitcherTeam, otherTeam, season_number, team_stat_data, pitcher_stat_data):
-    pitcherStats = get_pitcher_stats(pitcherName, season_number)
-    starStats = calc_star_max_mean_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    stlatStats = calc_stlat_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    return MatchupData(pitcherName, None, None, None, pitcherStats.get("strikeoutsPerNine", -1.0), 
-                       pitcherStats.get("earnedRunAverage", -1.0), None, otherTeam, None,
-                       get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
-                       sum(team_stat_data[otherTeam]["battingStars"]), calc_bng(stlatStats), starStats,
-                       4, 3)
+    return  # TODO: new endpoint uses pitcher IDs, this needs reworking
+    # pitcherStats = get_pitcher_stats(pitcherName, season_number)
+    # starStats = calc_star_max_mean_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
+    # stlatStats = calc_stlat_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
+    # return MatchupData(pitcherName, None, None, None, pitcherStats.get("strikeoutsPerNine", -1.0), 
+    #                    pitcherStats.get("earnedRunAverage", -1.0), None, otherTeam, None,
+    #                    get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
+    #                    sum(team_stat_data[otherTeam]["battingStars"]), calc_bng(stlatStats), starStats,
+    #                    4, 3)
 
 
 def sort_results(results, so9_pitchers=None, bng_pitchers=None):
@@ -346,8 +339,13 @@ def main():
     shame_results = {}
     if not args.today: # can't check for targeted shame without both today and tomorrow schedules
         shame_results = get_shame_results(streamdata['value']['games']['schedule'])
+    stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
+    all_pitcher_ids = []
     for game in tomorrowgames:
-        results.extend(process_game(game, season_number, day, team_stat_data, pitcher_stat_data))
+        all_pitcher_ids.extend((game["awayPitcher"], game["homePitcher"]))
+    pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
+    for game in tomorrowgames:
+        results.extend(process_game(game, stat_season_number, day, team_stat_data, pitcher_stat_data, pitcher_performance_stats))
     if results:
         so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}
         bng_pitchers = {res.pitchername for res in results if BNG_FLOOR <= res.bng <= BNG_CEILING}
