@@ -87,14 +87,13 @@ def get_output_line_from_matchup(matchup_data, odds, so9_pitchers, bng_pitchers)
 
 
 def sort_result_pairs(matchup_pairs, so9_pitchers, bng_pitchers):
-    sorted_results = sorted(matchup_pairs, key=lambda res: max(res.awayMatchupData.so9, res.homeMatchupData.so9), reverse=True)
-    if so9_pitchers and bng_pitchers:
-        grouped_results = [res for res in sorted_results if (res.awayMatchupData.pitchername in so9_pitchers and res.awayMatchupData.pitchername in bng_pitchers) or (res.homeMatchupData.pitchername in so9_pitchers and res.homeMatchupData.pitchername in bng_pitchers)]
-        grouped_results.extend([res for res in sorted_results if (res.awayMatchupData.pitchername in so9_pitchers and res.awayMatchupData.pitchername not in bng_pitchers) or (res.homeMatchupData.pitchername in so9_pitchers and res.homeMatchupData.pitchername not in bng_pitchers)])
-        grouped_results.extend([res for res in sorted_results if (res.awayMatchupData.pitchername not in so9_pitchers and res.awayMatchupData.pitchername in bng_pitchers) or (res.homeMatchupData.pitchername not in so9_pitchers and res.homeMatchupData.pitchername in bng_pitchers)])
-        grouped_results.extend([res for res in sorted_results if (res.awayMatchupData.pitchername not in so9_pitchers and res.awayMatchupData.pitchername not in bng_pitchers) or (res.homeMatchupData.pitchername not in so9_pitchers and res.homeMatchupData.pitchername not in bng_pitchers)])
-        sorted_results = grouped_results
-    return sorted_results
+    def sort_key(matchup_pair):
+        matches_both = (matchup_pair.awayMatchupData.pitchername in so9_pitchers and matchup_pair.awayMatchupData.pitchername in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername in so9_pitchers and matchup_pair.homeMatchupData.pitchername in bng_pitchers)
+        matches_so9 = (matchup_pair.awayMatchupData.pitchername in so9_pitchers and matchup_pair.awayMatchupData.pitchername not in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername in so9_pitchers and matchup_pair.homeMatchupData.pitchername not in bng_pitchers)
+        matches_bng = (matchup_pair.awayMatchupData.pitchername not in so9_pitchers and matchup_pair.awayMatchupData.pitchername in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername not in so9_pitchers and matchup_pair.homeMatchupData.pitchername in bng_pitchers)
+        matches_neither = (matchup_pair.awayMatchupData.pitchername not in so9_pitchers and matchup_pair.awayMatchupData.pitchername not in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername not in so9_pitchers and matchup_pair.homeMatchupData.pitchername not in bng_pitchers)
+        return (matches_both, matches_so9, matches_bng, matches_neither, max(matchup_pair.awayMatchupData.so9, matchup_pair.homeMatchupData.so9))
+    return sorted(matchup_pairs, key=sort_key, reverse=True)
 
 
 def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, bng_pitchers, shame_results):
@@ -102,7 +101,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, bng_p
     sorted_pairs = sort_result_pairs(matchup_pairs, so9_pitchers, bng_pitchers)
     batches = math.ceil(len(matchup_pairs) / DISCORD_RESULT_PER_BATCH)
     webhooks = [DiscordWebhook(url=discord_webhook_url, content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
-    for idx, result in enumerate(matchup_pairs):
+    for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
         awayOdds, homeOdds = get_formatted_odds(awayMatchupData.winodds, homeMatchupData.winodds)
         description = "{}\n--- @ ---\n{}".format(get_output_line_from_matchup(awayMatchupData, awayOdds, so9_pitchers, bng_pitchers),
