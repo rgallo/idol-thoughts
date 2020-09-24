@@ -40,8 +40,7 @@ BR_URL = "https://blaseball-reference.nyc3.digitaloceanspaces.com/public/json-da
 
 PLAYERNAME_SUBS = {
     "wyatt-owens": "emmett-owens",
-    "peanut-bong": "dan-bong",
-    "sexton-wheerer": "sexton-wheeler"
+    "peanut-bong": "dan-bong"
 }
 
 BNG_FLOOR = 100.0
@@ -251,7 +250,7 @@ def get_shame_results(today_schedule):
     
 
 def outcome_matters(outcome):
-    return "is now Unstable" not in outcome and "is now Flickering" not in outcome
+    return all(s not in outcome for s in ("is now Unstable", "is now Flickering", "Red Hot"))
 
 
 def already_ran_for_day(filepath, season_number, day):
@@ -344,6 +343,7 @@ def main():
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data)
         sys.exit(0)
     results = []
+    shame_results = {}
     if not args.today: # can't check for targeted shame without both today and tomorrow schedules
         shame_results = get_shame_results(streamdata['value']['games']['schedule'])
     for game in tomorrowgames:
