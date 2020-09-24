@@ -81,8 +81,10 @@ def generate_file(filename, inactive):
             row.extend([";".join(player[col]) if type(player[col]) == list else player[col] for col in JSON_COLUMNS])
             row.extend([starfunc(player) for starfunc in (batting_stars, pitching_stars, baserunning_stars, defense_stars)])
             output.append(row)
-        time.sleep(10)
         player_id_list = player_id_list[BATCH_SIZE:]
+        if player_id_list:
+            time.sleep(10)
+        
     output.sort(key=operator.itemgetter(0, 4, 5))
     with open(filename, 'w') as f:
         f.write("{}\n".format(",".join('"{}"'.format(col) for col in COLUMNS)))
