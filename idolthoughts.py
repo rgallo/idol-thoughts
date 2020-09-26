@@ -88,11 +88,14 @@ def get_output_line_from_matchup(matchup_data, odds, so9_pitchers, bng_pitchers)
 
 def sort_result_pairs(matchup_pairs, so9_pitchers, bng_pitchers):
     def sort_key(matchup_pair):
-        matches_both = (matchup_pair.awayMatchupData.pitchername in so9_pitchers and matchup_pair.awayMatchupData.pitchername in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername in so9_pitchers and matchup_pair.homeMatchupData.pitchername in bng_pitchers)
-        matches_so9 = (matchup_pair.awayMatchupData.pitchername in so9_pitchers and matchup_pair.awayMatchupData.pitchername not in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername in so9_pitchers and matchup_pair.homeMatchupData.pitchername not in bng_pitchers)
-        matches_bng = (matchup_pair.awayMatchupData.pitchername not in so9_pitchers and matchup_pair.awayMatchupData.pitchername in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername not in so9_pitchers and matchup_pair.homeMatchupData.pitchername in bng_pitchers)
-        matches_neither = (matchup_pair.awayMatchupData.pitchername not in so9_pitchers and matchup_pair.awayMatchupData.pitchername not in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername not in so9_pitchers and matchup_pair.homeMatchupData.pitchername not in bng_pitchers)
-        return (matches_both, matches_so9, matches_bng, matches_neither, max(matchup_pair.awayMatchupData.so9, matchup_pair.homeMatchupData.so9))
+        sortkey = 1
+        if (matchup_pair.awayMatchupData.pitchername in so9_pitchers and matchup_pair.awayMatchupData.pitchername in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername in so9_pitchers and matchup_pair.homeMatchupData.pitchername in bng_pitchers):
+            sortkey = 4
+        elif (matchup_pair.awayMatchupData.pitchername in so9_pitchers and matchup_pair.awayMatchupData.pitchername not in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername in so9_pitchers and matchup_pair.homeMatchupData.pitchername not in bng_pitchers):
+            sortkey = 3
+        elif (matchup_pair.awayMatchupData.pitchername not in so9_pitchers and matchup_pair.awayMatchupData.pitchername in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername not in so9_pitchers and matchup_pair.homeMatchupData.pitchername in bng_pitchers):
+            sortkey = 2
+        return (sortkey, max(matchup_pair.awayMatchupData.so9, matchup_pair.homeMatchupData.so9))
     return sorted(matchup_pairs, key=sort_key, reverse=True)
 
 
@@ -137,7 +140,6 @@ def get_def_off_ratio(pitcher, defenseteamname, offenseteamname, team_stat_data,
 
 
 def load_stat_data(filepath):
-    filedata = {}
     with open(filepath) as f:
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
     pitcherstardata = collections.defaultdict(lambda: {})
@@ -188,10 +190,6 @@ def calc_star_max_mean_stats(pitcher, defenseteamname, offenseteamname, team_sta
 
 
 def calc_stlat_stats(pitcher, defenseteamname, offenseteamname, team_stat_data, pitcher_stat_data):
-    ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness",  # Pitching
-                                     "minpatheticism", "meanthwackability", "meanmusclitude",  # Batting
-                                     "meanomniscience", "meantenaciousness", "meanwatchfulness", "meanchasiness",  # Defense
-                                     "meanbaseThirst"]  # Baserunning
     stlatdata = [pitcher_stat_data[pitcher][stlat] for stlat in ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness"]]
     stlatdata.extend((min(team_stat_data[offenseteamname]["patheticism"]), geomean(team_stat_data[offenseteamname]["thwackability"]), 
                      geomean(team_stat_data[offenseteamname]["musclitude"])))
