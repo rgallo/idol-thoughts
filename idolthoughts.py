@@ -1,26 +1,24 @@
-from __future__ import print_function
 from __future__ import division
+from __future__ import print_function
 
-import requests
-import json
+import argparse
 import collections
 import csv
-from functools import reduce
-from collections import namedtuple
-import sys
-import time
-import os
-import traceback
-
-from airtable import Airtable
-import argparse
-import blaseball_stat_csv
-from dotenv import load_dotenv
-from discord_webhook import DiscordWebhook, DiscordEmbed
+import json
 import math
+import os
+import sys
+from collections import namedtuple
+from functools import reduce
 
+import requests
+from airtable import Airtable
+from discord_webhook import DiscordWebhook, DiscordEmbed
+from dotenv import load_dotenv
 
-MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "so9", "era", "defemoji", "vsteam", 
+import blaseball_stat_csv
+
+MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "so9", "era", "defemoji", "vsteam",
                                          "offemoji", "defoff", "battingstars", "bng", "stardata", "ballcount", "strikecount",
                                          "pitcherteamnickname", "vsteamnickname", "winodds"])
 
@@ -52,6 +50,29 @@ DISCORD_SPLIT_LIMIT = 1900
 DISCORD_RESULT_PER_BATCH = 5
 
 
+class PrintWebhook:
+    def __init__(self, content=None, **kwargs):
+        self.content = content
+        self.embeds = []
+
+    def add_embed(self, embed):
+        self.embeds.append(embed)
+
+    def execute(self):
+        if self.content:
+            print(self.content)
+        for embed in self.embeds:
+            print(embed)
+
+
+class PrintEmbed:
+    def __init__(self, description=None, **kwargs):
+        self.description = description
+
+    def __repr__(self):
+        return self.description
+
+
 def send_discord_message(title, message):
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     webhook = DiscordWebhook(url=discord_webhook_url)
@@ -67,6 +88,7 @@ def get_formatted_bng(matchup_data, bng_pitchers):
     formatted_bng = "{:.2f}".format(matchup_data.bng) if matchup_data.bng <= 1000000 else "{:.2e}".format(matchup_data.bng)
     return "__{} BNG__".format(formatted_bng) if matchup_data.pitchername in bng_pitchers else "{} BNG".format(formatted_bng)
 
+
 def get_formatted_odds(away_odds, home_odds):
     formatted_away_odds = "{:.2f}%".format(away_odds*100.0)
     formatted_home_odds = "{:.2f}%".format(home_odds*100.0)
@@ -77,11 +99,13 @@ def get_formatted_odds(away_odds, home_odds):
     return formatted_away_odds, formatted_home_odds
 
 
-def get_output_line_from_matchup(matchup_data, odds, so9_pitchers, bng_pitchers):
+def get_output_line_from_matchup(matchup_data, odds, so9_pitchers, bng_pitchers, print=False):
     so9 = get_formatted_so9(matchup_data, so9_pitchers)
     bng = get_formatted_bng(matchup_data, bng_pitchers)
-    formatstr = "{} **[{}](https://blaseball-reference.com/players/{}), {}** ({}, {:.2f} ERA, {}), ({:.2f} OppBat★, {:.2f} OppMaxBat), {:.2f} D/O^2, {}"
-    return formatstr.format(chr(int(matchup_data.defemoji, 16)), matchup_data.pitchername, get_player_slug(matchup_data.pitchername),
+    formatstr = ("{} **{}, {}** ({}, {:.2f} ERA, {}), "
+                 "({:.2f} OppBat★, {:.2f} OppMaxBat), {:.2f} D/O^2, {}")
+    name = matchup_data.pitchername if print else "[{}](https://blaseball-reference.com/players/{})".format(matchup_data.pitchername, get_player_slug(matchup_data.pitchername))
+    return formatstr.format(chr(int(matchup_data.defemoji, 16)), name,
                             matchup_data.pitcherteamnickname, so9, matchup_data.era, bng, matchup_data.battingstars, 
                             matchup_data.stardata.maxbatstars, matchup_data.defoff, odds)
 
@@ -99,20 +123,21 @@ def sort_result_pairs(matchup_pairs, so9_pitchers, bng_pitchers):
     return sorted(matchup_pairs, key=sort_key, reverse=True)
 
 
-def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, bng_pitchers, shame_results):
+def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, bng_pitchers, shame_results, print=False):
+    Webhook, Embed = (PrintWebhook, PrintEmbed) if print else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     sorted_pairs = sort_result_pairs(matchup_pairs, so9_pitchers, bng_pitchers)
     batches = math.ceil(len(matchup_pairs) / DISCORD_RESULT_PER_BATCH)
-    webhooks = [DiscordWebhook(url=discord_webhook_url, content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
+    webhooks = [Webhook(url=discord_webhook_url, content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
     for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
         awayOdds, homeOdds = get_formatted_odds(awayMatchupData.winodds, homeMatchupData.winodds)
-        description = "{}\n--- @ ---\n{}".format(get_output_line_from_matchup(awayMatchupData, awayOdds, so9_pitchers, bng_pitchers),
-                                        get_output_line_from_matchup(homeMatchupData, homeOdds, so9_pitchers, bng_pitchers))
+        description = "{}\n--- @ ---\n{}".format(get_output_line_from_matchup(awayMatchupData, awayOdds, so9_pitchers, bng_pitchers, print=print),
+                                                 get_output_line_from_matchup(homeMatchupData, homeOdds, so9_pitchers, bng_pitchers, print=print))
         for matchup_data in (awayMatchupData, homeMatchupData):
             if matchup_data.pitcherteam in shame_results:
                 description += "\n:rotating_light::rotating_light: *{} Shame: -{}* :rotating_light::rotating_light:".format(matchup_data.pitcherteamnickname, shame_results[matchup_data.pitcherteam])
-        embed = DiscordEmbed(description=description)
+        embed = Embed(description=description)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
     return [webhook.execute() for webhook in webhooks]
 
@@ -290,27 +315,10 @@ def already_ran_for_day(filepath, season_number, day):
             return file_season_number == season_number and file_day == day
     return False
 
+
 def write_day(filepath, season_number, day):
     with open(filepath, "w") as f:
         f.write("{}-{}".format(season_number, day))
-
-
-def discord_print_results(day, results, so9_pitchers, bng_pitchers, shame_results):
-    output = []
-    for result in sort_results(results, so9_pitchers, bng_pitchers):
-        if result.pitchername in so9_pitchers or result.pitchername in bng_pitchers:
-            so9 = "__{:.2f} SO9__".format(result.so9) if result.pitchername in so9_pitchers else "{:.2f} SO9".format(result.so9)
-            formatted_bng = "{:.2f}".format(result.bng) if result.bng <= 1000000 else "{:.2e}".format(result.bng)
-            bng = "__{} BNG__".format(formatted_bng) if result.pitchername in bng_pitchers else "{} BNG".format(formatted_bng)
-            fmtstr = "{} **{}** ({}, {:.2f} ERA, {}) *vs.*\n {} **{}** ({:.2f} Bat★, {:.2f} MaxBat), {:.2f} D/O^2"
-            outputstr = fmtstr.format(chr(int(result.defemoji, 16)), result.pitchername, so9, result.era, bng, chr(int(result.offemoji, 16)), result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff)
-            for team in (result.pitcherteam, result.vsteam):
-                if team in shame_results:
-                    outputstr += "\n:rotating_light::rotating_light: *{} Shame: -{}* :rotating_light::rotating_light:".format(team, shame_results[team])
-            output.append(outputstr)
-    title = "__**Day {}**__".format(day)
-    message = "\n\n".join(output)
-    print("{}\n{}".format(title, message))
 
 
 def print_results(day, results, so9_pitchers, bng_pitchers, shame_results):
@@ -391,7 +399,7 @@ def main():
         if args.discord:
             send_matchup_data_to_discord_webhook(day, pair_results, so9_pitchers, bng_pitchers, shame_results)
         if args.discordprint:
-            discord_print_results(day, results, so9_pitchers, bng_pitchers, shame_results)
+            send_matchup_data_to_discord_webhook(day, pair_results, so9_pitchers, bng_pitchers, shame_results, print=True)
         if args.airtable:
             insert_into_airtable(results, season_number+1, day)
         if args.print:
