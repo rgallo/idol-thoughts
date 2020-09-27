@@ -240,7 +240,7 @@ def insert_into_airtable(results, season_number, day):
     airtable.batch_insert([get_dict_from_matchupdata(matchup, season_number, day) for matchup in results])
 
 
-def process_game(game, stat_season_number, day, team_stat_data, pitcher_stat_data, pitcher_performance_stats):
+def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_stats):
     results = []
     gameId = game["id"]
     awayPitcher, homePitcher = game["awayPitcherName"], game["homePitcherName"]
@@ -265,26 +265,27 @@ def process_game(game, stat_season_number, day, team_stat_data, pitcher_stat_dat
     return results
 
 
-def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data):
+def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data, stat_season_number):
     with open(filepath, "r") as json_file:
         json_data = json.load(json_file)
+        all_pitcher_ids = [matchup["pitcherId"] for matchup in json_data]
+        pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
         for matchup in json_data:
-            result = process_pitcher_vs_team(matchup["pitcherName"], matchup["pitcherTeam"], matchup["otherTeam"],
-                                             matchup["seasonNumber"], team_stat_data, pitcher_stat_data)
+            result = process_pitcher_vs_team(matchup["pitcherName"], matchup["pitcherId"], matchup["pitcherTeam"],
+                                             matchup["otherTeam"], team_stat_data, pitcher_stat_data,
+                                             pitcher_performance_stats)
             print("{} ({:.2f} SO9, {:.2f} ERA, {:.2f} BNG) vs. {} ({:.2f} Bat*, {:.2f} MaxBat), {:.2f} D/O^2".format(result.pitchername, result.so9, result.era, result.bng, result.vsteam, result.battingstars, result.stardata.maxbatstars, result.defoff))
 
 
-
-def process_pitcher_vs_team(pitcherName, pitcherTeam, otherTeam, season_number, team_stat_data, pitcher_stat_data):
-    return  # TODO: new endpoint uses pitcher IDs, this needs reworking
-    # pitcherStats = get_pitcher_stats(pitcherName, season_number)
-    # starStats = calc_star_max_mean_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    # stlatStats = calc_stlat_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    # return MatchupData(pitcherName, None, None, None, pitcherStats.get("strikeoutsPerNine", -1.0), 
-    #                    pitcherStats.get("earnedRunAverage", -1.0), None, otherTeam, None,
-    #                    get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
-    #                    sum(team_stat_data[otherTeam]["battingStars"]), calc_bng(stlatStats), starStats,
-    #                    4, 3, None, None)
+def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data, pitcher_performance_stats):
+    pitcherStats = pitcher_performance_stats.get(pitcherId, {})
+    starStats = calc_star_max_mean_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
+    stlatStats = calc_stlat_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
+    return MatchupData(pitcherName, None, None, None, float(pitcherStats.get("k_per_9", -1.0)),
+                       float(pitcherStats.get("era", -1.0)), None, otherTeam, None,
+                       get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
+                       sum(team_stat_data[otherTeam]["battingStars"]), calc_bng(stlatStats), starStats,
+                       4, 3, None, None, None)
 
 
 def sort_results(results, so9_pitchers=None, bng_pitchers=None):
@@ -358,11 +359,12 @@ def main():
     streamdata = get_stream_snapshot()
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
     day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
+    stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
     tomorrowgames = streamdata['value']['games'][('schedule' if args.today else 'tomorrowSchedule')]
-    if not tomorrowgames:
+    if not tomorrowgames and not args.lineupfile:
         print("No games found for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
-    if already_ran_for_day(args.dayfile, season_number, day) and not args.forcerun:
+    if already_ran_for_day(args.dayfile, season_number, day) and not args.forcerun and not args.lineupfile:
         print("Already ran for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
     outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
@@ -378,13 +380,12 @@ def main():
         blaseball_stat_csv.generate_file(args.statfile, False)
     team_stat_data, pitcher_stat_data = load_stat_data(args.statfile)
     if args.lineupfile:
-        run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data)
+        run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data, stat_season_number)
         sys.exit(0)
     results, pair_results = [], []
     shame_results = {}
-    if not args.today: # can't check for targeted shame without both today and tomorrow schedules
+    if not args.today:  # can't check for targeted shame without both today and tomorrow schedules
         shame_results = get_shame_results(streamdata['value']['games']['schedule'])
-    stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
     all_pitcher_ids = []
     for game in tomorrowgames:
         all_pitcher_ids.extend((game["awayPitcher"], game["homePitcher"]))
