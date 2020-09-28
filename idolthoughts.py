@@ -51,6 +51,15 @@ LAST_SEASON_STAT_CUTOFF = 11
 DISCORD_SPLIT_LIMIT = 1900
 DISCORD_RESULT_PER_BATCH = 5
 
+# Discord Embed Colors
+PINK = 16728779
+RED = 13632027
+ORANGE = 16098851
+YELLOW = 16312092
+GREEN = 8311585
+BLUE = 4886754
+PURPLE = 9442302
+
 
 class PrintWebhook:
     def __init__(self, content=None, **kwargs):
@@ -72,7 +81,11 @@ class PrintEmbed:
         self.description = description
 
     def __repr__(self):
-        return self.description
+        return "{}\n{}".format(discord_hr(), self.description)
+
+
+def discord_hr(spaces=25, char=" "):
+    return "~~-{}-~~".format(char * spaces)
 
 
 def send_discord_message(title, message):
@@ -108,8 +121,9 @@ def get_output_line_from_matchup(matchup_data, odds, so9_pitchers, bng_pitchers,
                  "({:.2f} OppBat★, {:.2f} OppMaxBat), {:.2f} D/O^2, {}")
     name = matchup_data.pitchername if print else "[{}](https://blaseball-reference.com/players/{})".format(matchup_data.pitchername, get_player_slug(matchup_data.pitchername))
     return formatstr.format(chr(int(matchup_data.defemoji, 16)), name,
-                            matchup_data.pitcherteamnickname, so9, matchup_data.era, bng, matchup_data.battingstars, 
+                            matchup_data.pitcherteamnickname, so9, matchup_data.era, bng, matchup_data.battingstars,
                             matchup_data.stardata.maxbatstars, matchup_data.defoff, odds)
+
 
 
 def sort_result_pairs(matchup_pairs, so9_pitchers, bng_pitchers):
@@ -121,7 +135,7 @@ def sort_result_pairs(matchup_pairs, so9_pitchers, bng_pitchers):
             sortkey = 3
         elif (matchup_pair.awayMatchupData.pitchername not in so9_pitchers and matchup_pair.awayMatchupData.pitchername in bng_pitchers) or (matchup_pair.homeMatchupData.pitchername not in so9_pitchers and matchup_pair.homeMatchupData.pitchername in bng_pitchers):
             sortkey = 2
-        return (sortkey, max(matchup_pair.awayMatchupData.so9, matchup_pair.homeMatchupData.so9))
+        return sortkey, max(matchup_pair.awayMatchupData.so9, matchup_pair.homeMatchupData.so9)
     return sorted(matchup_pairs, key=sort_key, reverse=True)
 
 
@@ -134,8 +148,9 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, bng_p
     for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
         awayOdds, homeOdds = get_formatted_odds(awayMatchupData.winodds, homeMatchupData.winodds)
-        description = "{}\n--- @ ---\n{}".format(get_output_line_from_matchup(awayMatchupData, awayOdds, so9_pitchers, bng_pitchers, print=print),
-                                                 get_output_line_from_matchup(homeMatchupData, homeOdds, so9_pitchers, bng_pitchers, print=print))
+        description = "{0}\n{2} @ {2}\n{1}".format(get_output_line_from_matchup(awayMatchupData, awayOdds, so9_pitchers, bng_pitchers, print=print),
+                                                   get_output_line_from_matchup(homeMatchupData, homeOdds, so9_pitchers, bng_pitchers, print=print),
+                                                   discord_hr(10, char="-"))
         for matchup_data in (awayMatchupData, homeMatchupData):
             if matchup_data.pitcherteam in shame_results:
                 description += "\n:rotating_light::rotating_light: *{} Shame: -{}* :rotating_light::rotating_light:".format(matchup_data.pitcherteamnickname, shame_results[matchup_data.pitcherteam])
