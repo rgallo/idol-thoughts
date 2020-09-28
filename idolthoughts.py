@@ -5,8 +5,10 @@ import argparse
 import collections
 import csv
 import json
+import linecache
 import math
 import os
+import random
 import sys
 from collections import namedtuple
 from functools import reduce
@@ -331,6 +333,19 @@ def print_results(day, results, so9_pitchers, bng_pitchers, shame_results):
                 print("-- {} Shame: -{}".format(team, shame_results[team]))
 
 
+def load_test_data(testfile):
+    filename, linenumber = testfile, None
+    if ":" in testfile:
+        filename, linenumber = testfile.split(":")
+    else:
+        with open(filename) as f:
+            for i, l in enumerate(f):
+                pass
+        linenumber = random.randint(1, i + 1)
+    print("Loading test data from {}, line {}".format(filename, linenumber))
+    return json.loads(linecache.getline(filename, int(linenumber)))
+
+
 def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--print', help="print to screen", action='store_true')
@@ -345,6 +360,7 @@ def handle_args():
     parser.add_argument('--forcerun', help="force running for day, even if it was already run last", action='store_true')
     parser.add_argument('--lineupfile', help="json file with array of {pitcherName, pitcherTeam, awayTeam, seasonNumber} lineups, print mode only")
     parser.add_argument('--archive', help="move csv file if a new one is regenerated before writing", action='store_true')
+    parser.add_argument('--testfile', help="path to file with test data in jsonl format, pass optional line number as filename:n, otherwise random line is used")
     args = parser.parse_args()
     if not args.print and not args.discord and not args.airtable and not args.discordprint and not args.lineupfile:
         print("No output specified")
@@ -356,7 +372,10 @@ def handle_args():
 def main():
     args = handle_args()
     load_dotenv()
-    streamdata = get_stream_snapshot()
+    if args.testfile:
+        streamdata = load_test_data(args.testfile)
+    else:
+        streamdata = get_stream_snapshot()
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
     day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
     stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
