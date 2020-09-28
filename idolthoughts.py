@@ -391,7 +391,7 @@ def main():
         all_pitcher_ids.extend((game["awayPitcher"], game["homePitcher"]))
     pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
     for game in tomorrowgames:
-        awayMatchupData, homeMatchupData = process_game(game, stat_season_number, day, team_stat_data, pitcher_stat_data, pitcher_performance_stats)
+        awayMatchupData, homeMatchupData = process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_stats)
         results.extend((awayMatchupData, homeMatchupData))
         pair_results.append(MatchupPair(awayMatchupData, homeMatchupData))
     if pair_results:
