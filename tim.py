@@ -1,6 +1,7 @@
 from __future__ import division
 from __future__ import print_function
 
+import math
 
 # Discord Embed Colors
 PINK = 16728779
@@ -57,7 +58,8 @@ class TIM:
         mar_val = self.mar_term.calc(mar)
         numerator = (unt_val + rut_val + ovp_val + shp_val + col_val + trg_val + pat_val)
         denominator = (thw_val + div_val + mox_val + mus_val + mar_val)
-        calc = (numerator / denominator) if denominator else 0
+        formula = (numerator / denominator) if denominator else 0
+        calc = 1.0 / (1.0 + math.exp(-1 * formula))
         return calc, self.condition(calc)
 
 
