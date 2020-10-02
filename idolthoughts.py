@@ -135,7 +135,6 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, shame
             if matchup_data.pitcherteam in shame_results:
                 description += ("\n:rotating_light::rotating_light: *{} Shame: -{}* :rotating_light::rotating_light:"
                                 "").format(matchup_data.pitcherteamnickname, shame_results[matchup_data.pitcherteam])
-        print(description)
         embed = Embed(description=description, color=color)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
     return [webhook.execute() for webhook in webhooks]
