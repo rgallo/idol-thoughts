@@ -1,0 +1,3 @@
+[submodule "blaseball-stat-csv"]
+	path = blaseball_stat_csv
+	url = git@github.com:rgallo/blaseball-stat-csv.git

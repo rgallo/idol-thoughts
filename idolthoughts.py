@@ -18,7 +18,7 @@ from airtable import Airtable
 from discord_webhook import DiscordWebhook, DiscordEmbed
 from dotenv import load_dotenv
 
-import blaseball_stat_csv
+from blaseball_stat_csv import blaseball_stat_csv
 from tim import RED_HOT, HOT, WARM, TEPID, TEMPERATE, COOL, DEAD_COLD, TIM_ERROR
 
 MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "so9", "era", "defemoji",
