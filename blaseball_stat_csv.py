@@ -2,13 +2,14 @@ from __future__ import print_function
 
 import requests
 import time
-import sys
+import os
 import json
 import argparse
 import operator
 
 JSON_COLUMNS = ['id', 'anticapitalism', 'baseThirst', 'buoyancy', 'chasiness', 'coldness', 'continuation', 'divinity', 'groundFriction', 'indulgence', 'laserlikeness', 'martyrdom', 'moxie', 'musclitude', 'bat', 'omniscience', 'overpowerment', 'patheticism', 'ruthlessness', 'shakespearianism', 'suppression', 'tenaciousness', 'thwackability', 'tragicness', 'unthwackability', 'watchfulness', 'pressurization', 'totalFingers', 'soul', 'deceased', 'peanutAllergy', 'cinnamon', 'fate', 'armor', 'ritual', 'blood', 'coffee', 'permAttr', 'seasAttr', 'weekAttr', 'gameAttr']
 COLUMNS = ['team', 'league', 'division', 'name', 'position', 'turnOrder'] + JSON_COLUMNS + ["battingStars", "pitchingStars", "baserunningStars", "defenseStars"]
+
 
 def get_stream_snapshot():
     snapshot = None
@@ -19,9 +20,8 @@ def get_stream_snapshot():
     return json.loads(snapshot.decode("utf-8")[6:])
 
 
-def get_team_leagues():
+def get_team_leagues(snapshot):
     team_divisions = {}
-    snapshot = get_stream_snapshot()
     active_subleague_ids = snapshot['value']['leagues']['leagues'][0]['subleagues']
     active_subleagues = [subleague for subleague in snapshot['value']['leagues']['subleagues'] if subleague["id"] in active_subleague_ids]
     for subleague in active_subleagues:
@@ -32,7 +32,6 @@ def get_team_leagues():
             division_name = division["name"]
             team_divisions.update({team_id: (subleague_name, division_name) for team_id in division["teams"]})
     return team_divisions
-
 
 
 def batting_stars(player):
@@ -51,8 +50,8 @@ def defense_stars(player):
     return (player["omniscience"] ** .2) * (player["tenaciousness"] ** .2) * (player["watchfulness"] ** .1) * (player["anticapitalism"] ** .1) * (player["chasiness"] ** .1) * 5.0
 
 
-def get_all_player_ids():
-    team_leagues = get_team_leagues()
+def get_all_player_ids(snapshot):
+    team_leagues = get_team_leagues(snapshot)
     allTeams = requests.get("https://blaseball.com/database/allTeams").json()
     player_ids = {}
     for team in allTeams:
@@ -66,9 +65,14 @@ def get_all_player_ids():
 BATCH_SIZE = 100
 
 
-def generate_file(filename, inactive):
+def generate_file(filename, inactive, archive):
+    streamdata = get_stream_snapshot()
+    if archive and os.path.isfile(filename):
+        season_number = streamdata['value']['games']['season']['seasonNumber'] + 1  # 0-indexed, make 1-indexed
+        day = streamdata['value']['games']['sim']['day'] + 2  # 0-indexed, make 1-indexed and add another if tomorrow
+        os.rename(filename, filename.replace(".csv", "S{}preD{}.csv".format(season_number + 1, day)))
     output = []
-    all_player_ids, nameidx, positionidx = get_all_player_ids()
+    all_player_ids, nameidx, positionidx = get_all_player_ids(streamdata)
     positions = ('lineup', 'rotation', 'bench', 'bullpen') if inactive else ('lineup', 'rotation')
     player_id_list = [key for key, value in all_player_ids.items() if value[positionidx] in positions]
     while player_id_list:
@@ -95,10 +99,11 @@ def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', default='output.csv', help="output filepath")
     parser.add_argument('--inactive', help="include inactive players(bench/bullpen)", action='store_true')
+    parser.add_argument('--archive', help="backup existing file before generating", action='store_true')
     args = parser.parse_args()
     return args
 
 
 if __name__ == "__main__":
     args = handle_args()
-    generate_file(args.output, args.inactive)
+    generate_file(args.output, args.inactive, args.archive)
