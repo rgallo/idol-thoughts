@@ -31,16 +31,20 @@ MatchupPair = namedtuple("MatchupPair", ["awayMatchupData", "homeMatchupData"])
 StarData = namedtuple("StarData", ["pitchingstars", "maxbatstars", "meanbatstars", "maxdefstars", "meandefstars", 
                                    "maxrunstars", "meanrunstars"])
 
-PITCHING_STLATS = ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness"]
-OFFENSE_STLATS = ["tragicness", "patheticism", "thwackability", "divinity", "moxie", "musclitude", "martyrdom",
-                  "baseThirst"]
-DEFENSE_STLATS = ["omniscience", "tenaciousness", "watchfulness", "chasiness"]
+PITCHING_STLATS = ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness", "suppression"]
+BATTING_STLATS = ["divinity", "martyrdom", "moxie", "musclitude", "patheticism", "thwackability", "tragicness"]
+DEFENSE_STLATS = ["anticapitalism", "chasiness", "omniscience", "tenaciousness", "watchfulness"]
+BASERUNNING_STLATS = ["baseThirst", "continuation", "groundFriction", "indulgence", "laserlikeness"]
+INVERSE_STLATS = ["tragicness", "patheticism"]  # These stlats are better for the target the smaller they are
 
 StlatData = namedtuple("StlatData", ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness",  # Pitching
                                      "meantragicness", "meanpatheticism", "meanthwackability", "meandivinity",  # Opponent
                                      "meanmoxie", "meanmusclitude", "meanmartyrdom"])
 
 ScoreAdjustment = namedtuple("ScoreAdjustment", ["score", "label"])
+
+WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
+            "Glitter", "Blooddrain", "Peanuts", "Birds", "Feedback", "Reverb"]
 
 BR_PLAYERNAME_SUBS = {
     "wyatt-owens": "emmett-owens",
@@ -166,21 +170,42 @@ def get_def_off_ratio(pitcher, defenseteamname, offenseteamname, team_stat_data,
     return (pitchingstars+meandefstars)/((meanbatstars+meanrunstars) ** 2)
 
 
-def load_stat_data(filepath):
+def get_crows_teams(crows_teams={}):
+    if not crows_teams:
+        crows_teams = [team["fullName"] for team in requests.get("https://www.blaseball.com/database/allTeams").json()
+                       if "AFFINITY_FOR_CROWS" in (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"])]
+    return crows_teams
+
+
+def get_stlat_value(team, stlatname, value, game):
+    # Affinity for Crows - commented out for now
+    # bird_weather = WEATHERS.index("Birds")
+    # if stlatname in BATTING_STLATS + PITCHING_STLATS and game["weather"] == bird_weather and team in get_crows_teams():
+    #     return value + (-.5 if stlatname in INVERSE_STLATS else .5)
+    # Default case
+    return value
+
+
+def load_stat_data(filepath, schedule):
     with open(filepath) as f:
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
+    games = {game["homeTeamName"]: game for game in schedule}
+    games.update({game["awayTeamName"]: game for game in schedule})
     pitcherstardata = collections.defaultdict(lambda: {})
     teamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: []))
     for row in filedata:
+        team = row["team"]
         if row["position"] == "rotation":
             for key in (PITCHING_STLATS + ["pitchingStars"]):
-                pitcherstardata[row["name"]][key] = float(row[key])
+                pitcherstardata[row["name"]][key] = get_stlat_value(team, key, float(row[key]), games[team])
         elif row["position"] == "lineup":
             if "SHELLED" not in row["permAttr"]:
-                for key in (OFFENSE_STLATS + ["battingStars", "baserunningStars"]):
-                    teamstatdata[row["team"]][key].append(float(row[key]))
+                for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
+                    val = get_stlat_value(team, key, float(row[key]), games[team])
+                    teamstatdata[team][key].append(val)
             for key in (DEFENSE_STLATS + ["defenseStars"]):
-                    teamstatdata[row["team"]][key].append(float(row[key]))
+                val = get_stlat_value(team, key, float(row[key]), games[team])
+                teamstatdata[team][key].append(val)
     return teamstatdata, pitcherstardata
 
 
@@ -425,7 +450,7 @@ def main():
         else:
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile, False, args.archive)
-    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile)
+    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, streamdata['value']['games']['schedule'])
     if args.lineupfile:
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data, stat_season_number)
         sys.exit(0)
