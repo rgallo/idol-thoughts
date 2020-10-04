@@ -22,7 +22,7 @@ from blaseball_stat_csv import blaseball_stat_csv
 from tim import RED_HOT, HOT, WARM, TEPID, TEMPERATE, COOL, DEAD_COLD, TIM_ERROR
 
 MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "so9", "era", "defemoji",
-                                         "vsteam", "offemoji", "defoff", "battingstars", "tim", "timrank", "timcalc",
+                                         "vsteam", "offemoji", "defoff", "tim", "timrank", "timcalc",
                                          "stardata", "ballcount", "strikecount", "pitcherteamnickname",
                                          "vsteamnickname", "winodds"])
 
@@ -92,10 +92,10 @@ def send_discord_message(title, message):
 def get_formatted_odds(away_odds, home_odds):
     formatted_away_odds = "{:.2f}%".format(away_odds*100.0)
     formatted_home_odds = "{:.2f}%".format(home_odds*100.0)
-    if away_odds > home_odds:
-        formatted_away_odds = "__{}__".format(formatted_away_odds)
-    elif home_odds > away_odds:
-        formatted_home_odds = "__{}__".format(formatted_home_odds)
+    if away_odds < home_odds:
+        formatted_away_odds = "~~{}~~".format(formatted_away_odds)
+    elif home_odds < away_odds:
+        formatted_home_odds = "~~{}~~".format(formatted_home_odds)
     return formatted_away_odds, formatted_home_odds
 
 
@@ -103,11 +103,11 @@ def get_output_line_from_matchup(matchup_data, odds, so9_pitchers, higher_tim, s
     so9 = "__{:.2f} SO9__".format(matchup_data.so9) if matchup_data.pitchername in so9_pitchers else "{:.2f} SO9".format(matchup_data.so9)
     tim = "__{}__".format(matchup_data.tim.name) if higher_tim else matchup_data.tim.name
     formatstr = ("{} **{}, {}** ({}, {}, {:.2f} ERA), "
-                 "({:.2f} OppBat★, {:.2f} OppMaxBat), {:.2f} D/O^2, {}")
+                 "({:.2f}★ AOB, {:.2f}★ MOB), {:.2f} D/O^2, {}")
     name = matchup_data.pitchername if screen else ("[{}](https://blaseball-reference.com/players/{})"
                                                     "").format(matchup_data.pitchername, get_player_slug(matchup_data.pitchername))
     return formatstr.format(chr(int(matchup_data.defemoji, 16)), name,
-                            matchup_data.pitcherteamnickname, tim, so9, matchup_data.era, matchup_data.battingstars,
+                            matchup_data.pitcherteamnickname, tim, so9, matchup_data.era, matchup_data.stardata.meanbatstars,
                             matchup_data.stardata.maxbatstars, matchup_data.defoff, odds)
 
 
@@ -233,8 +233,7 @@ def calc_stlat_stats(pitcher, offenseteamname, team_stat_data, pitcher_stat_data
 def get_dict_from_matchupdata(matchup, season_number, day):
     return {"Pitcher Name": matchup.pitchername, "Season": season_number, "Day": day,
             "SO9": matchup.so9, "ERA": matchup.era, "Opposing Team": matchup.vsteam,
-            "D/O": matchup.defoff, "Batting Stars": matchup.battingstars,
-            "Game ID": matchup.gameid, "Pitcher ID": matchup.pitcherid,
+            "D/O": matchup.defoff, "Game ID": matchup.gameid, "Pitcher ID": matchup.pitcherid,
             "Pitching Stars": matchup.stardata.pitchingstars, "Max Batting": matchup.stardata.maxbatstars,
             "Mean Batting": matchup.stardata.meanbatstars, "Max Defense": matchup.stardata.maxdefstars,
             "Mean Defense": matchup.stardata.meandefstars, "Max Baserunning": matchup.stardata.maxrunstars,
@@ -266,15 +265,13 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
                                float(awayPitcherStats.get("k_per_9", -1.0)), float(awayPitcherStats.get("era", -1.0)),
                                awayEmoji, homeTeam, homeEmoji,
                                get_def_off_ratio(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data),
-                               sum(team_stat_data[homeTeam]["battingStars"]), awayTIM, awayTIMRank, awayTIMCalc,
-                               awayStarStats, 4, game["homeStrikes"], game["awayTeamNickname"],
+                               awayTIM, awayTIMRank, awayTIMCalc, awayStarStats, 4, game["homeStrikes"], game["awayTeamNickname"],
                                game["homeTeamNickname"], game["awayOdds"]))
     results.append(MatchupData(homePitcher, homePitcherId, homeTeam, gameId,
                                float(homePitcherStats.get("k_per_9", -1.0)), float(homePitcherStats.get("era", -1.0)),
                                homeEmoji, awayTeam, awayEmoji,
                                get_def_off_ratio(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data),
-                               sum(team_stat_data[awayTeam]["battingStars"]), homeTIM, homeTIMRank, homeTIMCalc,
-                               homeStarStats, 4, game["awayStrikes"], game["homeTeamNickname"],
+                               homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, 4, game["awayStrikes"], game["homeTeamNickname"],
                                game["awayTeamNickname"], game["homeOdds"]))
     return results
 
@@ -288,9 +285,9 @@ def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data, stat_seaso
             result = process_pitcher_vs_team(matchup["pitcherName"], matchup["pitcherId"], matchup["pitcherTeam"],
                                              matchup["otherTeam"], team_stat_data, pitcher_stat_data,
                                              pitcher_performance_stats)
-            print(("{} ({}, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} Bat*, {:.2f} MaxBat), {:.2f} D/O^2"
+            print(("{} ({}, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2"
                    "").format(result.pitchername, result.tim.name, result.so9, result.era, result.vsteam,
-                              result.battingstars, result.stardata.maxbatstars, result.defoff))
+                              result.stardata.meanbatstars, result.stardata.maxbatstars, result.defoff))
 
 
 def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data,
@@ -302,8 +299,7 @@ def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team
     return MatchupData(pitcherName, None, None, None, float(pitcherStats.get("k_per_9", -1.0)),
                        float(pitcherStats.get("era", -1.0)), None, otherTeam, None,
                        get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
-                       sum(team_stat_data[otherTeam]["battingStars"]), tim, timRank, timCalc, starStats,
-                       4, 3, None, None, None)
+                       tim, timRank, timCalc, starStats, 4, 3, None, None, None)
 
 
 def sort_results(results):
@@ -336,9 +332,9 @@ def write_day(filepath, season_number, day):
 def print_results(day, results, shame_results):
     print("Day {}".format(day))
     for result in sort_results(results):
-        print(("{} ({}, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} Bat*, {:.2f} MaxBat), {:.2f} D/O^2"
+        print(("{} ({}, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2"
                "").format(result.pitchername, result.tim.name, result.so9, result.era, result.vsteam,
-                          result.battingstars, result.stardata.maxbatstars, result.defoff))
+                          result.stardata.meanbatstars, result.stardata.maxbatstars, result.defoff))
         for team in (result.pitcherteam, result.vsteam):
             if team in shame_results:
                 print("-- {} Shame: -{}".format(team, shame_results[team]))
