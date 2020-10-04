@@ -40,6 +40,8 @@ StlatData = namedtuple("StlatData", ["overpowerment", "ruthlessness", "unthwacka
                                      "meantragicness", "meanpatheticism", "meanthwackability", "meandivinity",  # Opponent
                                      "meanmoxie", "meanmusclitude", "meanmartyrdom"])
 
+ScoreAdjustment = namedtuple("ScoreAdjustment", ["score", "label"])
+
 BR_PLAYERNAME_SUBS = {
     "wyatt-owens": "emmett-owens",
     "peanut-bong": "dan-bong"
@@ -111,7 +113,7 @@ def get_output_line_from_matchup(matchup_data, odds, so9_pitchers, higher_tim, s
                             matchup_data.stardata.maxbatstars, matchup_data.defoff, odds)
 
 
-def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, shame_results, screen=False):
+def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, score_adjustments, screen=False):
     Webhook, Embed = (PrintWebhook, PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     sorted_pairs = sorted(matchup_pairs,
@@ -132,9 +134,11 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, shame
                                                    get_output_line_from_matchup(homeMatchupData, homeOdds, so9_pitchers, homeHigherTIM, screen=screen),
                                                    discord_hr(10, char="-"))
         for matchup_data in (awayMatchupData, homeMatchupData):
-            if matchup_data.pitcherteam in shame_results:
-                description += ("\n:rotating_light::rotating_light: *{} Shame: -{}* :rotating_light::rotating_light:"
-                                "").format(matchup_data.pitcherteamnickname, shame_results[matchup_data.pitcherteam])
+            if matchup_data.pitcherteam in score_adjustments:
+                for score_adjustment in score_adjustments[matchup_data.pitcherteam]:
+                    description += ("\n:rotating_light::rotating_light: *{} {}: {}{}* :rotating_light::rotating_light:"
+                                    "").format(matchup_data.pitcherteamnickname, score_adjustment.label,
+                                               "+" if score_adjustment.score > 0 else "", score_adjustment.score)
         embed = Embed(description=description, color=color)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
     return [webhook.execute() for webhook in webhooks]
@@ -306,10 +310,22 @@ def sort_results(results):
     return sorted(results, key=lambda result: (result.timrank, result.so9), reverse=True)
 
 
-def get_shame_results(today_schedule):
+def get_score_adjustments(is_today, today_schedule, tomorrow_schedule):
+    score_adjustments = collections.defaultdict(lambda: [])
     allTeams = requests.get("https://blaseball.com/database/allTeams").json()
-    shameable_teams = set([team['fullName'] for team in allTeams if 'SHAME_PIT' in team['seasAttr'] or 'SHAME_PIT' in team['permAttr']])
-    return {game["awayTeamName"]: (game["homeScore"] - game["awayScore"]) for game in today_schedule if game['shame'] and game["awayTeamName"] in shameable_teams}
+    teamAttrs = {team['fullName']: (team['gameAttr'] + team['weekAttr'] + team['seasAttr'] + team['permAttr']) for team in allTeams}
+    if not is_today:  # can't check for targeted shame without both today and tomorrow schedules
+        shameable_teams = set([team for team, attrs in teamAttrs.items() if 'SHAME_PIT' in attrs])
+        if shameable_teams:
+            for game in today_schedule:
+                if game['shame'] and game["awayTeamName"] in shameable_teams:
+                    score_adjustments[game["awayTeamName"]].append(ScoreAdjustment(game["awayScore"] - game["homeScore"], "Shame"))
+    hfa_teams = set([team for team, attrs in teamAttrs.items() if 'HOME_FIELD' in attrs])
+    if hfa_teams:
+        for game in tomorrow_schedule:
+            if game["homeTeamName"] in hfa_teams:
+                score_adjustments[game["homeTeamName"]].append(ScoreAdjustment(1, "Home Field Advantage"))
+    return score_adjustments
 
 
 def outcome_matters(outcome):
@@ -329,15 +345,18 @@ def write_day(filepath, season_number, day):
         f.write("{}-{}".format(season_number, day))
 
 
-def print_results(day, results, shame_results):
+def print_results(day, results, score_adjustments):
     print("Day {}".format(day))
     for result in sort_results(results):
         print(("{} ({}, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2"
                "").format(result.pitchername, result.tim.name, result.so9, result.era, result.vsteam,
                           result.stardata.meanbatstars, result.stardata.maxbatstars, result.defoff))
         for team in (result.pitcherteam, result.vsteam):
-            if team in shame_results:
-                print("-- {} Shame: -{}".format(team, shame_results[team]))
+            if team in score_adjustments:
+                for score_adjustment in score_adjustments[team]:
+                    print("-- {} {}: {}{}".format(team, score_adjustment.label,
+                                                  "+" if score_adjustment.score > 0 else "",
+                                                  score_adjustment.score))
 
 
 def load_test_data(testfile):
@@ -411,9 +430,8 @@ def main():
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data, stat_season_number)
         sys.exit(0)
     results, pair_results = [], []
-    shame_results = {}
-    if not args.today:  # can't check for targeted shame without both today and tomorrow schedules
-        shame_results = get_shame_results(streamdata['value']['games']['schedule'])
+    score_adjustments = get_score_adjustments(args.today, streamdata['value']['games']['schedule'] if args.today else [],
+                                              streamdata['value']['games']['tomorrowSchedule'])
     all_pitcher_ids = []
     for game in tomorrowgames:
         all_pitcher_ids.extend((game["awayPitcher"], game["homePitcher"]))
@@ -426,13 +444,13 @@ def main():
     if pair_results:
         so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}
         if args.discord:
-            send_matchup_data_to_discord_webhook(day, pair_results, so9_pitchers, shame_results)
+            send_matchup_data_to_discord_webhook(day, pair_results, so9_pitchers, score_adjustments)
         if args.discordprint:
-            send_matchup_data_to_discord_webhook(day, pair_results, so9_pitchers, shame_results, screen=True)
+            send_matchup_data_to_discord_webhook(day, pair_results, so9_pitchers, score_adjustments, screen=True)
         if args.airtable:
             insert_into_airtable(results, season_number+1, day)
         if args.print:
-            print_results(day, results, shame_results)
+            print_results(day, results, score_adjustments)
     else:
         print("No results")
     write_day(args.dayfile, season_number, day)
