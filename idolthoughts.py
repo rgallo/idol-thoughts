@@ -25,7 +25,7 @@ from helpers import geomean
 
 MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "so9", "era", "defemoji",
                                          "vsteam", "offemoji", "defoff", "tim", "timrank", "timcalc",
-                                         "stardata", "ballcount", "strikecount", "pitcherteamnickname",
+                                         "stardata", "ballcount", "strikecount", "basecount", "pitcherteamnickname",
                                          "vsteamnickname", "websiteodds", "mofoodds", "k9"])
 
 MatchupPair = namedtuple("MatchupPair", ["awayMatchupData", "homeMatchupData"])
@@ -266,7 +266,7 @@ def get_dict_from_matchupdata(matchup, season_number, day):
             "Mean Batting": matchup.stardata.meanbatstars, "Max Defense": matchup.stardata.maxdefstars,
             "Mean Defense": matchup.stardata.meandefstars, "Max Baserunning": matchup.stardata.maxrunstars,
             "Mean Baserunning": matchup.stardata.meanrunstars, "Ball Count": matchup.ballcount,
-            "Strike Count": matchup.strikecount}
+            "Strike Count": matchup.strikecount, "Base Count": matchup.basecount}
 
 
 def insert_into_airtable(results, season_number, day):
@@ -296,14 +296,16 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
                                float(awayPitcherStats.get("k_per_9", -1.0)), float(awayPitcherStats.get("era", -1.0)),
                                awayEmoji, homeTeam, homeEmoji,
                                get_def_off_ratio(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data),
-                               awayTIM, awayTIMRank, awayTIMCalc, awayStarStats, 4, game["homeStrikes"], game["awayTeamNickname"],
-                               game["homeTeamNickname"], game["awayOdds"], awayMOFO, awayK9))
+                               awayTIM, awayTIMRank, awayTIMCalc, awayStarStats, 4, game["homeStrikes"],
+                               game["homeBases"], game["awayTeamNickname"], game["homeTeamNickname"], game["awayOdds"],
+                               awayMOFO, awayK9))
     results.append(MatchupData(homePitcher, homePitcherId, homeTeam, gameId,
                                float(homePitcherStats.get("k_per_9", -1.0)), float(homePitcherStats.get("era", -1.0)),
                                homeEmoji, awayTeam, awayEmoji,
                                get_def_off_ratio(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data),
-                               homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, 4, game["awayStrikes"], game["homeTeamNickname"],
-                               game["awayTeamNickname"], game["homeOdds"], homeMOFO, homeK9))
+                               homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, 4, game["awayStrikes"],
+                               game["awayBases"], game["homeTeamNickname"], game["awayTeamNickname"], game["homeOdds"],
+                               homeMOFO, homeK9))
     return results
 
 
@@ -331,7 +333,7 @@ def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team
     return MatchupData(pitcherName, None, None, None, float(pitcherStats.get("k_per_9", -1.0)),
                        float(pitcherStats.get("era", -1.0)), None, otherTeam, None,
                        get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
-                       tim, timRank, timCalc, starStats, 4, 3, None, None, None, -1, pitcherk9)
+                       tim, timRank, timCalc, starStats, 4, 3, 4, None, None, None, -1, pitcherk9)
 
 
 def sort_results(results):
