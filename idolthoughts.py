@@ -11,7 +11,6 @@ import os
 import random
 import sys
 from collections import namedtuple
-from functools import reduce
 
 import requests
 from airtable import Airtable
@@ -20,11 +19,13 @@ from dotenv import load_dotenv
 
 from blaseball_stat_csv import blaseball_stat_csv
 from tim import RED_HOT, HOT, WARM, TEPID, TEMPERATE, COOL, DEAD_COLD, TIM_ERROR
+import mofo
+from helpers import geomean
 
 MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "so9", "era", "defemoji",
                                          "vsteam", "offemoji", "defoff", "tim", "timrank", "timcalc",
                                          "stardata", "ballcount", "strikecount", "pitcherteamnickname",
-                                         "vsteamnickname", "winodds"])
+                                         "vsteamnickname", "websiteodds", "mofoodds"])
 
 MatchupPair = namedtuple("MatchupPair", ["awayMatchupData", "homeMatchupData"])
 
@@ -105,16 +106,16 @@ def get_formatted_odds(away_odds, home_odds):
     return formatted_away_odds, formatted_home_odds
 
 
-def get_output_line_from_matchup(matchup_data, odds, so9_pitchers, higher_tim, screen=False):
+def get_output_line_from_matchup(matchup_data, websiteodds, mofoodds, so9_pitchers, higher_tim, screen=False):
     so9 = "__{:.2f} SO9__".format(matchup_data.so9) if matchup_data.pitchername in so9_pitchers else "{:.2f} SO9".format(matchup_data.so9)
     tim = "__{}__".format(matchup_data.tim.name) if higher_tim else matchup_data.tim.name
     formatstr = ("{} **{}, {}** ({}, {}, {:.2f} ERA), "
-                 "({:.2f}★ AOB, {:.2f}★ MOB), {:.2f} D/O^2, {}")
+                 "({:.2f}★ AOB, {:.2f}★ MOB), {:.2f} D/O^2, {} WebOdds, {} MOFO")
     name = matchup_data.pitchername if screen else ("[{}](https://blaseball-reference.com/players/{})"
                                                     "").format(matchup_data.pitchername, get_player_slug(matchup_data.pitchername))
     return formatstr.format(chr(int(matchup_data.defemoji, 16)), name,
                             matchup_data.pitcherteamnickname, tim, so9, matchup_data.era, matchup_data.stardata.meanbatstars,
-                            matchup_data.stardata.maxbatstars, matchup_data.defoff, odds)
+                            matchup_data.stardata.maxbatstars, matchup_data.defoff, websiteodds, mofoodds)
 
 
 def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, score_adjustments, screen=False):
@@ -130,12 +131,13 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, score
                         content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
     for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
-        awayOdds, homeOdds = get_formatted_odds(awayMatchupData.winodds, homeMatchupData.winodds)
+        awayOdds, homeOdds = get_formatted_odds(awayMatchupData.websiteodds, homeMatchupData.websiteodds)
+        awayMOFOOdds, homeMOFOOdds = get_formatted_odds(awayMatchupData.mofoodds, homeMatchupData.mofoodds)
         awayHigherTIM = awayMatchupData.timrank > homeMatchupData.timrank or (awayMatchupData.timrank == homeMatchupData.timrank and awayMatchupData.timcalc > homeMatchupData.timcalc)
         homeHigherTIM = homeMatchupData.timrank > awayMatchupData.timrank or (homeMatchupData.timrank == awayMatchupData.timrank and homeMatchupData.timcalc > awayMatchupData.timcalc)
         color = awayMatchupData.tim.color if awayHigherTIM else homeMatchupData.tim.color
-        description = "{0}\n{2} @ {2}\n{1}".format(get_output_line_from_matchup(awayMatchupData, awayOdds, so9_pitchers, awayHigherTIM, screen=screen),
-                                                   get_output_line_from_matchup(homeMatchupData, homeOdds, so9_pitchers, homeHigherTIM, screen=screen),
+        description = "{0}\n{2} @ {2}\n{1}".format(get_output_line_from_matchup(awayMatchupData, awayOdds, awayMOFOOdds, so9_pitchers, awayHigherTIM, screen=screen),
+                                                   get_output_line_from_matchup(homeMatchupData, homeOdds, homeMOFOOdds, so9_pitchers, homeHigherTIM, screen=screen),
                                                    discord_hr(10, char="-"))
         for matchup_data in (awayMatchupData, homeMatchupData):
             if matchup_data.pitcherteam in score_adjustments:
@@ -146,11 +148,6 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, score
         embed = Embed(description=description, color=color)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
     return [webhook.execute() for webhook in webhooks]
-
-
-def geomean(numbers):
-    correction = .001 if 0.0 in numbers else 0.0
-    return (reduce(lambda x, y: x*y, [(n + correction) for n in numbers])**(1.0/len(numbers))) - correction
 
 
 def get_stream_snapshot():
@@ -290,18 +287,19 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
     homeStlatStats = calc_stlat_stats(homePitcher, awayTeam, team_stat_data, pitcher_stat_data)
     awayTIM, awayTIMRank, awayTIMCalc = get_tim(awayStlatStats)
     homeTIM, homeTIMRank, homeTIMCalc = get_tim(homeStlatStats)
+    awayMOFO, homeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
     results.append(MatchupData(awayPitcher, awayPitcherId, awayTeam, gameId,
                                float(awayPitcherStats.get("k_per_9", -1.0)), float(awayPitcherStats.get("era", -1.0)),
                                awayEmoji, homeTeam, homeEmoji,
                                get_def_off_ratio(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data),
                                awayTIM, awayTIMRank, awayTIMCalc, awayStarStats, 4, game["homeStrikes"], game["awayTeamNickname"],
-                               game["homeTeamNickname"], game["awayOdds"]))
+                               game["homeTeamNickname"], game["awayOdds"], awayMOFO))
     results.append(MatchupData(homePitcher, homePitcherId, homeTeam, gameId,
                                float(homePitcherStats.get("k_per_9", -1.0)), float(homePitcherStats.get("era", -1.0)),
                                homeEmoji, awayTeam, awayEmoji,
                                get_def_off_ratio(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data),
                                homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, 4, game["awayStrikes"], game["homeTeamNickname"],
-                               game["awayTeamNickname"], game["homeOdds"]))
+                               game["awayTeamNickname"], game["homeOdds"], homeMOFO))
     return results
 
 
@@ -328,7 +326,7 @@ def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team
     return MatchupData(pitcherName, None, None, None, float(pitcherStats.get("k_per_9", -1.0)),
                        float(pitcherStats.get("era", -1.0)), None, otherTeam, None,
                        get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
-                       tim, timRank, timCalc, starStats, 4, 3, None, None, None)
+                       tim, timRank, timCalc, starStats, 4, 3, None, None, None, -1)
 
 
 def sort_results(results):
@@ -373,9 +371,10 @@ def write_day(filepath, season_number, day):
 def print_results(day, results, score_adjustments):
     print("Day {}".format(day))
     for result in sort_results(results):
-        print(("{} ({}, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2"
+        print(("{} ({}, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2, {:.2f}% WSO, {:.2f}% MOFO"
                "").format(result.pitchername, result.tim.name, result.so9, result.era, result.vsteam,
-                          result.stardata.meanbatstars, result.stardata.maxbatstars, result.defoff))
+                          result.stardata.meanbatstars, result.stardata.maxbatstars, result.defoff,
+                          result.websiteodds*100.0, result.mofoodds*100.0))
         for team in (result.pitcherteam, result.vsteam):
             if team in score_adjustments:
                 for score_adjustment in score_adjustments[team]:
