@@ -131,6 +131,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     batches = math.ceil(len(matchup_pairs) / DISCORD_RESULT_PER_BATCH)
     webhooks = [Webhook(url=discord_webhook_url,
                         content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
+    odds_mismatch = []
     for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
         awayOdds, homeOdds = get_formatted_odds(awayMatchupData.websiteodds, homeMatchupData.websiteodds)
@@ -147,9 +148,24 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
                     description += ("\n:rotating_light::rotating_light: *{} {}: {}{}* :rotating_light::rotating_light:"
                                     "").format(matchup_data.pitcherteamnickname, score_adjustment.label,
                                                "+" if score_adjustment.score > 0 else "", score_adjustment.score)
+        if (awayMatchupData.mofoodds < .5 and awayMatchupData.websiteodds > .5) or (awayMatchupData.mofoodds > .5 and awayMatchupData.websiteodds < .5):
+            odds_mismatch.append(result)
         embed = Embed(description=description, color=color)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
-    return [webhook.execute() for webhook in webhooks]
+    results = [webhook.execute() for webhook in webhooks]
+    if odds_mismatch:
+        odds_webhook = Webhook(url=discord_webhook_url, content="__**Odds Mismatches**__")
+        odds_description = "\n".join(["**{} @ {}** - Website: {} {:.2f}%, MOFO: **{}** {:.2f}%".format(
+            result.awayMatchupData.pitcherteamnickname, result.homeMatchupData.pitcherteamnickname,
+            result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.websiteodds > result.homeMatchupData.websiteodds else result.homeMatchupData.pitcherteamnickname,
+            (max(result.awayMatchupData.websiteodds, result.homeMatchupData.websiteodds)) * 100.0,
+            result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
+            (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0)
+                                      for result in odds_mismatch])
+        odds_embed = Embed(description=odds_description)
+        odds_webhook.add_embed(odds_embed)
+        results.append(odds_webhook.execute())
+    return results
 
 
 def get_stream_snapshot():
