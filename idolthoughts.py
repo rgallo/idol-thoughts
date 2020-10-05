@@ -154,7 +154,6 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
     results = [webhook.execute() for webhook in webhooks]
     if odds_mismatch:
-        odds_webhook = Webhook(url=discord_webhook_url, content="__**Odds Mismatches**__")
         odds_description = "\n".join(["**{} @ {}** - Website: {} {:.2f}%, MOFO: **{}** {:.2f}%".format(
             result.awayMatchupData.pitcherteamnickname, result.homeMatchupData.pitcherteamnickname,
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.websiteodds > result.homeMatchupData.websiteodds else result.homeMatchupData.pitcherteamnickname,
@@ -162,9 +161,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
             (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0)
                                       for result in odds_mismatch])
-        odds_embed = Embed(description=odds_description)
-        odds_webhook.add_embed(odds_embed)
-        results.append(odds_webhook.execute())
+        results.append(send_discord_message("__Odds Mismatches__", odds_description))
     return results
 
 
