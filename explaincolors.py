@@ -15,7 +15,7 @@ PURPLE = 9442302
 BLACK = 1
 
 output = [
-    ('**Red Hot:** Higher than the lowest calculated shutout value at which zero non-shutouts have ever been recorded. (Historical: 100%)', PINK),
+    ('**Red Hot:** Higher than the highest value at which non-shutouts have ever been recorded. (Historical: 100%)', PINK),
     ("**Hot:** At or below the maximum value at which a non-shutout has been recorded, but shutouts recorded at these values are at least significantly\* above the mean recorded value for shutouts. (Historical 15.4%)", RED),
     ("**Warm:** Lower than significantly above the mean recorded value for shutouts, but at or above a value of significantly above the mean recorded value for non-shutouts. (Historical: 9.78%)", ORANGE),
     ("**Tepid:** At or above the mean recorded value for shutouts, but also between the mean and significantly above of the mean recorded value for non-shutouts. (Historical: 6.89%)", YELLOW),
