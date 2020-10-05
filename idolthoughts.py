@@ -215,6 +215,8 @@ def get_player_slug(playername):
 
 
 def get_all_pitcher_performance_stats(pitcher_ids, season):
+    if not pitcher_ids:
+        return {}
     url = ("https://api.blaseball-reference.com/v1/playerStats?category=pitching&season={}&playerIds={}"
            "").format(season, ",".join(pitcher_ids))
     response = requests.get(url)
@@ -312,7 +314,7 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
 def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data, stat_season_number):
     with open(filepath, "r") as json_file:
         json_data = json.load(json_file)
-        all_pitcher_ids = [matchup["pitcherId"] for matchup in json_data]
+        all_pitcher_ids = [matchup["pitcherId"] for matchup in json_data if matchup["pitcherId"]]
         pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
         for matchup in json_data:
             result = process_pitcher_vs_team(matchup["pitcherName"], matchup["pitcherId"], matchup["pitcherTeam"],
@@ -447,6 +449,13 @@ def main():
     if already_ran_for_day(args.dayfile, season_number, day) and not args.forcerun and not args.lineupfile:
         print("Already ran for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
+    all_pitcher_ids = []
+    for game in tomorrowgames:
+        all_pitcher_ids.extend((game["awayPitcher"], game["homePitcher"]))
+    all_pitcher_ids = [pid for pid in all_pitcher_ids if pid]
+    if not all_pitcher_ids:
+        print("No pitchers assigned to games on Season {} Day {}, exiting.".format(season_number + 1, day))
+        sys.exit(0)
     outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
     stat_file_exists = os.path.isfile(args.statfile)
     if (outcomes or not stat_file_exists or args.forceupdate or ((day == 1 and args.today) or day == 2)) and not args.skipupdate:
@@ -463,9 +472,6 @@ def main():
     results, pair_results = [], []
     score_adjustments = get_score_adjustments(args.today, streamdata['value']['games']['schedule'] if args.today else [],
                                               streamdata['value']['games']['tomorrowSchedule'])
-    all_pitcher_ids = []
-    for game in tomorrowgames:
-        all_pitcher_ids.extend((game["awayPitcher"], game["homePitcher"]))
     pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
     for game in tomorrowgames:
         awayMatchupData, homeMatchupData = process_game(game, team_stat_data, pitcher_stat_data,
