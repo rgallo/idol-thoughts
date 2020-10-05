@@ -177,7 +177,7 @@ def get_crows_teams(crows_teams={}):
 def get_stlat_value(team, stlatname, value, game):
     # Affinity for Crows - commented out for now
     # bird_weather = WEATHERS.index("Birds")
-    # if stlatname in BATTING_STLATS + PITCHING_STLATS and game["weather"] == bird_weather and team in get_crows_teams():
+    # if game and stlatname in BATTING_STLATS + PITCHING_STLATS and game["weather"] == bird_weather and team in get_crows_teams():
     #     return value + (-.5 if stlatname in INVERSE_STLATS else .5)
     # Default case
     return value
@@ -194,14 +194,14 @@ def load_stat_data(filepath, schedule):
         team = row["team"]
         if row["position"] == "rotation":
             for key in (PITCHING_STLATS + ["pitchingStars"]):
-                pitcherstardata[row["name"]][key] = get_stlat_value(team, key, float(row[key]), games[team])
+                pitcherstardata[row["name"]][key] = get_stlat_value(team, key, float(row[key]), games.get(team))
         elif row["position"] == "lineup":
             if "SHELLED" not in row["permAttr"]:
                 for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
-                    val = get_stlat_value(team, key, float(row[key]), games[team])
+                    val = get_stlat_value(team, key, float(row[key]), games.get(team))
                     teamstatdata[team][key].append(val)
             for key in (DEFENSE_STLATS + ["defenseStars"]):
-                val = get_stlat_value(team, key, float(row[key]), games[team])
+                val = get_stlat_value(team, key, float(row[key]), games.get(team))
                 teamstatdata[team][key].append(val)
     return teamstatdata, pitcherstardata
 
