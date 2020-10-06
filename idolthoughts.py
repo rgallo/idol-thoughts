@@ -151,7 +151,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
                     description += ("\n:rotating_light::rotating_light: *{} {}: {}{}* :rotating_light::rotating_light:"
                                     "").format(matchup_data.pitcherteamnickname, score_adjustment.label,
                                                "+" if score_adjustment.score > 0 else "", score_adjustment.score)
-        if (awayMatchupData.mofoodds < .5 and awayMatchupData.websiteodds > .5) or (awayMatchupData.mofoodds > .5 and awayMatchupData.websiteodds < .5):
+        if (awayMatchupData.mofoodds < .5 and awayMatchupData.websiteodds > .5) or (awayMatchupData.mofoodds > .5 and awayMatchupData.websiteodds < .5) or (.495 <= awayMatchupData.websiteodds <= .505):
             odds_mismatch.append(result)
         embed = Embed(description=description, color=color)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
@@ -407,7 +407,7 @@ def print_results(day, results, score_adjustments):
                     print("-- {} {}: {}{}".format(team, score_adjustment.label,
                                                   "+" if score_adjustment.score > 0 else "",
                                                   score_adjustment.score))
-        if result.mofoodds > .5 and result.websiteodds < .5:
+        if (result.mofoodds > .5 and result.websiteodds < .5) or (.495 <= result.websiteodds <= .505):
             odds_mismatch.append(result)
     if odds_mismatch:
         print("Odds Mismatches")
