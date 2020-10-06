@@ -126,8 +126,11 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     sorted_pairs = sorted(matchup_pairs,
                           key=lambda matchup_pair: (max(matchup_pair.awayMatchupData.timrank,
                                                         matchup_pair.homeMatchupData.timrank),
-                                                    max(matchup_pair.awayMatchupData.so9,
-                                                        matchup_pair.homeMatchupData.so9)), reverse=True)
+                                                    max(matchup_pair.awayMatchupData.k9,
+                                                        matchup_pair.homeMatchupData.k9),
+                                                    max(matchup_pair.awayMatchupData.mofoodds,
+                                                        matchup_pair.homeMatchupData.mofoodds)
+                                                    ), reverse=True)
     batches = math.ceil(len(matchup_pairs) / DISCORD_RESULT_PER_BATCH)
     webhooks = [Webhook(url=discord_webhook_url,
                         content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
@@ -352,7 +355,7 @@ def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team
 
 
 def sort_results(results):
-    return sorted(results, key=lambda result: (result.timrank, result.so9), reverse=True)
+    return sorted(results, key=lambda result: (result.timrank, result.k9, result.mofoodds), reverse=True)
 
 
 def get_score_adjustments(is_today, today_schedule, tomorrow_schedule):
@@ -392,6 +395,7 @@ def write_day(filepath, season_number, day):
 
 def print_results(day, results, score_adjustments):
     print("Day {}".format(day))
+    odds_mismatch = []
     for result in sort_results(results):
         print(("{} ({}, {} K9, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2, {:.2f}% WSO, {:.2f}% MOFO"
                "").format(result.pitchername, result.tim.name, result.k9, result.so9, result.era, result.vsteam,
@@ -403,6 +407,11 @@ def print_results(day, results, score_adjustments):
                     print("-- {} {}: {}{}".format(team, score_adjustment.label,
                                                   "+" if score_adjustment.score > 0 else "",
                                                   score_adjustment.score))
+        if result.mofoodds > .5 and result.websiteodds < .5:
+            odds_mismatch.append(result)
+    if odds_mismatch:
+        print("Odds Mismatches")
+        print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in odds_mismatch))
 
 
 def load_test_data(testfile):
