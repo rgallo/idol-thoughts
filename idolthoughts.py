@@ -392,6 +392,7 @@ def write_day(filepath, season_number, day):
 
 def print_results(day, results, score_adjustments):
     print("Day {}".format(day))
+    odds_mismatch = []
     for result in sort_results(results):
         print(("{} ({}, {} K9, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2, {:.2f}% WSO, {:.2f}% MOFO"
                "").format(result.pitchername, result.tim.name, result.k9, result.so9, result.era, result.vsteam,
@@ -403,6 +404,11 @@ def print_results(day, results, score_adjustments):
                     print("-- {} {}: {}{}".format(team, score_adjustment.label,
                                                   "+" if score_adjustment.score > 0 else "",
                                                   score_adjustment.score))
+        if result.mofoodds > .5 and result.websiteodds < .5:
+            odds_mismatch.append(result)
+    if odds_mismatch:
+        print("Odds Mismatches")
+        print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in odds_mismatch))
 
 
 def load_test_data(testfile):
