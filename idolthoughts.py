@@ -126,8 +126,11 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     sorted_pairs = sorted(matchup_pairs,
                           key=lambda matchup_pair: (max(matchup_pair.awayMatchupData.timrank,
                                                         matchup_pair.homeMatchupData.timrank),
-                                                    max(matchup_pair.awayMatchupData.so9,
-                                                        matchup_pair.homeMatchupData.so9)), reverse=True)
+                                                    max(matchup_pair.awayMatchupData.k9,
+                                                        matchup_pair.homeMatchupData.k9),
+                                                    max(matchup_pair.awayMatchupData.mofoodds,
+                                                        matchup_pair.homeMatchupData.mofoodds)
+                                                    ), reverse=True)
     batches = math.ceil(len(matchup_pairs) / DISCORD_RESULT_PER_BATCH)
     webhooks = [Webhook(url=discord_webhook_url,
                         content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
@@ -352,7 +355,7 @@ def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team
 
 
 def sort_results(results):
-    return sorted(results, key=lambda result: (result.timrank, result.so9), reverse=True)
+    return sorted(results, key=lambda result: (result.timrank, result.k9, result.mofoodds), reverse=True)
 
 
 def get_score_adjustments(is_today, today_schedule, tomorrow_schedule):
