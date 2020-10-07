@@ -57,7 +57,7 @@ def team_offense(terms, teamname, team_stat_data):
 def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data):
     load_dotenv()
     terms_url = os.getenv("MOFO_TERMS")
-    terms = load_terms(terms_url)
+    terms, _ = load_terms(terms_url)
     away_offense = team_offense(terms, awayTeam, team_stat_data)
     away_defense = team_defense(terms, awayPitcher, awayTeam, team_stat_data, pitcher_stat_data)
     home_offense = team_offense(terms, homeTeam, team_stat_data)

@@ -23,11 +23,12 @@ def geomean(numbers):
 TERM_RESULTS = {}
 
 
-def load_terms(term_url):
+def load_terms(term_url, special_cases=None):
+    special_case_list = [case.lower() for case in special_cases] if special_cases else []
     if term_url not in TERM_RESULTS:
         data = requests.get(term_url).text
         splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
-        terms = {name.lower(): StlatTerm(a, b, c) for name, a, b, c in splitdata}
-        TERM_RESULTS[term_url] = terms
+        TERM_RESULTS[term_url] = ({name.lower(): StlatTerm(float(a), float(b), float(c)) for name, a, b, c in splitdata if name.lower() not in special_case_list},
+                                  {line[0]: line[1:] for line in splitdata if line[0].lower() in special_case_list})
     return TERM_RESULTS[term_url]
 

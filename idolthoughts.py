@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 
 import k9
 from blaseball_stat_csv import blaseball_stat_csv
-from tim import RED_HOT, HOT, WARM, TEPID, TEMPERATE, COOL, DEAD_COLD, TIM_ERROR
+import tim
 import mofo
 from helpers import geomean
 
@@ -59,8 +59,6 @@ BNG_CEILING = 994975
 LAST_SEASON_STAT_CUTOFF = 11
 DISCORD_SPLIT_LIMIT = 1900
 DISCORD_RESULT_PER_BATCH = 5
-
-TIM_TIERS = (RED_HOT, HOT, WARM, TEPID, TEMPERATE, COOL, DEAD_COLD)
 
 
 class PrintWebhook:
@@ -241,15 +239,16 @@ def get_all_pitcher_performance_stats(pitcher_ids, season):
 
 
 def get_tim(stlatdata):
-    tier_length = len(TIM_TIERS)
-    for idx, tier in enumerate(TIM_TIERS):
+    tim_tiers = tim.get_tiers()
+    tier_length = len(tim_tiers)
+    for idx, tier in enumerate(tim_tiers):
         calc, check = tier.check(stlatdata.unthwackability, stlatdata.ruthlessness, stlatdata.overpowerment,
                                  stlatdata.shakespearianism, stlatdata.coldness, stlatdata.meantragicness,
                                  stlatdata.meanpatheticism, stlatdata.meanthwackability, stlatdata.meandivinity,
                                  stlatdata.meanmoxie, stlatdata.meanmusclitude, stlatdata.meanmartyrdom)
         if check:
             return tier, tier_length-idx, calc
-    return TIM_ERROR, -1, -1
+    return tim.TIM_ERROR, -1, -1
 
 
 def calc_star_max_mean_stats(pitcher, defenseteamname, offenseteamname, team_stat_data, pitcher_stat_data):

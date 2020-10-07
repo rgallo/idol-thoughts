@@ -60,9 +60,10 @@ def calc_everythingelse(terms, pitchingteam, battingteam, team_stat_data):
 def calculate(pitcher, pitchingteam, battingteam, team_stat_data, pitcher_stat_data):
     load_dotenv()
     terms_url = os.getenv("K9_TERMS")
-    terms = load_terms(terms_url)
+    terms, special_cases = load_terms(terms_url, ["factors"])
     pitching = calc_pitching(terms, pitcher, pitcher_stat_data)
     everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_stat_data)
-    kplus1PI = (pitching ** 1.92728213507654) + everythingelse - 0.246123019416862
+    factor_exp, factor_const = special_cases["factors"]
+    kplus1PI = (pitching ** float(factor_exp)) + everythingelse - float(factor_const)
     k9 = (kplus1PI * 9) - 1
     return round(k9)

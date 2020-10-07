@@ -2,6 +2,12 @@ from __future__ import division
 from __future__ import print_function
 
 import math
+import operator
+import os
+
+from dotenv import load_dotenv
+
+import helpers
 from helpers import StlatTerm
 
 # Discord Embed Colors
@@ -54,112 +60,13 @@ class TIM:
         return calc, self.condition(calc)
 
 
-RED_HOT = TIM(
-    "Red Hot",
-    StlatTerm(0.177322289, 0.0, 2.597944004),  # UnT
-    StlatTerm(0.0, 0.0, 0.0),  # RuT
-    StlatTerm(0.0, 0.0, 0.0),  # OvP
-    StlatTerm(0.0, 0.0, 0.0),  # ShP
-    StlatTerm(0.0, 0.0, 0.0),  # CoL
-    StlatTerm(0.094588904, 0.016224189, 4.847784146),  # TrG
-    StlatTerm(0.832641828, 0.141320159, 3.314225248),  # PaT
-    StlatTerm(7.648261191, 0, 3.435681233),  # ThW
-    StlatTerm(0.0, 0.0, 0.0),  # DiV
-    StlatTerm(9.99961566, 0.183252128, 4.999824451),  # MoX
-    StlatTerm(0.0, 0.0, 0.0),  # MuS
-    StlatTerm(0.0, 0.0, 0.0),  # MaR
-    lambda x: x > 0.772815176,
-    PINK
-)
-
-HOT = TIM(
-    "Hot",
-    StlatTerm(0.002145301, 0.066691001, 3.269944529),  # UnT
-    StlatTerm(0.0, 0.0, 0.0),  # RuT
-    StlatTerm(11.99299272, 0.274987415, 5.999766736),  # OvP
-    StlatTerm(0.0, 0.0, 0.0),  # ShP
-    StlatTerm(7.519598636, 0.000138072, 5.999257545),  # CoL
-    StlatTerm(3.957129029, 0.056104291, 5.428240871),  # TrG
-    StlatTerm(0.0, 0.0, 0.0),  # PaT
-    StlatTerm(2.349230548, 1.206080018, 4.845805179),  # ThW
-    StlatTerm(1.062939319, 0.415779463, 5.975998002),  # DiV
-    StlatTerm(3.82691836, 2.241155807, 1.919126386),  # MoX
-    StlatTerm(0.200531697, 0.054364085, 2.310488073),  # MuS
-    StlatTerm(0.203404099, 0.046397544, 4.952527765),  # MaR
-    lambda x: x >= 0.989385278,
-    RED
-)
-
-WARM = TIM(
-    "Warm",
-    StlatTerm(0.002145301, 0.066691001, 3.269944529),  # UnT
-    StlatTerm(0.0, 0.0, 0.0),  # RuT
-    StlatTerm(11.99299272, 0.274987415, 5.999766736),  # OvP
-    StlatTerm(0.0, 0.0, 0.0),  # ShP
-    StlatTerm(7.519598636, 0.000138072, 5.999257545),  # CoL
-    StlatTerm(3.957129029, 0.056104291, 5.428240871),  # TrG
-    StlatTerm(0.0, 0.0, 0.0),  # PaT
-    StlatTerm(2.349230548, 1.206080018, 4.845805179),  # ThW
-    StlatTerm(1.062939319, 0.415779463, 5.975998002),  # DiV
-    StlatTerm(3.82691836, 2.241155807, 1.919126386),  # MoX
-    StlatTerm(0.200531697, 0.054364085, 2.310488073),  # MuS
-    StlatTerm(0.203404099, 0.046397544, 4.952527765),  # MaR
-    lambda x: x >= 0.857489627,
-    ORANGE
-)
-
-TEPID = TIM(
-    "Tepid",
-    StlatTerm(9.296347588, 1.123548898, 3.128206331),  # UnT
-    StlatTerm(8.400990108, 0.858306755, 2.56543587),  # RuT
-    StlatTerm(6.432804813, 0.578874091, 3.086524219),  # OvP
-    StlatTerm(7.536314297, 0.611823438, 4.104052762),  # ShP
-    StlatTerm(5.690347835, 0.71087485, 3.802016902),  # CoL
-    StlatTerm(3.085366284, 1.551089242, 2.935376194),  # TrG
-    StlatTerm(2.233738838, 0.812370089, 3.077927013),  # PaT
-    StlatTerm(6.421824852, 1.069765806, 2.796632602),  # ThW
-    StlatTerm(5.828023617, 0.56688689, 3.317837775),  # DiV
-    StlatTerm(4.798888123, 1.399638526, 4.363377101),  # MoX
-    StlatTerm(8.721443267, 1.433894815, 2.531678849),  # MuS
-    StlatTerm(2.4119358, 0.959596028, 2.737780473),  # MaR
-    lambda x: x >= 0.746400436,
-    YELLOW
-)
-
-TEMPERATE = TIM(
-    "Temperate",
-    StlatTerm(9.296347588, 1.123548898, 3.128206331),  # UnT
-    StlatTerm(8.400990108, 0.858306755, 2.56543587),  # RuT
-    StlatTerm(6.432804813, 0.578874091, 3.086524219),  # OvP
-    StlatTerm(7.536314297, 0.611823438, 4.104052762),  # ShP
-    StlatTerm(5.690347835, 0.71087485, 3.802016902),  # CoL
-    StlatTerm(3.085366284, 1.551089242, 2.935376194),  # TrG
-    StlatTerm(2.233738838, 0.812370089, 3.077927013),  # PaT
-    StlatTerm(6.421824852, 1.069765806, 2.796632602),  # ThW
-    StlatTerm(5.828023617, 0.56688689, 3.317837775),  # DiV
-    StlatTerm(4.798888123, 1.399638526, 4.363377101),  # MoX
-    StlatTerm(8.721443267, 1.433894815, 2.531678849),  # MuS
-    StlatTerm(2.4119358, 0.959596028, 2.737780473),  # MaR
-    lambda x: x >= 0.71954724,
-    GREEN
-)
-
-COOL = TIM(
-    "Cool",
-    StlatTerm(9.296347588, 1.123548898, 3.128206331),  # UnT
-    StlatTerm(8.400990108, 0.858306755, 2.56543587),  # RuT
-    StlatTerm(6.432804813, 0.578874091, 3.086524219),  # OvP
-    StlatTerm(7.536314297, 0.611823438, 4.104052762),  # ShP
-    StlatTerm(5.690347835, 0.71087485, 3.802016902),  # CoL
-    StlatTerm(3.085366284, 1.551089242, 2.935376194),  # TrG
-    StlatTerm(2.233738838, 0.812370089, 3.077927013),  # PaT
-    StlatTerm(6.421824852, 1.069765806, 2.796632602),  # ThW
-    StlatTerm(5.828023617, 0.56688689, 3.317837775),  # DiV
-    StlatTerm(4.798888123, 1.399638526, 4.363377101),  # MoX
-    StlatTerm(8.721443267, 1.433894815, 2.531678849),  # MuS
-    StlatTerm(2.4119358, 0.959596028, 2.737780473),  # MaR
-    lambda x: x >= 0.61970085,
-    BLUE
+TERMS = (
+    ("Red Hot", "REDHOT_TERMS", PINK),
+    ("Hot", "HOT_TERMS", RED),
+    ("Warm", "WARM_TERMS", ORANGE),
+    ("Tepid", "TEPID_TERMS", YELLOW),
+    ("Temperate", "TEMPERATE_TERMS", GREEN),
+    ("Cool", "COOL_TERMS", BLUE),
 )
 
 DEAD_COLD = TIM(
@@ -197,3 +104,22 @@ TIM_ERROR = TIM(
     lambda x: True,
     BLACK
 )
+
+TIM_TIERS = []
+
+
+def get_tiers():
+    if not TIM_TIERS:
+        load_dotenv()
+        for name, propname, color in TERMS:
+            terms_url = os.getenv(propname)
+            terms, special_cases = helpers.load_terms(terms_url, ["cutoff"])
+            _, op, cutoff_value = special_cases["cutoff"]
+            opfunc = operator.gt if op == ">" else operator.ge if op == ">=" else operator.lt if op == "<" else operator.le if op == "<=" else None
+            if not opfunc:
+                raise Exception("Operator not supported: {}".format(op))
+            TIM_TIERS.append(TIM(name, terms["unt"], terms["rut"], terms["ovp"], terms["shp"], terms["col"],
+                                 terms["trg"], terms["pat"], terms["thw"], terms["div"], terms["mox"], terms["mus"],
+                                 terms["mar"], lambda x: opfunc(x, float(cutoff_value)), color))
+        TIM_TIERS.extend([DEAD_COLD, TIM_ERROR])
+    return TIM_TIERS
