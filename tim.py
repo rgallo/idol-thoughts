@@ -197,3 +197,7 @@ TIM_ERROR = TIM(
     lambda x: True,
     BLACK
 )
+
+
+def get_tiers():
+    return [RED_HOT, HOT, WARM, TEPID, TEMPERATE, COOL, DEAD_COLD]
