@@ -26,9 +26,15 @@ TERM_RESULTS = {}
 def load_terms(term_url, special_cases=None):
     special_case_list = [case.lower() for case in special_cases] if special_cases else []
     if term_url not in TERM_RESULTS:
+        results, special = {}, {}
         data = requests.get(term_url).text
         splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
-        TERM_RESULTS[term_url] = ({name.lower(): StlatTerm(float(a), float(b), float(c)) for name, a, b, c in splitdata if name.lower() not in special_case_list},
-                                  {line[0]: line[1:] for line in splitdata if line[0].lower() in special_case_list})
+        for row in splitdata:
+            name = row[0].lower()
+            if name in special_case_list:
+                special[name] = row[1:]
+            else:
+                results[name] = StlatTerm(float(row[1]), float(row[2]), float(row[3]))
+        TERM_RESULTS[term_url] = (results, special)
     return TERM_RESULTS[term_url]
 
