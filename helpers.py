@@ -20,7 +20,14 @@ def geomean(numbers):
     return (reduce(lambda x, y: x*y, [(n + correction) for n in numbers])**(1.0/len(numbers))) - correction
 
 
+TERM_RESULTS = {}
+
+
 def load_terms(term_url):
-    data = requests.get(term_url).text
-    splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
-    return {name: StlatTerm(a, b, c) for name, a, b, c in splitdata}
+    if term_url not in TERM_RESULTS:
+        data = requests.get(term_url).text
+        splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
+        terms = {name.lower(): StlatTerm(a, b, c) for name, a, b, c in splitdata}
+        TERM_RESULTS[term_url] = terms
+    return TERM_RESULTS[term_url]
+
