@@ -149,7 +149,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
                     description += ("\n:rotating_light::rotating_light: *{} {}: {}{}* :rotating_light::rotating_light:"
                                     "").format(matchup_data.pitcherteamnickname, score_adjustment.label,
                                                "+" if score_adjustment.score > 0 else "", score_adjustment.score)
-        if (awayMatchupData.mofoodds < .5 and awayMatchupData.websiteodds > .5) or (awayMatchupData.mofoodds > .5 and awayMatchupData.websiteodds < .5) or (.495 <= awayMatchupData.websiteodds <= .505):
+        if (awayMatchupData.mofoodds < .5 and awayMatchupData.websiteodds > .5) or (awayMatchupData.mofoodds > .5 and awayMatchupData.websiteodds < .5) or (.495 <= awayMatchupData.websiteodds < .505):
             odds_mismatch.append(result)
         embed = Embed(description=description, color=color)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
@@ -183,23 +183,26 @@ def get_def_off_ratio(pitcher, defenseteamname, offenseteamname, team_stat_data,
     return (pitchingstars+meandefstars)/((meanbatstars+meanrunstars) ** 2)
 
 
-def get_crows_teams(crows_teams={}):
-    if not crows_teams:
-        crows_teams = [team["fullName"] for team in requests.get("https://www.blaseball.com/database/allTeams").json()
-                       if "AFFINITY_FOR_CROWS" in (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"])]
-    return crows_teams
+def get_team_attributes(attributes={}):
+    if not attributes:
+        attributes.update({team["fullName"]: (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"]) for team in requests.get("https://www.blaseball.com/database/allTeams").json()})
+    return attributes
 
 
-def get_stlat_value(team, stlatname, value, game):
+def get_stlat_value(team, stlatname, value, game, day):
+    adjustedVal = value
+    # Growth
+    if game and "GROWTH" in get_team_attributes()[team]:
+        adjustedVal = adjustedVal + ((-.05 if stlatname in INVERSE_STLATS else .05) * min(day/99, 1))
     # Affinity for Crows - commented out for now
-    # bird_weather = WEATHERS.index("Birds")
-    # if game and stlatname in BATTING_STLATS + PITCHING_STLATS and game["weather"] == bird_weather and team in get_crows_teams():
-    #     return value + (-.5 if stlatname in INVERSE_STLATS else .5)
+    bird_weather = WEATHERS.index("Birds")
+    if game and stlatname in BATTING_STLATS + PITCHING_STLATS and game["weather"] == bird_weather and "AFFINITY_FOR_CROWS" in get_team_attributes()[team]:
+        adjustedVal = adjustedVal + (-.5 if stlatname in INVERSE_STLATS else .5)
     # Default case
-    return value
+    return max(adjustedVal, .01)
 
 
-def load_stat_data(filepath, schedule):
+def load_stat_data(filepath, schedule, day):
     with open(filepath) as f:
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
     games = {game["homeTeamName"]: game for game in schedule}
@@ -210,14 +213,14 @@ def load_stat_data(filepath, schedule):
         team = row["team"]
         if row["position"] == "rotation":
             for key in (PITCHING_STLATS + ["pitchingStars"]):
-                pitcherstardata[row["name"]][key] = get_stlat_value(team, key, float(row[key]), games.get(team))
+                pitcherstardata[row["name"]][key] = get_stlat_value(team, key, float(row[key]), games.get(team), day)
         elif row["position"] == "lineup":
             if "SHELLED" not in row["permAttr"]:
                 for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
-                    val = get_stlat_value(team, key, float(row[key]), games.get(team))
+                    val = get_stlat_value(team, key, float(row[key]), games.get(team), day)
                     teamstatdata[team][key].append(val)
             for key in (DEFENSE_STLATS + ["defenseStars"]):
-                val = get_stlat_value(team, key, float(row[key]), games.get(team))
+                val = get_stlat_value(team, key, float(row[key]), games.get(team), day)
                 teamstatdata[team][key].append(val)
     return teamstatdata, pitcherstardata
 
@@ -406,7 +409,7 @@ def print_results(day, results, score_adjustments):
                     print("-- {} {}: {}{}".format(team, score_adjustment.label,
                                                   "+" if score_adjustment.score > 0 else "",
                                                   score_adjustment.score))
-        if (result.mofoodds > .5 and result.websiteodds < .5) or (.495 <= result.websiteodds <= .505):
+        if (result.mofoodds > .5 and result.websiteodds < .5) or (.495 <= result.websiteodds < .505 and result.mofoodds >= .5):
             odds_mismatch.append(result)
     if odds_mismatch:
         print("Odds Mismatches")
@@ -486,7 +489,7 @@ def main():
         else:
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile, False, args.archive)
-    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, streamdata['value']['games']['schedule'])
+    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, tomorrowgames, day)
     if args.lineupfile:
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data, stat_season_number)
         sys.exit(0)
