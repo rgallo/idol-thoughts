@@ -15,14 +15,14 @@ PURPLE = 9442302
 BLACK = 1
 
 output = [
-    ('**Red Hot:** Higher than the highest value at which non-shutouts have ever been recorded. (Historical: 100%)', PINK),
-    ("**Hot:** At or below the maximum value at which a non-shutout has been recorded, but shutouts recorded at these values are at least significantly\* above the mean recorded value for shutouts. (Historical 15.4%)", RED),
-    ("**Warm:** Lower than significantly above the mean recorded value for shutouts, but at or above a value of significantly above the mean recorded value for non-shutouts. (Historical: 9.78%)", ORANGE),
-    ("**Tepid:** At or above the mean recorded value for shutouts, but also between the mean and significantly above of the mean recorded value for non-shutouts. (Historical: 6.89%)", YELLOW),
-    ("**Temperate:** Below the mean recorded value for shutouts, but above the mean recorded value for non-shutouts. (Historical: 5.25%)", GREEN),
-    ("**Cool:** At or above the minimum recorded value for shutouts, but below the mean recorded value for non-shutouts. (Historical: 2.93%)", BLUE),
-    ("**Dead Cold:** Below the minimum recorded value for shutouts. (Historical: 0%)", PURPLE),
-    ("\* Significant: Three standard deviations\nHistorical data spans middle of season 6 to near-end of season 8\nAll pitcher evaluations ever evaluated by us = 4.40% pitched shutouts", None)
+    ('**Red Hot:** Higher than the highest value at which non-shutouts have ever been recorded. (Historical: 100%, 3 pitchers)', PINK),
+    ("**Hot:** At or below the maximum value at which a non-shutout has been recorded, but shutouts recorded at these values are at least significantly above the mean recorded value for shutouts. (Historical 75%, 4 pitchers)", RED),
+    ("**Warm:** Lower than Hot, but still some amount above the mean recorded value for nonshutouts. (Historical: 16.67%, 6 pitchers)", ORANGE),
+    ("**Tepid:** Lower than Warm, but still above the mean value for shutouts. (Historical: 10.09%, 327 pitchers)", YELLOW),
+    ("**Temperate:** Lower than Tepid, but above the mean recorded value for non-shutouts. (Historical: 8.00%, 50 pitchers)", GREEN),
+    ("**Cool:** At or above the minimum recorded value for shutouts, but below the mean recorded value for non-shutouts. (Historical: 4.37%, 5,078 pitchers)", BLUE),
+    ("**Dead Cold:** Below the minimum recorded value for shutouts. (Historical: 0%, 14 pitchers)", PURPLE),
+    ("All pitcher evaluations ever evaluated by us = 4.85% pitched shutouts", None)
 ]
 webhook = DiscordWebhook(url=os.getenv("DISCORD_WEBHOOK_URL").split(";"))
 for line, color in output:
