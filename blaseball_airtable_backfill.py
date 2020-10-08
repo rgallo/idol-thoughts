@@ -38,7 +38,7 @@ def get_inning_count(pitcher_id, game_id):
 def get_game_data(game_id):
     if game_id not in GAME_CACHE:
         game_request = requests.get("https://api.blaseball-reference.com/v1/events?gameId={}".format(game_id))
-        game_results = game_request.json().get("results")
+        game_results = game_request.json()
         GAME_CACHE[game_id] = game_results
     return GAME_CACHE[game_id]
 
@@ -46,7 +46,7 @@ def get_game_data(game_id):
 def pitcher_team_earned_runs_shutout(pitcher_id, game_id):
     if (pitcher_id, game_id) in RBI_CACHE:
         return RBI_CACHE[(pitcher_id, game_id)]
-    game_results = get_game_data(game_id)
+    game_results = get_game_data(game_id).get("results")
     if not game_results:
         RBI_CACHE[(pitcher_id, game_id)] = (None, None)
         return None, None
@@ -74,7 +74,7 @@ def handle_args():
     parser.add_argument('--earnedruns', help="backfill earned runs", action='store_true')
     parser.add_argument('--inningspitched', help="backfill innings pitched", action='store_true')
     args = parser.parse_args()
-    if not args.strikeouts and not args.shutouts and not args.earnedruns and not args.innings:
+    if not args.strikeouts and not args.shutouts and not args.earnedruns and not args.inningspitched:
         print("Nothing to do, that was easy")
         parser.print_help()
         sys.exit(-1)
@@ -99,7 +99,7 @@ def main():
     if args.strikeouts:
         handle_backfill(airtable, "Strikeouts", lambda result: "Pitcher ID" in result['fields'], get_strikout_count,
                         lambda count: count >= 0)
-    if args.innings:
+    if args.inningspitched:
         handle_backfill(airtable, "Innings Pitched", lambda result: "Pitcher ID" in result['fields'], get_inning_count,
                         lambda count: count >= 0)
     if args.shutouts:
