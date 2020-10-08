@@ -10,6 +10,7 @@ import math
 import os
 import random
 import sys
+import time
 from collections import namedtuple
 
 import requests
@@ -465,16 +466,45 @@ def main():
         streamdata = get_stream_snapshot()
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
     day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
-    stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
-    tomorrowgames = streamdata['value']['games'][('schedule' if args.today else 'tomorrowSchedule')]
-    if not tomorrowgames and not args.lineupfile:
-        print("No games found for Season {} Day {}, exiting.".format(season_number+1, day))
-        sys.exit(0)
     if already_ran_for_day(args.dayfile, season_number, day) and not args.forcerun and not args.lineupfile:
         print("Already ran for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
+    today_schedule = streamdata['value']['games']['schedule']
+    games_complete = False
+    retry_count = int(os.getenv("RETRY_COUNT", 10))
+    if not args.today and not args.forcerun and not args.testfile and retry_count > 0:
+        first_try = True
+        sleep_interval = 30
+        for _ in range(retry_count):
+            games_complete = all([game["finalized"] for game in today_schedule])
+            if not games_complete and first_try:
+                total_seconds = sleep_interval * retry_count
+                message = "Waiting up to {} minute{} {}for current games to end."
+                message = message.format(total_seconds // 60, "" if total_seconds // 60 == 1 else "s",
+                                         "{} seconds ".format(total_seconds % 60) if total_seconds % 60 else "")
+                if args.discord:
+                    send_discord_message("Sorry!", message)
+                else:
+                    print(message)
+                first_try = False
+            elif games_complete:
+                break
+            time.sleep(sleep_interval)
+            streamdata = get_stream_snapshot()
+            today_schedule = streamdata['value']['games']['schedule']
+        if not games_complete:
+            message = "Running even though games aren't complete, watch out!"
+            if args.discord:
+                send_discord_message("Warning!", message)
+            else:
+                print(message)
+    stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
+    game_schedule = today_schedule if args.today else streamdata['value']['games']['schedule']
+    if not game_schedule and not args.lineupfile:
+        print("No games found for Season {} Day {}, exiting.".format(season_number+1, day))
+        sys.exit(0)
     all_pitcher_ids = []
-    for game in tomorrowgames:
+    for game in game_schedule:
         all_pitcher_ids.extend((game["awayPitcher"], game["homePitcher"]))
     all_pitcher_ids = [pid for pid in all_pitcher_ids if pid]
     if not all_pitcher_ids:
@@ -489,7 +519,7 @@ def main():
         else:
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile, False, args.archive)
-    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, tomorrowgames, day)
+    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, game_schedule, day)
     if args.lineupfile:
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data, stat_season_number)
         sys.exit(0)
@@ -497,7 +527,7 @@ def main():
     score_adjustments = get_score_adjustments(args.today, streamdata['value']['games']['schedule'] if args.today else [],
                                               streamdata['value']['games']['tomorrowSchedule'])
     pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
-    for game in tomorrowgames:
+    for game in game_schedule:
         awayMatchupData, homeMatchupData = process_game(game, team_stat_data, pitcher_stat_data,
                                                         pitcher_performance_stats)
         results.extend((awayMatchupData, homeMatchupData))
