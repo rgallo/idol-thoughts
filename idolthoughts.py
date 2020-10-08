@@ -499,7 +499,7 @@ def main():
             else:
                 print(message)
     stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
-    game_schedule = today_schedule if args.today else streamdata['value']['games']['schedule']
+    game_schedule = today_schedule if args.today else streamdata['value']['games']['tomorrowSchedule']
     if not game_schedule and not args.lineupfile:
         print("No games found for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
