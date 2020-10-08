@@ -11,8 +11,10 @@ import os
 from dotenv import load_dotenv
 
 RBI_CACHE = {}
+GAME_CACHE = {}
 
 AirtableGame = namedtuple("AirtableGame", ["airtable_id", "pitcher_id", "game_id", "season", "day"])
+
 
 def get_missing_games(airtable, column, column_empty_func):
     results = airtable.search(column, '')
@@ -20,17 +22,31 @@ def get_missing_games(airtable, column, column_empty_func):
 
 
 def get_strikout_count(pitcher_id, game_id):
-    game_results = requests.get("https://api.blaseball-reference.com/v1/events?gameId={}&pitcherId={}".format(game_id, pitcher_id)).json()
+    game_results = get_game_data(game_id)
     if not game_results["count"]:
         return -1
-    return len([res for res in game_results["results"] if res["event_type"] == "STRIKEOUT"])
+    return len([res for res in game_results["results"] if res["event_type"] == "STRIKEOUT" and res["pitcher_id"] == pitcher_id])
+
+
+def get_inning_count(pitcher_id, game_id):
+    game_results = get_game_data(game_id)
+    if not game_results["count"]:
+        return -1
+    return len(set([res["inning"] for res in game_results["results"] if res["pitcher_id"] == pitcher_id]))
+
+
+def get_game_data(game_id):
+    if game_id not in GAME_CACHE:
+        game_request = requests.get("https://api.blaseball-reference.com/v1/events?gameId={}".format(game_id))
+        game_results = game_request.json()
+        GAME_CACHE[game_id] = game_results
+    return GAME_CACHE[game_id]
 
 
 def pitcher_team_earned_runs_shutout(pitcher_id, game_id):
     if (pitcher_id, game_id) in RBI_CACHE:
         return RBI_CACHE[(pitcher_id, game_id)]
-    game_request = requests.get("https://api.blaseball-reference.com/v1/events?gameId={}".format(game_id))
-    game_results = game_request.json()["results"]
+    game_results = get_game_data(game_id).get("results")
     if not game_results:
         RBI_CACHE[(pitcher_id, game_id)] = (None, None)
         return None, None
@@ -44,7 +60,7 @@ def pitcher_team_earned_runs_shutout(pitcher_id, game_id):
     # Get other side and cache it while we're here
     other_pitcher_id = (pitchers - {pitcher_id}).pop()
     RBI_CACHE[(other_pitcher_id, game_id)] = (other_team_rbi, not pitcher_team_rbi)
-    return (pitcher_team_rbi, not other_team_rbi)
+    return pitcher_team_rbi, not other_team_rbi
 
 
 def update_column(airtable, airtable_id, column, result):
@@ -56,8 +72,9 @@ def handle_args():
     parser.add_argument('--strikeouts', help="backfill strikeouts", action='store_true')
     parser.add_argument('--shutouts', help="backfill strikeouts", action='store_true')
     parser.add_argument('--earnedruns', help="backfill earned runs", action='store_true')
+    parser.add_argument('--inningspitched', help="backfill innings pitched", action='store_true')
     args = parser.parse_args()
-    if not args.strikeouts and not args.shutouts and not args.earnedruns:
+    if not args.strikeouts and not args.shutouts and not args.earnedruns and not args.inningspitched:
         print("Nothing to do, that was easy")
         parser.print_help()
         sys.exit(-1)
@@ -80,8 +97,11 @@ def main():
     load_dotenv()
     airtable = Airtable(os.getenv("AIRTABLE_BASE_KEY"), os.getenv("AIRTABLE_TABLE_NAME"), os.getenv("AIRTABLE_API_KEY"))
     if args.strikeouts:
-        handle_backfill(airtable, "Strikeouts", lambda result: "Pitcher ID" in result['fields'],
-                        get_strikout_count, lambda count: count >= 0)
+        handle_backfill(airtable, "Strikeouts", lambda result: "Pitcher ID" in result['fields'], get_strikout_count,
+                        lambda count: count >= 0)
+    if args.inningspitched:
+        handle_backfill(airtable, "Innings Pitched", lambda result: "Pitcher ID" in result['fields'], get_inning_count,
+                        lambda count: count >= 0)
     if args.shutouts:
         handle_backfill(airtable, "Shutouts", lambda result: "Pitcher ID" in result['fields'] and ("Shutouts" not in result['fields'] or result['fields']['Shutouts'] not in (0, 1)),
                         lambda pid, gid: pitcher_team_earned_runs_shutout(pid, gid)[1], lambda is_shutout: is_shutout is not None, transform_result=lambda res: 1 if res else 0)
