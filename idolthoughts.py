@@ -360,8 +360,8 @@ def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data, stat_seaso
             result = process_pitcher_vs_team(matchup["pitcherName"], matchup["pitcherId"], matchup["pitcherTeam"],
                                              matchup["otherTeam"], team_stat_data, pitcher_stat_data,
                                              pitcher_performance_stats)
-            print(("{} ({}, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2"
-                   "").format(result.pitchername, result.tim.name, result.so9, result.era, result.vsteam,
+            print(("{} ({}, {} K9, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2"
+                   "").format(result.pitchername, result.tim.name, result.k9, result.so9, result.era, result.vsteam,
                               result.stardata.meanbatstars, result.stardata.maxbatstars, result.defoff))
 
 
@@ -528,7 +528,7 @@ def main():
     for game in game_schedule:
         all_pitcher_ids.extend((game["awayPitcher"], game["homePitcher"]))
     all_pitcher_ids = [pid for pid in all_pitcher_ids if pid]
-    if not all_pitcher_ids:
+    if not all_pitcher_ids and not args.lineupfile:
         print("No pitchers assigned to games on Season {} Day {}, exiting.".format(season_number + 1, day))
         sys.exit(0)
     outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
