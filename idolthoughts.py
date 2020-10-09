@@ -354,15 +354,26 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
 def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data, stat_season_number):
     with open(filepath, "r") as json_file:
         json_data = json.load(json_file)
-        all_pitcher_ids = [matchup["pitcherId"] for matchup in json_data if matchup["pitcherId"]]
+        all_pitcher_ids = [matchup["awayPitcherId"] for matchup in json_data] + [matchup["homePitcherId"] for matchup in json_data]
         pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
+        fmtstr = ("{} ({}, {} K9, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat),"
+                  " {:.2f} D/O^2, {:.2f}% MOFO")
         for matchup in json_data:
-            result = process_pitcher_vs_team(matchup["pitcherName"], matchup["pitcherId"], matchup["pitcherTeam"],
-                                             matchup["otherTeam"], team_stat_data, pitcher_stat_data,
-                                             pitcher_performance_stats)
-            print(("{} ({}, {} K9, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2"
-                   "").format(result.pitchername, result.tim.name, result.k9, result.so9, result.era, result.vsteam,
-                              result.stardata.meanbatstars, result.stardata.maxbatstars, result.defoff))
+            awayMOFO, homeMOFO = mofo.calculate(matchup["awayPitcherName"], matchup["homePitcherName"],
+                                                matchup["awayTeam"], matchup["homeTeam"], team_stat_data,
+                                                pitcher_stat_data)
+            awayresult = process_pitcher_vs_team(matchup["awayPitcherName"], matchup["awayPitcherId"],
+                                                 matchup["awayTeam"], matchup["homeTeam"], team_stat_data,
+                                                 pitcher_stat_data, pitcher_performance_stats)
+            print(fmtstr.format(awayresult.pitchername, awayresult.tim.name, awayresult.k9, awayresult.so9,
+                                awayresult.era, awayresult.vsteam, awayresult.stardata.meanbatstars,
+                                awayresult.stardata.maxbatstars, awayresult.defoff, awayMOFO*100.0))
+            homeresult = process_pitcher_vs_team(matchup["homePitcherName"], matchup["homePitcherId"],
+                                                 matchup["homeTeam"], matchup["awayTeam"], team_stat_data,
+                                                 pitcher_stat_data, pitcher_performance_stats)
+            print(fmtstr.format(homeresult.pitchername, homeresult.tim.name, homeresult.k9, homeresult.so9,
+                                homeresult.era, homeresult.vsteam, homeresult.stardata.meanbatstars,
+                                homeresult.stardata.maxbatstars, homeresult.defoff, homeMOFO*100.0))
 
 
 def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data,
