@@ -107,10 +107,10 @@ def get_formatted_odds(away_odds, home_odds):
     return formatted_away_odds, formatted_home_odds
 
 
-def get_output_line_from_matchup(matchup_data, websiteodds, mofoodds, so9_pitchers, k9_pitchers, higher_tim, screen=False):
+def get_output_line_from_matchup(matchup_data, websiteodds, mofoodds, so9_pitchers, k9_pitchers, higher_tim, lower_tim_rank, screen=False):
     so9 = "__{:.2f} SO9__".format(matchup_data.so9) if matchup_data.pitchername in so9_pitchers else "{:.2f} SO9".format(matchup_data.so9)
     k9 = "__{} K9__".format(matchup_data.k9) if matchup_data.pitchername in k9_pitchers else "{} K9".format(matchup_data.k9)
-    tim = "__{}__".format(matchup_data.tim.name) if higher_tim else matchup_data.tim.name
+    tim = "__{}__".format(matchup_data.tim.name) if higher_tim else "~~{}~~".format(matchup_data.tim.name) if lower_tim_rank else matchup_data.tim.name
     formatstr = ("{} **{}, {}** ({}, {}, {}, {:.2f} ERA), "
                  "({:.2f}★ AOB, {:.2f}★ MOB), {:.2f} D/O^2, {} WebOdds, {} MOFO")
     name = matchup_data.pitchername if screen else ("[{}](https://blaseball-reference.com/players/{})"
@@ -140,11 +140,19 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
         awayOdds, homeOdds = get_formatted_odds(awayMatchupData.websiteodds, homeMatchupData.websiteodds)
         awayMOFOOdds, homeMOFOOdds = get_formatted_odds(awayMatchupData.mofoodds, homeMatchupData.mofoodds)
-        awayHigherTIM = awayMatchupData.timrank > homeMatchupData.timrank or (awayMatchupData.timrank == homeMatchupData.timrank and awayMatchupData.timcalc > homeMatchupData.timcalc)
-        homeHigherTIM = homeMatchupData.timrank > awayMatchupData.timrank or (homeMatchupData.timrank == awayMatchupData.timrank and homeMatchupData.timcalc > awayMatchupData.timcalc)
+        awayHigherTIMRank = awayMatchupData.timrank > homeMatchupData.timrank
+        awayHigherTIM = awayHigherTIMRank or (awayMatchupData.timrank == homeMatchupData.timrank and awayMatchupData.timcalc > homeMatchupData.timcalc)
+        homeHigherTIMRank = homeMatchupData.timrank > awayMatchupData.timrank
+        homeHigherTIM = homeHigherTIMRank or (homeMatchupData.timrank == awayMatchupData.timrank and homeMatchupData.timcalc > awayMatchupData.timcalc)
         color = awayMatchupData.tim.color if awayHigherTIM else homeMatchupData.tim.color
-        description = "{0}\n{2} @ {2}\n{1}".format(get_output_line_from_matchup(awayMatchupData, awayOdds, awayMOFOOdds, so9_pitchers, k9_pitchers, awayHigherTIM, screen=screen),
-                                                   get_output_line_from_matchup(homeMatchupData, homeOdds, homeMOFOOdds, so9_pitchers, k9_pitchers, homeHigherTIM, screen=screen),
+        description = "{0}\n{2} @ {2}\n{1}".format(get_output_line_from_matchup(awayMatchupData, awayOdds, awayMOFOOdds,
+                                                                                so9_pitchers, k9_pitchers,
+                                                                                awayHigherTIM, homeHigherTIMRank,
+                                                                                screen=screen),
+                                                   get_output_line_from_matchup(homeMatchupData, homeOdds, homeMOFOOdds,
+                                                                                so9_pitchers, k9_pitchers,
+                                                                                homeHigherTIM, awayHigherTIMRank,
+                                                                                screen=screen),
                                                    discord_hr(10, char="-"))
         for matchup_data in (awayMatchupData, homeMatchupData):
             if matchup_data.pitcherteam in score_adjustments:
@@ -162,9 +170,11 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         embed = Embed(description=description, color=color)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
     results = [webhook.execute() for webhook in webhooks]
+    # results = []
     if odds_mismatch:
-        odds_description = "\n".join(["**{} @ {}** - Website: {} {:.2f}%, MOFO: **{}** {:.2f}%".format(
-            result.awayMatchupData.pitcherteamnickname, result.homeMatchupData.pitcherteamnickname,
+        odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, MOFO: **{}** {:.2f}%".format(
+            "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
+            "**{}**".format(result.homeMatchupData.pitcherteamnickname) if result.homeMatchupData.mofoodds > result.awayMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.websiteodds > result.homeMatchupData.websiteodds else result.homeMatchupData.pitcherteamnickname,
             (max(result.awayMatchupData.websiteodds, result.homeMatchupData.websiteodds)) * 100.0,
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
