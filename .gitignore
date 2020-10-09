@@ -4,7 +4,7 @@ bot_thanks.py
 explanations/
 lastday.txt
 lineup.json
-output.csv
+output*.csv
 olddata/
 testdata/
 
