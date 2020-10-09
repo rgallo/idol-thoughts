@@ -173,7 +173,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         results.append(send_discord_message("__Odds Mismatches__", odds_description, screen=screen))
     if notify:
         notify_message = "<@&{}> __**FIRE PICKS**__\n".format(notify_role)
-        notify_message += "\n".join(["{}, {} - *{}*".format(matchup_data.pitchername, matchup_data.pitcherteamnickname,
+        notify_message += "\n".join(["{}, {} - **{}**".format(matchup_data.pitchername, matchup_data.pitcherteamnickname,
                                                             matchup_data.tim.name) for matchup_data in notify])
         results.append(Webhook(url=discord_webhook_url, content=notify_message).execute())
     return results
