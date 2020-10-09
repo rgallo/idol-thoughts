@@ -1,3 +1,14 @@
+# idolthoughts specific stuff
+.idea/
+bot_thanks.py
+explanations/
+lastday.txt
+lineup.json
+output.csv
+olddata/
+testdata/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -127,3 +138,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
