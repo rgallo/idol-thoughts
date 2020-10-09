@@ -170,7 +170,6 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         embed = Embed(description=description, color=color)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
     results = [webhook.execute() for webhook in webhooks]
-    # results = []
     if odds_mismatch:
         odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, MOFO: **{}** {:.2f}%".format(
             "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
@@ -217,7 +216,7 @@ def get_stlat_value(team, stlatname, value, game, day):
     # Growth
     if game and "GROWTH" in get_team_attributes()[team]:
         adjustedVal = adjustedVal + ((-.05 if stlatname in INVERSE_STLATS else .05) * min(day/99, 1))
-    # Affinity for Crows - commented out for now
+    # Affinity for Crows
     bird_weather = WEATHERS.index("Birds")
     if game and stlatname in BATTING_STLATS + PITCHING_STLATS and game["weather"] == bird_weather and "AFFINITY_FOR_CROWS" in get_team_attributes()[team]:
         adjustedVal = adjustedVal + (-.5 if stlatname in INVERSE_STLATS else .5)
