@@ -566,7 +566,7 @@ def main():
         pair_results.append(MatchupPair(awayMatchupData, homeMatchupData))
     if pair_results:
         so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}
-        k9_min = sorted(results, key=lambda res: res.k9, reverse=True)[4].k9
+        k9_min = sorted(results, key=lambda res: res.k9, reverse=True)[min(len(results)-1, 4)].k9
         k9_pitchers = {res.pitchername for res in results if res.k9 >= k9_min}
         if args.discord:
             send_matchup_data_to_discord_webhook(day, pair_results, so9_pitchers, k9_pitchers, score_adjustments)
