@@ -89,10 +89,11 @@ def discord_hr(spaces=25, char=" "):
     return "~~-{}-~~".format(char * spaces)
 
 
-def send_discord_message(title, message):
+def send_discord_message(title, message, screen=False):
+    Webhook, Embed = (PrintWebhook, PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
-    webhook = DiscordWebhook(url=discord_webhook_url)
-    webhook.add_embed(DiscordEmbed(title=title, description=message))
+    webhook = Webhook(url=discord_webhook_url)
+    webhook.add_embed(Embed(title=title, description=message))
     return webhook.execute()
 
 
@@ -122,6 +123,7 @@ def get_output_line_from_matchup(matchup_data, websiteodds, mofoodds, so9_pitche
 def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pitchers, score_adjustments, screen=False):
     Webhook, Embed = (PrintWebhook, PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
+    notify_tim_rank, notify_role = os.getenv("NOTIFY_TIM_RANK"), os.getenv("NOTIFY_ROLE")
     sorted_pairs = sorted(matchup_pairs,
                           key=lambda matchup_pair: (max(matchup_pair.awayMatchupData.timrank,
                                                         matchup_pair.homeMatchupData.timrank),
@@ -133,7 +135,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     batches = math.ceil(len(matchup_pairs) / DISCORD_RESULT_PER_BATCH)
     webhooks = [Webhook(url=discord_webhook_url,
                         content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
-    odds_mismatch = []
+    odds_mismatch, notify = [], []
     for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
         awayOdds, homeOdds = get_formatted_odds(awayMatchupData.websiteodds, homeMatchupData.websiteodds)
@@ -152,6 +154,11 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
                                                "+" if score_adjustment.score > 0 else "", score_adjustment.score)
         if (awayMatchupData.mofoodds < .5 and awayMatchupData.websiteodds > .5) or (awayMatchupData.mofoodds > .5 and awayMatchupData.websiteodds < .5) or (.495 <= awayMatchupData.websiteodds < .505):
             odds_mismatch.append(result)
+        if notify_tim_rank and notify_role:
+            if awayMatchupData.timrank >= int(notify_tim_rank):
+                notify.append(awayMatchupData)
+            if homeMatchupData.timrank >= int(notify_tim_rank):
+                notify.append(homeMatchupData)
         embed = Embed(description=description, color=color)
         webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
     results = [webhook.execute() for webhook in webhooks]
@@ -163,7 +170,12 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
             (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0)
                                       for result in odds_mismatch])
-        results.append(send_discord_message("__Odds Mismatches__", odds_description))
+        results.append(send_discord_message("__Odds Mismatches__", odds_description, screen=screen))
+    if notify:
+        notify_message = "<@&{}> __**FIRE PICKS**__\n".format(notify_role)
+        notify_message += "\n".join(["{}, {} - *{}*".format(matchup_data.pitchername, matchup_data.pitcherteamnickname,
+                                                            matchup_data.tim.name) for matchup_data in notify])
+        results.append(Webhook(url=discord_webhook_url, content=notify_message).execute())
     return results
 
 
