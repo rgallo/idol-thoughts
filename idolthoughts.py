@@ -338,16 +338,16 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
                                float(awayPitcherStats.get("k_per_9", -1.0)), float(awayPitcherStats.get("era", -1.0)),
                                awayEmoji, homeTeam, homeEmoji,
                                get_def_off_ratio(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data),
-                               awayTIM, awayTIMRank, awayTIMCalc, awayStarStats, 4, game["homeStrikes"],
-                               game["homeBases"], game["awayTeamNickname"], game["homeTeamNickname"], game["awayOdds"],
-                               awayMOFO, awayK9))
+                               awayTIM, awayTIMRank, awayTIMCalc, awayStarStats, game.get("homeBalls", 4),
+                               game["homeStrikes"], game["homeBases"], game["awayTeamNickname"],
+                               game["homeTeamNickname"], game["awayOdds"], awayMOFO, awayK9))
     results.append(MatchupData(homePitcher, homePitcherId, homeTeam, gameId,
                                float(homePitcherStats.get("k_per_9", -1.0)), float(homePitcherStats.get("era", -1.0)),
                                homeEmoji, awayTeam, awayEmoji,
                                get_def_off_ratio(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data),
-                               homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, 4, game["awayStrikes"],
-                               game["awayBases"], game["homeTeamNickname"], game["awayTeamNickname"], game["homeOdds"],
-                               homeMOFO, homeK9))
+                               homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, game.get("awayBalls", 4),
+                               game["awayStrikes"], game["awayBases"], game["homeTeamNickname"],
+                               game["awayTeamNickname"], game["homeOdds"], homeMOFO, homeK9))
     return results
 
 
