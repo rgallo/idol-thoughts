@@ -556,7 +556,7 @@ def main():
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data, stat_season_number)
         sys.exit(0)
     results, pair_results = [], []
-    score_adjustments = get_score_adjustments(args.today, streamdata['value']['games']['schedule'] if args.today else [],
+    score_adjustments = get_score_adjustments(args.today, streamdata['value']['games']['schedule'],
                                               streamdata['value']['games']['tomorrowSchedule'])
     pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
     for game in game_schedule:
