@@ -263,8 +263,8 @@ def get_all_pitcher_performance_stats(pitcher_ids, season):
     return {pitcher["player_id"]: pitcher for pitcher in resjson}
 
 
-def get_tim(stlatdata):
-    tim_tiers = tim.get_tiers()
+def get_tim(stlatdata, non_shutout=False):
+    tim_tiers = tim.get_tiers() if not non_shutout else [tim.DEAD_COLD]
     tier_length = len(tim_tiers)
     for idx, tier in enumerate(tim_tiers):
         calc, check = tier.check(stlatdata.unthwackability, stlatdata.ruthlessness, stlatdata.overpowerment,
