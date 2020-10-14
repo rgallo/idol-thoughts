@@ -19,7 +19,8 @@ def calc_team(terms, termset, mods):
         moddedterm = term
         for modterm in modterms:
             moddedterm = StlatTerm(term.a + modterm.a, term.b + modterm.b, term.c + modterm.c)
-        total += moddedterm.calc(val)
+        calculated_value = moddedterm.calc(val)
+        total += calculated_value
     return total
 
 
@@ -98,11 +99,10 @@ def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitc
                 homeMods[name].append(stlatterm)
             for name, stlatterm in mods[attr]["opp"].items():
                 awayMods[name].append(stlatterm)
-    away_offense = team_offense(terms, awayTeam, awayMods, team_stat_data)
-    away_defense = team_defense(terms, awayPitcher, awayTeam, awayMods, team_stat_data, pitcher_stat_data)
-    home_offense = team_offense(terms, homeTeam, homeMods, team_stat_data)
-    home_defense = team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data)
-    away_formula = ((away_offense - home_defense) - min(home_offense - away_defense, 0.0)) / (
-                (away_offense - home_defense) + min(home_offense - away_defense, 0.0))
+    away_offense = abs(team_offense(terms, awayTeam, awayMods, team_stat_data))
+    away_defense = abs(team_defense(terms, awayPitcher, awayTeam, awayMods, team_stat_data, pitcher_stat_data))
+    home_offense = abs(team_offense(terms, homeTeam, homeMods, team_stat_data))
+    home_defense = abs(team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data))
+    away_formula = ((away_offense - home_defense) - (home_offense - away_defense)) / ((away_offense - home_defense) + (home_offense - away_defense))
     away_odds = (1 / (1 + 10 ** (-1 * away_formula)))
     return away_odds, 1.0 - away_odds
