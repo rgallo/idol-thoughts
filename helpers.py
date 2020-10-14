@@ -1,6 +1,7 @@
 from __future__ import division
 from __future__ import print_function
 
+import collections
 from functools import reduce
 import requests
 
@@ -24,8 +25,8 @@ TERM_RESULTS = {}
 
 
 def load_terms(term_url, special_cases=None):
-    special_case_list = [case.lower() for case in special_cases] if special_cases else []
     if term_url not in TERM_RESULTS:
+        special_case_list = [case.lower() for case in special_cases] if special_cases else []
         results, special = {}, {}
         data = requests.get(term_url).text
         splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
@@ -38,3 +39,28 @@ def load_terms(term_url, special_cases=None):
         TERM_RESULTS[term_url] = (results, special)
     return TERM_RESULTS[term_url]
 
+
+MOD_RESULTS = {}
+
+
+def load_mods(mods_url, day):
+    if mods_url not in MOD_RESULTS:
+        mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
+        data = requests.get(mods_url).text
+        splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
+        for row in splitdata:
+            attr, team, name = [val.lower() for val in row[:3]]
+            a, b, c = float(row[3]), float(row[4]), float(row[5])
+            if attr == "growth":
+                a, b, c = a * (min(day / 99, 1)), b * (min(day / 99, 1)), c * (min(day / 99, 1))
+            mods[attr][team][name] = StlatTerm(a, b, c)
+        MOD_RESULTS[mods_url] = mods
+    return MOD_RESULTS[mods_url]
+
+
+WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
+            "Glitter", "Blooddrain", "Peanuts", "Birds", "Feedback", "Reverb"]
+
+
+def get_weather_idx(weather):
+    return WEATHERS.index(weather)

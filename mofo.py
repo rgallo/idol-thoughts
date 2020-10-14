@@ -1,67 +1,108 @@
 from __future__ import division
 from __future__ import print_function
 
-from helpers import geomean, load_terms
+import collections
+
+from helpers import geomean, load_terms, StlatTerm, get_weather_idx, load_mods
 from dotenv import load_dotenv
 import os
 
+WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
+            "Glitter", "Blooddrain", "Peanuts", "Birds", "Feedback", "Reverb"]
 
-def team_defense(terms, pitcher, teamname, team_stat_data, pitcher_stat_data):
+
+def calc_team(terms, termset, mods):
+    total = 0.0
+    for termname, val in termset:
+        term = terms[termname]
+        modterms = mods.get(termname, [])
+        moddedterm = term
+        for modterm in modterms:
+            moddedterm = StlatTerm(term.a + modterm.a, term.b + modterm.b, term.c + modterm.c)
+        total += moddedterm.calc(val)
+    return total
+
+
+def team_defense(terms, pitcher, teamname, mods, team_stat_data, pitcher_stat_data):
     pitcher_data = pitcher_stat_data[pitcher]
     team_data = team_stat_data[teamname]
-    return sum([term.calc(val) for term, val in (
-        (terms["unthwackability"], pitcher_data["unthwackability"]),
-        (terms["ruthlessness"], pitcher_data["ruthlessness"]),
-        (terms["overpowerment"], pitcher_data["overpowerment"]),
-        (terms["shakespearianism"], pitcher_data["shakespearianism"]),
-        (terms["coldness"], pitcher_data["coldness"]),
-        (terms["meanomniscience"], geomean(team_data["omniscience"])),
-        (terms["meantenaciousness"], geomean(team_data["tenaciousness"])),
-        (terms["meanwatchfulness"], geomean(team_data["watchfulness"])),
-        (terms["meananticapitalism"], geomean(team_data["anticapitalism"])),
-        (terms["meanchasiness"], geomean(team_data["chasiness"])),
-        (terms["maxomniscience"], max(team_data["omniscience"])),
-        (terms["maxtenaciousness"], max(team_data["tenaciousness"])),
-        (terms["maxwatchfulness"], max(team_data["watchfulness"])),
-        (terms["maxanticapitalism"], max(team_data["anticapitalism"])),
-        (terms["maxchasiness"], max(team_data["chasiness"])))])
+    termset = (
+        ("unthwackability", pitcher_data["unthwackability"]),
+        ("ruthlessness", pitcher_data["ruthlessness"]),
+        ("overpowerment", pitcher_data["overpowerment"]),
+        ("shakespearianism", pitcher_data["shakespearianism"]),
+        ("coldness", pitcher_data["coldness"]),
+        ("meanomniscience", geomean(team_data["omniscience"])),
+        ("meantenaciousness", geomean(team_data["tenaciousness"])),
+        ("meanwatchfulness", geomean(team_data["watchfulness"])),
+        ("meananticapitalism", geomean(team_data["anticapitalism"])),
+        ("meanchasiness", geomean(team_data["chasiness"])),
+        ("maxomniscience", max(team_data["omniscience"])),
+        ("maxtenaciousness", max(team_data["tenaciousness"])),
+        ("maxwatchfulness", max(team_data["watchfulness"])),
+        ("maxanticapitalism", max(team_data["anticapitalism"])),
+        ("maxchasiness", max(team_data["chasiness"])))
+    return calc_team(terms, termset, mods)
 
 
-def team_offense(terms, teamname, team_stat_data):
+def team_offense(terms, teamname, mods, team_stat_data):
     team_data = team_stat_data[teamname]
-    return sum([term.calc(val) for term, val in (
-        (terms["meantragicness"], geomean(team_data["tragicness"])),
-        (terms["meanpatheticism"], geomean(team_data["patheticism"])),
-        (terms["meanthwackability"], geomean(team_data["thwackability"])),
-        (terms["meandivinity"], geomean(team_data["divinity"])),
-        (terms["meanmoxie"], geomean(team_data["moxie"])),
-        (terms["meanmusclitude"], geomean(team_data["musclitude"])),
-        (terms["meanmartyrdom"], geomean(team_data["martyrdom"])),
-        (terms["maxthwackability"], max(team_data["thwackability"])),
-        (terms["maxdivinity"], max(team_data["divinity"])),
-        (terms["maxmoxie"], max(team_data["moxie"])),
-        (terms["maxmusclitude"], max(team_data["musclitude"])),
-        (terms["maxmartyrdom"], max(team_data["martyrdom"])),
-        (terms["meanlaserlikeness"], geomean(team_data["laserlikeness"])),
-        (terms["meanbasethirst"], geomean(team_data["baseThirst"])),
-        (terms["meancontinuation"], geomean(team_data["continuation"])),
-        (terms["meangroundfriction"], geomean(team_data["groundFriction"])),
-        (terms["meanindulgence"], geomean(team_data["indulgence"])),
-        (terms["maxlaserlikeness"], max(team_data["laserlikeness"])),
-        (terms["maxbasethirst"], max(team_data["baseThirst"])),
-        (terms["maxcontinuation"], max(team_data["continuation"])),
-        (terms["maxgroundfriction"], max(team_data["groundFriction"])),
-        (terms["maxindulgence"], max(team_data["indulgence"])))])
+    termset = (
+            ("meantragicness", geomean(team_data["tragicness"])),
+            ("meanpatheticism", geomean(team_data["patheticism"])),
+            ("meanthwackability", geomean(team_data["thwackability"])),
+            ("meandivinity", geomean(team_data["divinity"])),
+            ("meanmoxie", geomean(team_data["moxie"])),
+            ("meanmusclitude", geomean(team_data["musclitude"])),
+            ("meanmartyrdom", geomean(team_data["martyrdom"])),
+            ("maxthwackability", max(team_data["thwackability"])),
+            ("maxdivinity", max(team_data["divinity"])),
+            ("maxmoxie", max(team_data["moxie"])),
+            ("maxmusclitude", max(team_data["musclitude"])),
+            ("maxmartyrdom", max(team_data["martyrdom"])),
+            ("meanlaserlikeness", geomean(team_data["laserlikeness"])),
+            ("meanbasethirst", geomean(team_data["baseThirst"])),
+            ("meancontinuation", geomean(team_data["continuation"])),
+            ("meangroundfriction", geomean(team_data["groundFriction"])),
+            ("meanindulgence", geomean(team_data["indulgence"])),
+            ("maxlaserlikeness", max(team_data["laserlikeness"])),
+            ("maxbasethirst", max(team_data["baseThirst"])),
+            ("maxcontinuation", max(team_data["continuation"])),
+            ("maxgroundfriction", max(team_data["groundFriction"])),
+            ("maxindulgence", max(team_data["indulgence"])))
+    return calc_team(terms, termset, mods)
 
 
-def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data):
+def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs,
+              day, weather):
     load_dotenv()
     terms_url = os.getenv("MOFO_TERMS")
     terms, _ = load_terms(terms_url)
-    away_offense = team_offense(terms, awayTeam, team_stat_data)
-    away_defense = team_defense(terms, awayPitcher, awayTeam, team_stat_data, pitcher_stat_data)
-    home_offense = team_offense(terms, homeTeam, team_stat_data)
-    home_defense = team_defense(terms, homePitcher, homeTeam, team_stat_data, pitcher_stat_data)
-    away_formula = ((away_offense - home_defense) - min(home_offense - away_defense, 0.0)) / ((away_offense - home_defense) + min(home_offense - away_defense, 0.0))
+    mods_url = os.getenv("MOFO_MODS")
+    mods = load_mods(mods_url, day)
+    awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
+    lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
+    lowerHomeAttrs = [attr.lower() for attr in homeAttrs]
+    bird_weather = get_weather_idx("Birds")
+    for attr in mods:
+        # Special case for Affinity for Crows
+        if attr == "affinity_for_crows" and weather != bird_weather:
+            continue
+        if attr in lowerAwayAttrs:
+            for name, stlatterm in mods[attr]["same"].items():
+                awayMods[name].append(stlatterm)
+            for name, stlatterm in mods[attr]["opp"].items():
+                homeMods[name].append(stlatterm)
+        if attr in lowerHomeAttrs:
+            for name, stlatterm in mods[attr]["same"].items():
+                homeMods[name].append(stlatterm)
+            for name, stlatterm in mods[attr]["opp"].items():
+                awayMods[name].append(stlatterm)
+    away_offense = team_offense(terms, awayTeam, awayMods, team_stat_data)
+    away_defense = team_defense(terms, awayPitcher, awayTeam, awayMods, team_stat_data, pitcher_stat_data)
+    home_offense = team_offense(terms, homeTeam, homeMods, team_stat_data)
+    home_defense = team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data)
+    away_formula = ((away_offense - home_defense) - min(home_offense - away_defense, 0.0)) / (
+                (away_offense - home_defense) + min(home_offense - away_defense, 0.0))
     away_odds = (1 / (1 + 10 ** (-1 * away_formula)))
-    return away_odds, 1.0-away_odds
+    return away_odds, 1.0 - away_odds
