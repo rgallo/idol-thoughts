@@ -103,6 +103,10 @@ def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitc
     away_defense = abs(team_defense(terms, awayPitcher, awayTeam, awayMods, team_stat_data, pitcher_stat_data))
     home_offense = abs(team_offense(terms, homeTeam, homeMods, team_stat_data))
     home_defense = abs(team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data))
-    away_formula = ((away_offense - home_defense) - (home_offense - away_defense)) / ((away_offense - home_defense) + (home_offense - away_defense))
+    numerator = (max(away_offense - home_defense, 0.0) - max(home_offense - away_defense, 0.0))
+    denominator = (max(away_offense - home_defense, 0.0) + max(home_offense - away_defense, 0.0))
+    if not denominator:
+        return .5, .5
+    away_formula = numerator / denominator
     away_odds = (1 / (1 + 10 ** (-1 * away_formula)))
     return away_odds, 1.0 - away_odds
