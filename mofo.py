@@ -2,7 +2,6 @@ from __future__ import division
 from __future__ import print_function
 
 from helpers import geomean, load_terms
-from dotenv import load_dotenv
 import os
 
 
@@ -55,7 +54,6 @@ def team_offense(terms, teamname, team_stat_data):
 
 
 def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data):
-    load_dotenv()
     terms_url = os.getenv("MOFO_TERMS")
     terms, _ = load_terms(terms_url)
     away_offense = abs(team_offense(terms, awayTeam, team_stat_data))

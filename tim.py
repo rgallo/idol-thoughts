@@ -5,8 +5,6 @@ import math
 import operator
 import os
 
-from dotenv import load_dotenv
-
 import helpers
 from helpers import StlatTerm
 
@@ -113,7 +111,6 @@ TIM_TIERS = []
 
 def get_tiers():
     if not TIM_TIERS:
-        load_dotenv()
         for name, propname, color in TERMS:
             terms_url = os.getenv(propname)
             terms, special_cases = helpers.load_terms(terms_url, ["condition"])

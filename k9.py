@@ -3,7 +3,6 @@ from __future__ import print_function
 
 import os
 
-from dotenv import load_dotenv
 from helpers import geomean, load_terms
 
 
@@ -58,7 +57,6 @@ def calc_everythingelse(terms, pitchingteam, battingteam, team_stat_data):
 
 
 def calculate(pitcher, pitchingteam, battingteam, team_stat_data, pitcher_stat_data):
-    load_dotenv()
     terms_url = os.getenv("K9_TERMS")
     terms, special_cases = load_terms(terms_url, ["factors"])
     pitching = calc_pitching(terms, pitcher, pitcher_stat_data)

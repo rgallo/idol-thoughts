@@ -481,6 +481,7 @@ def handle_args():
                         action='store_true')
     parser.add_argument('--testfile', help="path to file with test data in jsonl format, pass optional line number as "
                                            "filename:n, otherwise random line is used")
+    parser.add_argument('--env', help="path to .env file, defaults to .env in same directory")
     args = parser.parse_args()
     if not args.print and not args.discord and not args.airtable and not args.discordprint and not args.lineupfile:
         print("No output specified")
@@ -491,7 +492,7 @@ def handle_args():
 
 def main():
     args = handle_args()
-    load_dotenv()
+    load_dotenv(dotenv_path=args.env)
     if args.testfile:
         streamdata = load_test_data(args.testfile)
     else:
