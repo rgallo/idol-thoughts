@@ -21,15 +21,15 @@ BLACK = 1
 
 
 class TIM:
-    NUMERATOR_TERMS = ("unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness",
-                       "meantragicness", "meanpatheticism", "meanomniscience", "maxomniscience",
-                       "meantenaciousness", "maxtenaciousness", "meanwatchfulness", "maxwatchfulness", "meanchasiness",
-                       "maxchasiness")
-    DENOMINATOR_TERMS = ("meanthwackability", "meandivinity", "meanmoxie", "meanmusclitude", "meanmartyrdom",
-                         "maxmartyrdom", "meanlaserlikeness", "maxlaserlikeness", "meanbasethirst", "maxbasethirst",
-                         "meancontinuation", "maxcontinuation", "meangroundfriction", "maxgroundfriction",
-                         "meanindulgence", "maxindulgence", "maxthwackability", "maxdivinity", "maxmoxie",
-                         "maxmusclitude")
+    DEFENSE_TERMS = ("unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness",
+                     "meantragicness", "meanpatheticism", "meanomniscience", "maxomniscience",
+                     "meantenaciousness", "maxtenaciousness", "meanwatchfulness", "maxwatchfulness", "meanchasiness",
+                     "maxchasiness")
+    OFFENSE_TERMS = ("meanthwackability", "meandivinity", "meanmoxie", "meanmusclitude", "meanmartyrdom",
+                     "maxmartyrdom", "meanlaserlikeness", "maxlaserlikeness", "meanbasethirst", "maxbasethirst",
+                     "meancontinuation", "maxcontinuation", "meangroundfriction", "maxgroundfriction",
+                     "meanindulgence", "maxindulgence", "maxthwackability", "maxdivinity", "maxmoxie",
+                     "maxmusclitude")
 
     def __init__(self, name, terms, opfunc, cutoff, color):
         self.name = name
@@ -39,8 +39,10 @@ class TIM:
         self.color = color
 
     def check(self, stlatdata):
-        numerator = sum([self.terms[term].calc(stlatdata[term]) for term in self.NUMERATOR_TERMS])
-        denominator = sum([self.terms[term].calc(stlatdata[term]) for term in self.DENOMINATOR_TERMS])
+        defense = sum([self.terms[term].calc(stlatdata[term]) for term in self.DEFENSE_TERMS])
+        offense = sum([self.terms[term].calc(stlatdata[term]) for term in self.OFFENSE_TERMS])
+        numerator = defense - offense
+        denominator = defense + offense
         formula = (numerator / denominator) if denominator else 0
         calc = 1.0 / (1.0 + math.exp(-1 * formula))
         return calc, self.opfunc(calc, self.cutoff) if self.opfunc else True
