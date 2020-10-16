@@ -267,10 +267,7 @@ def get_tim(stlatdata, non_shutout=False):
     tim_tiers = tim.get_tiers() if not non_shutout else [tim.DEAD_COLD]
     tier_length = len(tim_tiers)
     for idx, tier in enumerate(tim_tiers):
-        calc, check = tier.check(stlatdata.unthwackability, stlatdata.ruthlessness, stlatdata.overpowerment,
-                                 stlatdata.shakespearianism, stlatdata.coldness, stlatdata.meantragicness,
-                                 stlatdata.meanpatheticism, stlatdata.meanthwackability, stlatdata.meandivinity,
-                                 stlatdata.meanmoxie, stlatdata.meanmusclitude, stlatdata.meanmartyrdom)
+        calc, check = tier.check(stlatdata)
         if check:
             return tier, tier_length-idx, calc
     return tim.TIM_ERROR, -1, -1
@@ -287,17 +284,17 @@ def calc_star_max_mean_stats(pitcher, defenseteamname, offenseteamname, team_sta
     return StarData(pitchingstars, maxbatstars, meanbatstars, maxdefstars, meandefstars, maxrunstars, meanrunstars)
 
 
-def calc_stlat_stats(pitcher, offenseteamname, team_stat_data, pitcher_stat_data):
-    stlatdata = [pitcher_stat_data[pitcher][stlat] for stlat in ["overpowerment", "ruthlessness", "unthwackability",
-                                                                 "shakespearianism", "coldness"]]
-    stlatdata.extend((geomean(team_stat_data[offenseteamname]["tragicness"]),
-                      geomean(team_stat_data[offenseteamname]["patheticism"]),
-                      geomean(team_stat_data[offenseteamname]["thwackability"]),
-                      geomean(team_stat_data[offenseteamname]["divinity"]),
-                      geomean(team_stat_data[offenseteamname]["moxie"]),
-                      geomean(team_stat_data[offenseteamname]["musclitude"]),
-                      geomean(team_stat_data[offenseteamname]["martyrdom"])))
-    return StlatData(*stlatdata)
+def calc_stlat_stats(pitcher, pitcherteamname, offenseteamname, team_stat_data, pitcher_stat_data):
+    stlatdata = {stlat: pitcher_stat_data[pitcher][stlat] for stlat in PITCHING_STLATS}
+    for stlat in DEFENSE_STLATS:
+        stlatdata["mean{}".format(stlat.lower())] = geomean(team_stat_data[pitcherteamname][stlat])
+        stlatdata["max{}".format(stlat.lower())] = max(team_stat_data[pitcherteamname][stlat])
+    for stlat in BATTING_STLATS + BASERUNNING_STLATS:
+        stlatdata["mean{}".format(stlat.lower())] = geomean(team_stat_data[offenseteamname][stlat])
+        stlatdata["max{}".format(stlat.lower())] = max(team_stat_data[offenseteamname][stlat])
+    for stlat in INVERSE_STLATS:  # change this if there are any non-batting inverse stlats
+        stlatdata["min{}".format(stlat.lower())] = min(team_stat_data[offenseteamname][stlat])
+    return stlatdata
 
 
 def get_dict_from_matchupdata(matchup, season_number, day):
@@ -327,8 +324,8 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
     homePitcherStats = pitcher_performance_stats.get(homePitcherId, {})
     awayStarStats = calc_star_max_mean_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
     homeStarStats = calc_star_max_mean_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
-    awayStlatStats = calc_stlat_stats(awayPitcher, homeTeam, team_stat_data, pitcher_stat_data)
-    homeStlatStats = calc_stlat_stats(homePitcher, awayTeam, team_stat_data, pitcher_stat_data)
+    awayStlatStats = calc_stlat_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
+    homeStlatStats = calc_stlat_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
     awayTIM, awayTIMRank, awayTIMCalc = get_tim(awayStlatStats)
     homeTIM, homeTIMRank, homeTIMCalc = get_tim(homeStlatStats)
     awayMOFO, homeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
@@ -380,7 +377,7 @@ def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team
                             pitcher_performance_stats):
     pitcherStats = pitcher_performance_stats.get(pitcherId, {})
     starStats = calc_star_max_mean_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    stlatStats = calc_stlat_stats(pitcherName, otherTeam, team_stat_data, pitcher_stat_data)
+    stlatStats = calc_stlat_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
     tim, timRank, timCalc = get_tim(stlatStats)
     pitcherk9 = k9.calculate(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
     return MatchupData(pitcherName, None, None, None, float(pitcherStats.get("k_per_9", -1.0)),
