@@ -12,7 +12,7 @@ class StlatTerm:
         self.c = c
 
     def calc(self, val):
-        return self.a * ((self.b + val) ** self.c)
+        return self.a * (max(self.b + val, 0.01) ** self.c)
 
 
 def geomean(numbers):
