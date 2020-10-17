@@ -22,7 +22,7 @@ import k9
 from blaseball_stat_csv import blaseball_stat_csv
 import tim
 import mofo
-from helpers import geomean
+from helpers import geomean, get_weather_idx
 
 MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "so9", "era", "defemoji",
                                          "vsteam", "offemoji", "defoff", "tim", "timrank", "timcalc",
@@ -45,9 +45,6 @@ StlatData = namedtuple("StlatData", ["overpowerment", "ruthlessness", "unthwacka
                                      "meanmoxie", "meanmusclitude", "meanmartyrdom"])
 
 ScoreAdjustment = namedtuple("ScoreAdjustment", ["score", "label"])
-
-WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
-            "Glitter", "Blooddrain", "Peanuts", "Birds", "Feedback", "Reverb"]
 
 BR_PLAYERNAME_SUBS = {
     "wyatt-owens": "emmett-owens",
@@ -217,7 +214,7 @@ def get_stlat_value(team, stlatname, value, game, day):
     if game and "GROWTH" in get_team_attributes()[team]:
         adjustedVal = adjustedVal + ((-.05 if stlatname in INVERSE_STLATS else .05) * min(day/99, 1))
     # Affinity for Crows
-    bird_weather = WEATHERS.index("Birds")
+    bird_weather = get_weather_idx("Birds")
     if game and stlatname in BATTING_STLATS + PITCHING_STLATS and game["weather"] == bird_weather and "AFFINITY_FOR_CROWS" in get_team_attributes()[team]:
         adjustedVal = adjustedVal + (-.5 if stlatname in INVERSE_STLATS else .5)
     # Default case
@@ -229,22 +226,23 @@ def load_stat_data(filepath, schedule, day):
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
     games = {game["homeTeamName"]: game for game in schedule}
     games.update({game["awayTeamName"]: game for game in schedule})
-    pitcherstardata = collections.defaultdict(lambda: {})
-    teamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: []))
+    pitcherstatdata, moddedpitcherstatdata = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})
+    teamstatdata, moddedteamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: [])), collections.defaultdict(lambda: collections.defaultdict(lambda: []))
     for row in filedata:
         team = row["team"]
         if row["position"] == "rotation":
             for key in (PITCHING_STLATS + ["pitchingStars"]):
-                pitcherstardata[row["name"]][key] = get_stlat_value(team, key, float(row[key]), games.get(team), day)
+                pitcherstatdata[row["name"]][key] = float(row[key])
+                moddedpitcherstatdata[row["name"]][key] = get_stlat_value(team, key, float(row[key]), games.get(team), day)
         elif row["position"] == "lineup":
             if "SHELLED" not in row["permAttr"]:
                 for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
-                    val = get_stlat_value(team, key, float(row[key]), games.get(team), day)
-                    teamstatdata[team][key].append(val)
+                    teamstatdata[row["team"]][key].append(float(row[key]))
+                    moddedteamstatdata[team][key].append(get_stlat_value(team, key, float(row[key]), games.get(team), day))
             for key in (DEFENSE_STLATS + ["defenseStars"]):
-                val = get_stlat_value(team, key, float(row[key]), games.get(team), day)
-                teamstatdata[team][key].append(val)
-    return teamstatdata, pitcherstardata
+                teamstatdata[row["team"]][key].append(float(row[key]))
+                moddedteamstatdata[team][key].append(get_stlat_value(team, key, float(row[key]), games.get(team), day))
+    return teamstatdata, pitcherstatdata, moddedteamstatdata, moddedpitcherstatdata
 
 
 def get_player_slug(playername):
@@ -313,7 +311,7 @@ def insert_into_airtable(results, season_number, day):
     airtable.batch_insert([get_dict_from_matchupdata(matchup, season_number, day) for matchup in results])
 
 
-def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_stats):
+def process_game(game, team_stat_data, pitcher_stat_data, modded_team_stat_data, modded_pitcher_stat_data, pitcher_performance_stats, day):
     results = []
     gameId = game["id"]
     awayPitcher, homePitcher = game["awayPitcherName"], game["homePitcherName"]
@@ -322,26 +320,27 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
     awayEmoji, homeEmoji = game['awayTeamEmoji'], game['homeTeamEmoji']
     awayPitcherStats = pitcher_performance_stats.get(awayPitcherId, {})
     homePitcherStats = pitcher_performance_stats.get(homePitcherId, {})
-    awayStarStats = calc_star_max_mean_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
-    homeStarStats = calc_star_max_mean_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
-    awayStlatStats = calc_stlat_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
-    homeStlatStats = calc_stlat_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
+    awayStarStats = calc_star_max_mean_stats(awayPitcher, awayTeam, homeTeam, modded_team_stat_data, modded_pitcher_stat_data)
+    homeStarStats = calc_star_max_mean_stats(homePitcher, homeTeam, awayTeam, modded_team_stat_data, modded_pitcher_stat_data)
+    awayStlatStats = calc_stlat_stats(awayPitcher, awayTeam, homeTeam, modded_team_stat_data, modded_pitcher_stat_data)
+    homeStlatStats = calc_stlat_stats(homePitcher, homeTeam, awayTeam, modded_team_stat_data, modded_pitcher_stat_data)
     awayTIM, awayTIMRank, awayTIMCalc = get_tim(awayStlatStats)
     homeTIM, homeTIMRank, homeTIMCalc = get_tim(homeStlatStats)
-    awayMOFO, homeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
-    awayK9 = k9.calculate(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
-    homeK9 = k9.calculate(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
+    awayAttrs, homeAttrs = get_team_attributes()[awayTeam], get_team_attributes()[homeTeam]
+    awayMOFO, homeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs, day, game["weather"])
+    awayK9 = k9.calculate(awayPitcher, awayTeam, homeTeam, modded_team_stat_data, modded_pitcher_stat_data)
+    homeK9 = k9.calculate(homePitcher, homeTeam, awayTeam, modded_team_stat_data, modded_pitcher_stat_data)
     results.append(MatchupData(awayPitcher, awayPitcherId, awayTeam, gameId,
                                float(awayPitcherStats.get("k_per_9", -1.0)), float(awayPitcherStats.get("era", -1.0)),
                                awayEmoji, homeTeam, homeEmoji,
-                               get_def_off_ratio(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data),
+                               get_def_off_ratio(awayPitcher, awayTeam, homeTeam, modded_team_stat_data, modded_pitcher_stat_data),
                                awayTIM, awayTIMRank, awayTIMCalc, awayStarStats, game.get("homeBalls", 4),
                                game["homeStrikes"], game["homeBases"], game["awayTeamNickname"],
                                game["homeTeamNickname"], game["awayOdds"], awayMOFO, awayK9))
     results.append(MatchupData(homePitcher, homePitcherId, homeTeam, gameId,
                                float(homePitcherStats.get("k_per_9", -1.0)), float(homePitcherStats.get("era", -1.0)),
                                homeEmoji, awayTeam, awayEmoji,
-                               get_def_off_ratio(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data),
+                               get_def_off_ratio(homePitcher, homeTeam, awayTeam, modded_team_stat_data, modded_pitcher_stat_data),
                                homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, game.get("awayBalls", 4),
                                game["awayStrikes"], game["awayBases"], game["homeTeamNickname"],
                                game["awayTeamNickname"], game["homeOdds"], homeMOFO, homeK9))
@@ -549,7 +548,7 @@ def main():
         else:
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile, False, args.archive)
-    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, game_schedule, day)
+    team_stat_data, pitcher_stat_data, modded_team_stat_data, modded_pitcher_stat_data = load_stat_data(args.statfile, game_schedule, day)
     if args.lineupfile:
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data, stat_season_number)
         sys.exit(0)
@@ -558,8 +557,8 @@ def main():
                                               streamdata['value']['games']['tomorrowSchedule'])
     pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
     for game in game_schedule:
-        awayMatchupData, homeMatchupData = process_game(game, team_stat_data, pitcher_stat_data,
-                                                        pitcher_performance_stats)
+        awayMatchupData, homeMatchupData = process_game(game, team_stat_data, pitcher_stat_data, modded_team_stat_data,
+                                                        modded_pitcher_stat_data, pitcher_performance_stats, day)
         results.extend((awayMatchupData, homeMatchupData))
         pair_results.append(MatchupPair(awayMatchupData, homeMatchupData))
     if pair_results:

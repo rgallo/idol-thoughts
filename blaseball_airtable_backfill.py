@@ -54,8 +54,8 @@ def pitcher_team_earned_runs_shutout(pitcher_id, game_id):
     if pitcher_id not in pitchers or len(pitchers) != 2:
         RBI_CACHE[(pitcher_id, game_id)] = (None, None)
         return None, None
-    pitcher_team_rbi = sum([event["runs_batted_in"] for event in game_results if event['pitcher_id'] != pitcher_id])
-    other_team_rbi = sum([event["runs_batted_in"] for event in game_results if event['pitcher_id'] == pitcher_id])
+    pitcher_team_rbi = sum([max(event["runs_batted_in"], 0.0) for event in game_results if event['pitcher_id'] != pitcher_id])
+    other_team_rbi = sum([max(event["runs_batted_in"], 0.0) for event in game_results if event['pitcher_id'] == pitcher_id])
     RBI_CACHE[(pitcher_id, game_id)] = (pitcher_team_rbi, not other_team_rbi)
     # Get other side and cache it while we're here
     other_pitcher_id = (pitchers - {pitcher_id}).pop()
