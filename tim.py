@@ -31,11 +31,11 @@ class TIM:
                      "meanindulgence", "maxindulgence", "maxthwackability", "maxdivinity", "maxmoxie",
                      "maxmusclitude")
 
-    def __init__(self, name, terms, opfunc, cutoff, color):
+    def __init__(self, name, terms, opfuncs, cutoffs, color):
         self.name = name
         self.terms = terms
-        self.opfunc = opfunc
-        self.cutoff = cutoff
+        self.opfuncs = opfuncs
+        self.cutoffs = cutoffs
         self.color = color
 
     def check(self, stlatdata):
@@ -45,7 +45,7 @@ class TIM:
         denominator = defense + offense
         formula = (numerator / denominator) if denominator else 0
         calc = 1.0 / (1.0 + math.exp(-1 * formula))
-        return calc, self.opfunc(calc, self.cutoff) if self.opfunc else True
+        return calc, all(opfunc(calc, cutoff) if opfunc else True for opfunc, cutoff in zip(self.opfuncs, self.cutoffs)) if self.opfuncs else True
 
 
 TERMS = (
@@ -69,11 +69,17 @@ def get_tiers():
         for name, propname, color in TERMS:
             terms_url = os.getenv(propname)
             terms, special_cases = helpers.load_terms(terms_url, ["condition"])
-            op, cutoff_value = special_cases["condition"][:2]
-            opfunc = operator.gt if op == ">" else operator.ge if op == ">=" else operator.lt if op == "<" else operator.le if op == "<=" else None
-            if not opfunc:
-                raise Exception("Operator not supported: {}".format(op))
-            tim = TIM(name, terms, opfunc, float(cutoff_value), color)
+            opfuncs, cutoffs = [], []
+            for condition in special_cases["condition"]:
+                if not condition:
+                    continue
+                op, cutoff = condition.split(":")
+                opfunc = operator.gt if op == ">" else operator.ge if op == ">=" else operator.lt if op == "<" else operator.le if op == "<=" else None
+                if not opfunc:
+                    raise Exception("Operator not supported: {}".format(op))
+                opfuncs.append(opfunc)
+                cutoffs.append(float(cutoff))
+            tim = TIM(name, terms, opfuncs, cutoffs, color)
             TIM_TIERS.append(tim)
         TIM_TIERS.append(DEAD_COLD)
     return TIM_TIERS
