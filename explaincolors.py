@@ -17,12 +17,12 @@ BLACK = 1
 output = [
     ('**Red Hot:** Higher than the highest value at which non-shutouts have ever been recorded. (Historical: 100%, 3 pitchers)', PINK),
     ("**Hot:** At or below the maximum value at which a non-shutout has been recorded, but shutouts recorded at these values are at least significantly above the mean recorded value for shutouts. (Historical 40%, 10 pitchers)", RED),
-    ("**Warm:** Lower than Hot, but still some amount above the mean recorded value for nonshutouts. (Historical: 20%, 80 pitchers)", ORANGE),
-    ("**Tepid:** Lower than Warm, but still above the mean value for shutouts. (Historical: 10.02%, 649 pitchers)", YELLOW),
-    ("**Temperate:** Lower than Tepid, but above the mean recorded value for non-shutouts. (Historical: 5.79%, 1,520 pitchers)", GREEN),
-    ("**Cool:** At or above the minimum recorded value for shutouts, but below the mean recorded value for non-shutouts. (Historical: 4.12%, 3,568 pitchers)", BLUE),
-    ("**Dead Cold:** Below the minimum recorded value for shutouts. (Historical: 0%, 484 pitchers)", PURPLE),
-    ("All pitcher evaluations ever evaluated by us = 4.71% pitched shutouts", None)
+    ("**Warm:** Lower than Hot, but still some amount above the mean recorded value for nonshutouts. (Historical: 19.51%, 82 pitchers)", ORANGE),
+    ("**Tepid:** Lower than Warm, but still above the mean value for shutouts. (Historical: 10.16%, 640 pitchers)", YELLOW),
+    ("**Temperate:** Lower than Tepid, but above the mean recorded value for non-shutouts. (Historical: 5.94%, 1,565 pitchers)", GREEN),
+    ("**Cool:** At or above the minimum recorded value for shutouts, but below the mean recorded value for non-shutouts. (Historical: 3.96%, 3,611 pitchers)", BLUE),
+    ("**Dead Cold:** Below the minimum recorded value for shutouts. (Historical: 0%, 427 pitchers)", PURPLE),
+    ("All pitcher evaluations ever evaluated by us = 5.11% pitched shutouts", None)
 ]
 webhook = DiscordWebhook(url=os.getenv("DISCORD_WEBHOOK_URL").split(";"))
 for line, color in output:
