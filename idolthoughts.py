@@ -112,9 +112,13 @@ def get_output_line_from_matchup(matchup_data, websiteodds, mofoodds, so9_pitche
                  "({:.2f}★ AOB, {:.2f}★ MOB), {:.2f} D/O^2, {} WebOdds, {} MOFO")
     name = matchup_data.pitchername if screen else ("[{}](https://blaseball-reference.com/players/{})"
                                                     "").format(matchup_data.pitchername, get_player_slug(matchup_data.pitchername))
-    return formatstr.format(chr(int(matchup_data.defemoji, 16)), name,
-                            matchup_data.pitcherteamnickname, tim, k9, so9, matchup_data.era, matchup_data.stardata.meanbatstars,
-                            matchup_data.stardata.maxbatstars, matchup_data.defoff, websiteodds, mofoodds)
+    try:
+        emoji = chr(int(matchup_data.defemoji, 16))
+    except ValueError:
+        emoji = matchup_data.defemoji
+    return formatstr.format(emoji, name, matchup_data.pitcherteamnickname, tim, k9, so9, matchup_data.era,
+                            matchup_data.stardata.meanbatstars, matchup_data.stardata.maxbatstars, matchup_data.defoff,
+                            websiteodds, mofoodds)
 
 
 def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pitchers, score_adjustments, screen=False):
