@@ -58,8 +58,8 @@ def load_mods(mods_url, day):
     return MOD_RESULTS[mods_url]
 
 
-WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
-            "Glitter", "Blooddrain", "Peanuts", "Birds", "Feedback", "Reverb"]
+WEATHERS = ["Void", "Sun 2", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
+            "Glitter", "Blooddrain", "Peanuts", "Birds", "Feedback", "Reverb", "Black Hole"]
 
 
 def get_weather_idx(weather):
