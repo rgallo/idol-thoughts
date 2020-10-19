@@ -413,7 +413,7 @@ def get_score_adjustments(is_today, today_schedule, tomorrow_schedule):
 
 def outcome_matters(outcome):
     return all(s not in outcome for s in ("is now Unstable", "is now Flickering", "Red Hot", "is now Repeating",
-                                          "Black Hole swallowed a Win"))
+                                          "Black Hole swallowed a Win", "Sun 2 set a Win upon"))
 
 
 def already_ran_for_day(filepath, season_number, day):
