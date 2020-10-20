@@ -56,7 +56,7 @@ BNG_FLOOR = 100.0
 BNG_CEILING = 994975
 LAST_SEASON_STAT_CUTOFF = 11
 DISCORD_SPLIT_LIMIT = 1900
-DISCORD_RESULT_PER_BATCH = 5
+DISCORD_RESULT_PER_BATCH = 2
 
 
 class PrintWebhook:
@@ -121,21 +121,27 @@ def get_output_line_from_matchup(matchup_data, websiteodds, mofoodds, so9_pitche
                             websiteodds, mofoodds)
 
 
+def add_score_adjustments(description, matchup_data, score_adjustments):
+    new_description = description
+    if matchup_data.pitcherteam in score_adjustments:
+        for score_adjustment in score_adjustments[matchup_data.pitcherteam]:
+            new_description += ("\n:rotating_light::rotating_light: *{} {}: {}{}* :rotating_light::rotating_light:"
+                                "").format(matchup_data.pitcherteamnickname, score_adjustment.label,
+                                           "+" if score_adjustment.score > 0 else "", score_adjustment.score)
+    return new_description
+
+
 def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pitchers, score_adjustments, screen=False):
     Webhook, Embed = (PrintWebhook, PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     notify_tim_rank, notify_role = os.getenv("NOTIFY_TIM_RANK"), os.getenv("NOTIFY_ROLE")
-    sorted_pairs = sorted(matchup_pairs,
-                          key=lambda matchup_pair: (max(matchup_pair.awayMatchupData.timrank,
-                                                        matchup_pair.homeMatchupData.timrank),
-                                                    max(matchup_pair.awayMatchupData.k9,
-                                                        matchup_pair.homeMatchupData.k9),
-                                                    max(matchup_pair.awayMatchupData.mofoodds,
-                                                        matchup_pair.homeMatchupData.mofoodds)
-                                                    ), reverse=True)
-    batches = math.ceil(len(matchup_pairs) / DISCORD_RESULT_PER_BATCH)
+    sortkey = lambda matchup_pair: (max(matchup_pair.awayMatchupData.timrank, matchup_pair.homeMatchupData.timrank),
+                                    max(matchup_pair.awayMatchupData.k9, matchup_pair.homeMatchupData.k9),
+                                    max(matchup_pair.awayMatchupData.mofoodds, matchup_pair.homeMatchupData.mofoodds))
+    sorted_pairs = sorted(matchup_pairs, key=sortkey, reverse=True)
+    batches = len(matchup_pairs)
     webhooks = [Webhook(url=discord_webhook_url,
-                        content="__**Day {}**__{}".format(day, " (cont.)" if batch else "")) for batch in range(batches)]
+                        content="__**Day {}**__".format(day) if not batch else discord_hr(10, char='-')) for batch in range(batches)]
     odds_mismatch, notify = [], []
     for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
@@ -145,32 +151,25 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         awayHigherTIM = awayHigherTIMRank or (awayMatchupData.timrank == homeMatchupData.timrank and awayMatchupData.timcalc > homeMatchupData.timcalc)
         homeHigherTIMRank = homeMatchupData.timrank > awayMatchupData.timrank
         homeHigherTIM = homeHigherTIMRank or (homeMatchupData.timrank == awayMatchupData.timrank and homeMatchupData.timcalc > awayMatchupData.timcalc)
-        color = awayMatchupData.tim.color if awayHigherTIM else homeMatchupData.tim.color
-        description = "{0}\n{2} @ {2}\n{1}".format(get_output_line_from_matchup(awayMatchupData, awayOdds, awayMOFOOdds,
-                                                                                so9_pitchers, k9_pitchers,
-                                                                                awayHigherTIM, homeHigherTIMRank,
-                                                                                screen=screen),
-                                                   get_output_line_from_matchup(homeMatchupData, homeOdds, homeMOFOOdds,
-                                                                                so9_pitchers, k9_pitchers,
-                                                                                homeHigherTIM, awayHigherTIMRank,
-                                                                                screen=screen),
-                                                   discord_hr(10, char="-"))
-        for matchup_data in (awayMatchupData, homeMatchupData):
-            if matchup_data.pitcherteam in score_adjustments:
-                for score_adjustment in score_adjustments[matchup_data.pitcherteam]:
-                    description += ("\n:rotating_light::rotating_light: *{} {}: {}{}* :rotating_light::rotating_light:"
-                                    "").format(matchup_data.pitcherteamnickname, score_adjustment.label,
-                                               "+" if score_adjustment.score > 0 else "", score_adjustment.score)
-        if (awayMatchupData.mofoodds < .5 and awayMatchupData.websiteodds > .5) or (awayMatchupData.mofoodds > .5 and awayMatchupData.websiteodds < .5) or (.495 <= awayMatchupData.websiteodds < .505):
+        awayOutput = get_output_line_from_matchup(awayMatchupData, awayOdds, awayMOFOOdds, so9_pitchers, k9_pitchers,
+                                                  awayHigherTIM, homeHigherTIMRank, screen=screen)
+        awayOutput = add_score_adjustments(awayOutput, awayMatchupData, score_adjustments)
+        homeOutput = get_output_line_from_matchup(homeMatchupData, homeOdds, homeMOFOOdds, so9_pitchers, k9_pitchers,
+                                                  homeHigherTIM, awayHigherTIMRank, screen=screen)
+        homeOutput = add_score_adjustments(homeOutput, homeMatchupData, score_adjustments)
+        if (awayMatchupData.mofoodds < .5 < awayMatchupData.websiteodds) or (awayMatchupData.mofoodds > .5 > awayMatchupData.websiteodds) or (.495 <= awayMatchupData.websiteodds < .505):
             odds_mismatch.append(result)
         if notify_tim_rank and notify_role:
             if awayMatchupData.timrank >= int(notify_tim_rank):
                 notify.append(awayMatchupData)
             if homeMatchupData.timrank >= int(notify_tim_rank):
                 notify.append(homeMatchupData)
-        embed = Embed(description=description, color=color)
-        webhooks[idx // DISCORD_RESULT_PER_BATCH].add_embed(embed)
-    results = [webhook.execute() for webhook in webhooks]
+        webhooks[(idx * 2) // DISCORD_RESULT_PER_BATCH].add_embed(Embed(description=awayOutput, color=awayMatchupData.tim.color))
+        webhooks[(idx * 2) // DISCORD_RESULT_PER_BATCH].add_embed(Embed(description=homeOutput, color=homeMatchupData.tim.color))
+    results = []
+    for webhook in webhooks:
+        results.append(webhook.execute())
+        time.sleep(.5)
     if odds_mismatch:
         odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, MOFO: **{}** {:.2f}%".format(
             "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
