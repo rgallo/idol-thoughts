@@ -92,7 +92,7 @@ def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitc
                 awayMods[name].append(stlatterm)
             for name, stlatterm in mods[attr]["opp"].items():
                 homeMods[name].append(stlatterm)
-        if attr in lowerHomeAttrs:
+        if attr in lowerHomeAttrs and attr != "traveling":
             for name, stlatterm in mods[attr]["same"].items():
                 homeMods[name].append(stlatterm)
             for name, stlatterm in mods[attr]["opp"].items():
