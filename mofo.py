@@ -14,12 +14,10 @@ def calc_team(terms, termset, mods):
     total = 0.0
     for termname, val in termset:
         term = terms[termname]
+        total += term.calc(val)
         modterms = mods.get(termname, [])
-        moddedterm = term
         for modterm in modterms:
-            moddedterm = StlatTerm(term.a + modterm.a, term.b + modterm.b, term.c + modterm.c)
-        calculated_value = moddedterm.calc(val)
-        total += calculated_value
+            total += modterm.calc(val)
     return total
 
 
