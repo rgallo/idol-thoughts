@@ -4,26 +4,31 @@ import os
 
 load_dotenv()
 
-s = ("🦀 **[Brock Forbes](https://blaseball-reference.com/players/brock-forbes), Crabs** "
-     "(__Tepid__, __8 K9__, __8.56 SO9__, 3.07 ERA), (2.95★ AOB, 4.21★ MOB), 0.30 D/O^2, 56.01% WebOdds, 55.87% MOFO\n"
-     "~~------------~~ @ ~~------------~~\n"
-     "🐅 **[Hiroto Wilcox](https://blaseball-reference.com/players/hiroto-wilcox), Tigers** "
-     "(Tepid, __6 K9__, __7.06 SO9__, 2.40 ERA), (2.53★ AOB, 3.84★ MOB), 0.14 D/O^2, ~~43.99%~~ WebOdds, ~~44.13%~~ MOFO")
+s1 = ("💋 **[Yosh Carpenter](https://blaseball-reference.com/players/yosh-carpenter), Lovers** (~~Cool~~, __5 K9__, "
+      "6.14 SO9, 3.76 ERA), (3.25★ AOB, 4.78★ MOB), 0.16 D/O^2, ~~43.76%~~ WebOdds, ~~48.87%~~ MOFO")
 
+s2 = ("📱 **[Theodore Cervantes](https://blaseball-reference.com/players/theodore-cervantes), Millennials** "
+      "(__Tepid__, __7 K9__, __6.73 SO9__, 3.88 ERA), (2.41★ AOB, 4.56★ MOB), 0.25 D/O^2, 56.24% WebOdds, 51.13% MOFO")
 
 webhook = DiscordWebhook(url=os.getenv("DISCORD_WEBHOOK_URL").split(";"))
-webhook.add_embed(DiscordEmbed(description=s, color=16312092))
+webhook.add_embed(DiscordEmbed(description=s1, color=4886754))
+webhook.add_embed(DiscordEmbed(description=s2, color=16312092))
 
 explanations = DiscordEmbed(title="How to Learn to Stop Worrying and Love the Bot")
-explanations.add_embed_field(name='TIM', value='Temperature Indicator Matters. Hotter > Cooler when it comes to shutout chance. It scales from Red Hot > Hot > Warm > Tepid > Temperate > Cool > Dead Cold.  Check pins for more info on colors. __Underlined__ values have a better TIM, even when the words are the same. Games are sorted by the max temp, so most likely shutouts will be on top.', inline=False)
-explanations.add_embed_field(name='K9', value='A calculated prediction of how many strikeouts the pitcher will pitch in 9 innings, an average game taking a normal amount of time (higher is better).  __Underlined__ values are in the top five values for today.', inline=False)
-explanations.add_embed_field(name='SO9', value='Historical strikeouts per 9 innings, how many strikeouts the pitcher on average has previously pitched in an average game taking a normal amount of time (higher is better).  __Underlined__ values are in the top five values for today.', inline=False)
-explanations.add_embed_field(name='ERA', value='Earned Run Average, the average number of runs the pitcher has historically allowed per game (lower is better).', inline=False)
-explanations.add_embed_field(name='AOB', value='Average Opponent Batting, the geometric mean of batting stars the offensive team has (lower is better).', inline=False)
-explanations.add_embed_field(name='MOB', value='Max Opponent Batting, the highest number of stars a single batter has (lower is better).', inline=False)
-explanations.add_embed_field(name='D/O^2', value='A ratio of average defensive/pitching stars to average batting/baserunning stars (higher is better) `((pitchingstars+meandefstars)/((meanbatstars+meanrunstars) ** 2))`.', inline=False)
-explanations.add_embed_field(name='WebOdds', value='The win odds straight from Blaseball.  ~~Strikethrough~~ values are the lesser odds.', inline=False)
-explanations.add_embed_field(name='MOFO', value='Millennials Outrageously Fabulous Odds, an alternative odds formula.  With our current data set, this picks the winner 66.32% of games, vs. WebOdds\' 62.99%.  ~~Strikethrough~~ values are the lesser odds.', inline=False)
+fields = (
+     ('TIM', 'Temperature Indicator Matters. Hotter > Cooler when it comes to shutout chance. It scales from Red Hot > Hot > Warm > Tepid > Temperate > Cool > Dead Cold.  Check pins for more info on colors. __Underlined__ values have a better TIM, even when the words are the same. Games are sorted by the max temp, so most likely shutouts will be on top.'),
+     ('K9', 'A calculated prediction of how many strikeouts the pitcher will pitch in 9 innings, an average game taking a normal amount of time (higher is better).  __Underlined__ values are in the top five values for today.'),
+     ('SO9', 'Historical strikeouts per 9 innings, how many strikeouts the pitcher on average has previously pitched in an average game taking a normal amount of time (higher is better).  __Underlined__ values are in the top five values for today.'),
+     ('ERA', 'Earned Run Average, the average number of runs the pitcher has historically allowed per game (lower is better).'),
+     ('AOB', 'Average Opponent Batting, the geometric mean of batting stars the offensive team has (lower is better).'),
+     ('MOB', 'Max Opponent Batting, the highest number of stars a single batter has (lower is better).'),
+     ('D/O^2', 'A ratio of average defensive/pitching stars to average batting/baserunning stars (higher is better) `((pitchingstars+meandefstars)/((meanbatstars+meanrunstars) ** 2))`.'),
+     ('WebOdds', 'The win odds straight from Blaseball.  ~~Strikethrough~~ values are the lesser odds.'),
+     ('MOFO', "Millennials Outrageously Fabulous Odds, an alternative odds formula.  With our current data set, prior to Season 11, this picks the winner 66.32% of games, vs. WebOdds' 62.99%.  ~~Strikethrough~~ values are the lesser odds."),
+)
+
+for name, description in fields:
+    explanations.add_embed_field(name=name, value=description, inline=False)
 
 webhook.add_embed(explanations)
 
