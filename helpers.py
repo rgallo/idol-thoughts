@@ -13,7 +13,9 @@ class StlatTerm:
         self.c = c
 
     def calc(self, val):
-        return self.a * (max(self.b + val, 0.01) ** self.c)
+        b_val = self.b + val
+        c_val = 1.0 if b_val < 0.0 else self.c
+        return self.a * (b_val ** c_val)
 
 
 def geomean(numbers):
