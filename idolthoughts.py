@@ -505,20 +505,22 @@ def main():
     today_schedule = streamdata['value']['games']['schedule']
     games_complete = False
     retry_count = int(os.getenv("RETRY_COUNT", 10))
+    show_waiting_message = int(os.getenv("SHOW_WAITING_MESSAGE", 1))
+    sleep_interval = int(os.getenv("WAIT_INTERVAL", 30))
     if not args.today and not args.forcerun and not args.testfile and retry_count > 0:
         first_try = True
-        sleep_interval = 30
         for _ in range(retry_count):
             games_complete = all([game["finalized"] for game in today_schedule])
             if not games_complete and first_try:
                 total_seconds = sleep_interval * retry_count
-                message = "Waiting up to {} minute{} {}for current games to end."
-                message = message.format(total_seconds // 60, "" if total_seconds // 60 == 1 else "s",
-                                         "{} seconds ".format(total_seconds % 60) if total_seconds % 60 else "")
-                if args.discord:
-                    send_discord_message("Sorry!", message)
-                else:
-                    print(message)
+                if show_waiting_message:
+                    message = "Waiting up to {} minute{} {}for current games to end."
+                    message = message.format(total_seconds // 60, "" if total_seconds // 60 == 1 else "s",
+                                             "{} seconds ".format(total_seconds % 60) if total_seconds % 60 else "")
+                    if args.discord:
+                        send_discord_message("Sorry!", message)
+                    else:
+                        print(message)
                 first_try = False
             elif games_complete:
                 break
