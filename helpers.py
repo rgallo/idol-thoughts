@@ -14,7 +14,7 @@ class StlatTerm:
 
     def calc(self, val):
         b_val = self.b + val
-        c_val = 1.0 if b_val < 0.0 else self.c
+        c_val = 1.0 if (b_val < 0.0 or (b_val < 1.0 and self.c < 0.0)) else self.c
         return self.a * (b_val ** c_val)
 
 
