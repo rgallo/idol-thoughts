@@ -190,10 +190,17 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
 
 def get_stream_snapshot():
     snapshot = None
-    response = requests.get("https://www.blaseball.com/events/streamData", stream=True)
-    for line in response.iter_lines():
-        snapshot = line
-        break
+    retries = 0
+    while snapshot is None and retries < 5:
+        if retries:
+            time.sleep(2)  # Sleep after first time
+        response = requests.get("https://www.blaseball.com/events/streamData", stream=True)
+        for line in response.iter_lines():
+            snapshot = line
+            break
+        retries += 1
+    if not snapshot:
+        raise Exception("Unable to get stream snapshot")
     return json.loads(snapshot.decode("utf-8")[6:])
 
 
