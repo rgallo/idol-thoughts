@@ -211,19 +211,6 @@ def get_team_attributes(attributes={}):
     return attributes
 
 
-def get_stlat_value(team, stlatname, value, game, day):
-    adjustedVal = value
-    # Growth
-    if game and "GROWTH" in get_team_attributes()[team]:
-        adjustedVal = adjustedVal + ((-.05 if stlatname in INVERSE_STLATS else .05) * min(day/99, 1))
-    # Affinity for Crows
-    bird_weather = get_weather_idx("Birds")
-    if game and stlatname in BATTING_STLATS + PITCHING_STLATS and game["weather"] == bird_weather and "AFFINITY_FOR_CROWS" in get_team_attributes()[team]:
-        adjustedVal = adjustedVal + (-.5 if stlatname in INVERSE_STLATS else .5)
-    # Default case
-    return max(adjustedVal, .01)
-
-
 def adjust_by_pct(row, pct, stlats, star_func):
     new_row = row.copy()
     original_stars = star_func(row)
