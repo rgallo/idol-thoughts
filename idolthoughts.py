@@ -190,6 +190,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
 
 def get_stream_snapshot():
     snapshot = None
+    json_snapshot = None
     retries = 0
     while snapshot is None and retries < 5:
         if retries:
@@ -199,9 +200,13 @@ def get_stream_snapshot():
             snapshot = line
             break
         retries += 1
+        try:
+            json_snapshot = json.loads(snapshot.decode("utf-8")[6:])
+        except json.decoder.JSONDecodeError:
+            snapshot = None
     if not snapshot:
         raise Exception("Unable to get stream snapshot")
-    return json.loads(snapshot.decode("utf-8")[6:])
+    return json_snapshot
 
 
 def get_def_off_ratio(pitcher, defenseteamname, offenseteamname, team_stat_data, pitcher_stat_data):
@@ -541,7 +546,9 @@ def main():
         first_try = True
         for _ in range(retry_count):
             games_complete = all([game["finalized"] for game in today_schedule])
-            if not games_complete and first_try:
+            is_postseason = any([game["isPostseason"] for game in today_schedule])
+            keep_trying = (not games_complete or (is_postseason and not args.today and not streamdata['value']['games']['tomorrowSchedule']))
+            if keep_trying and first_try:
                 total_seconds = sleep_interval * retry_count
                 if show_waiting_message:
                     message = "Waiting up to {} minute{} {}for current games to end."
@@ -552,7 +559,7 @@ def main():
                     else:
                         print(message)
                 first_try = False
-            elif games_complete:
+            elif not keep_trying:
                 break
             time.sleep(sleep_interval)
             streamdata = get_stream_snapshot()
