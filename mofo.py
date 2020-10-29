@@ -3,7 +3,7 @@ from __future__ import print_function
 
 import collections
 
-from helpers import geomean, load_terms, StlatTerm, get_weather_idx, load_mods
+from helpers import geomean, load_terms, get_weather_idx, load_mods
 import os
 
 WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
@@ -15,7 +15,7 @@ def calc_team(terms, termset, mods):
     for termname, val in termset:
         term = terms[termname]
         total += term.calc(val)
-        modterms = mods.get(termname, [])
+        modterms = (mods or {}).get(termname, [])
         for modterm in modterms:
             total += modterm.calc(val)
     return total
@@ -71,8 +71,7 @@ def team_offense(terms, teamname, mods, team_stat_data):
     return calc_team(terms, termset, mods)
 
 
-def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs,
-              day, weather):
+def setup(day, weather, awayAttrs, homeAttrs):
     terms_url = os.getenv("MOFO_TERMS")
     terms, _ = load_terms(terms_url)
     mods_url = os.getenv("MOFO_MODS")
@@ -95,12 +94,22 @@ def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitc
                 homeMods[name].append(stlatterm)
             for name, stlatterm in mods[attr]["opp"].items():
                 awayMods[name].append(stlatterm)
+    return terms, awayMods, homeMods
+
+
+def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs,
+              day, weather):
+    terms, awayMods, homeMods = setup(day, weather, awayAttrs, homeAttrs)
+    return get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods)
+
+
+def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods):
     away_offense = abs(team_offense(terms, awayTeam, awayMods, team_stat_data))
     away_defense = abs(team_defense(terms, awayPitcher, awayTeam, awayMods, team_stat_data, pitcher_stat_data))
     home_offense = abs(team_offense(terms, homeTeam, homeMods, team_stat_data))
     home_defense = abs(team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data))
-    numerator = (max(away_offense - home_defense, 0.0) - max(home_offense - away_defense, 0.0))
-    denominator = (max(away_offense - home_defense, 0.0) + max(home_offense - away_defense, 0.0))
+    numerator = (away_offense - home_defense) - (home_offense - away_defense)
+    denominator = (away_offense - home_defense) + (home_offense - away_defense)
     if not denominator:
         return .5, .5
     away_formula = numerator / denominator

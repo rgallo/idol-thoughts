@@ -260,17 +260,22 @@ def adjust_stlats(row, game, day):
     return new_row
 
 
-def load_stat_data(filepath, schedule, day):
+def load_stat_data(filepath, schedule=None, day=None):
     with open(filepath) as f:
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
-    games = {game["homeTeamName"]: game for game in schedule}
-    games.update({game["awayTeamName"]: game for game in schedule})
+    games = {}
+    if schedule:
+        games.update({game["homeTeamName"]: game for game in schedule})
+        games.update({game["awayTeamName"]: game for game in schedule})
     pitcherstatdata = collections.defaultdict(lambda: {})
     teamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: []))
     for row in filedata:
         team = row["team"]
-        game = games.get(team)
-        new_row = adjust_stlats(row, game, day)
+        if games:
+            game = games.get(team)
+            new_row = adjust_stlats(row, game, day)
+        else:
+            new_row = row
         if new_row["position"] == "rotation":
             for key in (PITCHING_STLATS + ["pitchingStars"]):
                 pitcherstatdata[new_row["name"]][key] = float(new_row[key])
