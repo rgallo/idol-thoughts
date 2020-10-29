@@ -237,30 +237,30 @@ def adjust_by_pct(row, pct, stlats, star_func):
     return new_row
 
 
-def adjust_stlats(row, game, day):
+def adjust_stlats(row, game, day, team_attrs=None):
     new_row = row.copy()
     if game:
         team = row["team"]
-        team_attrs = get_team_attributes()[team]
-        if "GROWTH" in team_attrs:
+        current_team_attrs = (team_attrs if team_attrs is not None else get_team_attributes()).get(team, {})
+        if "GROWTH" in current_team_attrs:
             growth_pct = .05 * min(day / 99, 1.0)
             new_row = adjust_by_pct(new_row, growth_pct, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
             new_row = adjust_by_pct(new_row, growth_pct, BATTING_STLATS, blaseball_stat_csv.batting_stars)
             new_row = adjust_by_pct(new_row, growth_pct, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
             new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
-        if "TRAVELING" in team_attrs and team == game["awayTeamName"]:
+        if "TRAVELING" in current_team_attrs and team == game["awayTeamName"]:
             new_row = adjust_by_pct(new_row, 0.05, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
             new_row = adjust_by_pct(new_row, 0.05, BATTING_STLATS, blaseball_stat_csv.batting_stars)
             new_row = adjust_by_pct(new_row, 0.05, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
             new_row = adjust_by_pct(new_row, 0.05, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
         bird_weather = get_weather_idx("Birds")
-        if "AFFINITY_FOR_CROWS" in team_attrs and game["weather"] == bird_weather:
+        if "AFFINITY_FOR_CROWS" in current_team_attrs and game["weather"] == bird_weather:
             new_row = adjust_by_pct(new_row, 0.50, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
             new_row = adjust_by_pct(new_row, 0.50, BATTING_STLATS, blaseball_stat_csv.batting_stars)
     return new_row
 
 
-def load_stat_data(filepath, schedule=None, day=None):
+def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):
     with open(filepath) as f:
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
     games = {}
@@ -273,7 +273,7 @@ def load_stat_data(filepath, schedule=None, day=None):
         team = row["team"]
         if games:
             game = games.get(team)
-            new_row = adjust_stlats(row, game, day)
+            new_row = adjust_stlats(row, game, day, team_attrs)
         else:
             new_row = row
         if new_row["position"] == "rotation":

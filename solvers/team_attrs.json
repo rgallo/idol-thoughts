@@ -1,0 +1,136 @@
+{
+  "3": {
+    "New York Millennials": [
+      "EXTRA_STRIKE"
+    ],
+    "Kansas City Breath Mints": [
+      "EXTRA_STRIKE"
+    ],
+    "Hellmouth Sunbeams": [
+      "EXTRA_STRIKE"
+    ],
+    "San Francisco Lovers": [
+      "EXTRA_STRIKE"
+    ]
+  },
+  "7": {
+    "Breckenridge Jazz Hands": [
+      "EXTRA_STRIKE"
+    ]
+  },
+  "9": {
+    "Seattle Garages": [
+      "HOME_FIELD"
+    ],
+    "Hellmouth Sunbeams": [
+      "BASE_INSTINCTS"
+    ],
+    "Philly Pies": [
+      "AFFINITY_FOR_CROWS"
+    ],
+    "Boston Flowers": [
+      "GROWTH"
+    ]
+  },
+  "10": {
+    "Yellowstone Magic": [
+      "EXTRA_BASE"
+    ],
+    "Hellmouth Sunbeams": [
+      "EXTRA_BASE",
+      "BASE_INSTINCTS"
+    ],
+    "Canada Moist Talkers": [
+      "EXTRA_BASE"
+    ],
+    "Dallas Steaks": [
+      "EXTRA_BASE"
+    ],
+    "Hades Tigers": [
+      "EXTRA_BASE"
+    ],
+    "Unlimited Tacos": [
+      "EXTRA_BASE"
+    ],
+    "Los Angeles Tacos": [
+      "EXTRA_BASE"
+    ],
+    "Charleston Shoe Thieves": [
+      "EXTRA_BASE"
+    ],
+    "Seattle Garages": [
+      "EXTRA_BASE"
+    ],
+    "Kansas City Breath Mints": [
+      "EXTRA_BASE"
+    ],
+    "Miami Dalé": [
+      "EXTRA_BASE"
+    ],
+    "Philly Pies": [
+      "EXTRA_BASE",
+      "AFFINITY_FOR_CROWS"
+    ],
+    "Houston Spies": [
+      "EXTRA_BASE"
+    ],
+    "Hawai'i Fridays": [
+      "EXTRA_BASE"
+    ],
+    "Hawaii Fridays": [
+      "EXTRA_BASE"
+    ],
+    "Miami Dale": [
+      "EXTRA_BASE"
+    ],
+    "THE SHELLED ONE'S PODS": [
+      "EXTRA_STRIKE"
+    ],
+    "San Francisco Lovers": [
+      "LOVE"
+    ],
+    "New York Millennials": [
+      "EXTRA_BASE"
+    ],
+    "Boston Flowers": [
+      "EXTRA_BASE",
+      "GROWTH"
+    ]
+  },
+  "11": {
+    "Yellowstone Magic": [
+      "O_NO"
+    ],
+    "Charleston Shoe Thieves": [
+      "TRAVELING",
+      "EXTRA_STRIKE"
+    ],
+    "Hellmouth Sunbeams": [
+      "EXTRA_STRIKE",
+      "WALK_IN_THE_PARK",
+      "BASE_INSTINCTS"
+    ],
+    "Miami Dale": [
+      "WALK_IN_THE_PARK"
+    ],
+    "Miami Dalé": [
+      "WALK_IN_THE_PARK"
+    ],
+    "Unlimited Tacos": [
+      "WALK_IN_THE_PARK"
+    ],
+    "Los Angeles Tacos": [
+      "WALK_IN_THE_PARK"
+    ],
+    "Houston Spies": [
+      "WALK_IN_THE_PARK"
+    ],
+    "Boston Flowers": [
+      "WALK_IN_THE_PARK",
+      "GROWTH"
+    ],
+    "Philly Pies": [
+      "AFFINITY_FOR_CROWS"
+    ]
+  }
+}
