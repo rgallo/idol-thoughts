@@ -62,16 +62,18 @@ BEST_RESULT = 1.0
 
 def func(parameters, *data):
     global BEST_RESULT
-    stat_file_map, game_list = data
+    stat_file_map, game_list, debug = data
     terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(STLAT_LIST, zip(*[iter(parameters)] * 3))}
     game_counter, fail_counter = 0, 0
     for season in (5,):
+        pitchers, team_stat_data, pitcher_stat_data = None, None, None
         for day in range(1, 125):
             stat_filename = stat_file_map.get((season, day))
-            if not stat_filename:
-                continue
-            pitchers = get_pitcher_id_lookup(stat_filename)
-            team_stat_data, pitcher_stat_data = load_stat_data(stat_filename)
+            if stat_filename:
+                pitchers = get_pitcher_id_lookup(stat_filename)
+                team_stat_data, pitcher_stat_data = load_stat_data(stat_filename)
+            if not pitchers:
+                raise Exception("No stat file found")
             awayMods, homeMods = [], []
             games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
             paired_games = pair_games(games)
@@ -90,35 +92,40 @@ def func(parameters, *data):
                 if (awayodds < .5 and away_rbi > home_rbi) or (awayodds > .5 and away_rbi < home_rbi):
                     fail_counter += 1
     fail_rate = fail_counter / game_counter
-    if fail_rate < BEST_RESULT:
-        BEST_RESULT = fail_rate
-        print("-"*20)
-        print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(STLAT_LIST, zip(*[iter(parameters)] * 3))))
-        print("Best so far - fail rate {:.2f}%".format(fail_rate * 100.0))
-        print("-" * 20)
-    # print("- fail rate {:.2f}%".format(fail_rate * 100.0))
+    if debug:
+        if fail_rate < BEST_RESULT:
+            BEST_RESULT = fail_rate
+            print("-"*20)
+            print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(STLAT_LIST, zip(*[iter(parameters)] * 3))))
+            print("Best so far - fail rate {:.2f}%".format(fail_rate * 100.0))
+            print("-" * 20)
+        print("- fail rate {:.2f}%".format(fail_rate * 100.0))
     return fail_rate
 
 
 def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--statfolder', help="path to stat folder")
-    parser.add_argument('--gamefile', help="path to stat folder")
+    parser.add_argument('--gamefile', help="path to game file")
+    parser.add_argument('--debug', help="print output", action='store_true')
     args = parser.parse_args()
     return args
 
 
 def main():
+    import datetime
+    print(datetime.datetime.now())
     args = handle_args()
     bounds = [(0, 10), (0, 3), (-3, 3)] * len(STLAT_LIST)
     stat_file_map = get_stat_file_map(args.statfolder)
     game_list = get_games(args.gamefile)
-    args = (stat_file_map, game_list)
-    result = differential_evolution(func, bounds, args=args, popsize=200, tol=0.00001, mutation=0.075, workers=-1, maxiter=10)
+    args = (stat_file_map, game_list, args.debug)
+    result = differential_evolution(func, bounds, args=args, popsize=15, tol=0.001, mutation=0.075, workers=1, maxiter=1)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = func(result.x, stat_file_map, game_list)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
+    print(datetime.datetime.now())
 
 
 if __name__ == "__main__":
