@@ -97,6 +97,9 @@ def get_attrs_from_paired_games(season_team_attrs, paired_games):
     return attrs
 
 
+STAT_CACHE = {}
+
+
 def func(parameters, *data):
     print("func start: {}".format(datetime.datetime.now()))
     global BEST_RESULT
@@ -113,14 +116,19 @@ def func(parameters, *data):
             paired_games = pair_games(games)
             schedule = get_schedule_from_paired_games(paired_games)
             day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
-            stat_filename = stat_file_map.get((season, day))
-            if stat_filename:
-                last_stat_filename = stat_filename
-                pitchers = get_pitcher_id_lookup(stat_filename)
-                team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)
-            elif should_regen(day_mods):
-                pitchers = get_pitcher_id_lookup(last_stat_filename)
-                team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
+            cached_stats = STAT_CACHE.get((season, day))
+            if cached_stats:
+                team_stat_data, pitcher_stat_data, pitchers = cached_stats
+            else:
+                stat_filename = stat_file_map.get((season, day))
+                if stat_filename:
+                    last_stat_filename = stat_filename
+                    pitchers = get_pitcher_id_lookup(stat_filename)
+                    team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)
+                elif should_regen(day_mods):
+                    pitchers = get_pitcher_id_lookup(last_stat_filename)
+                    team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
+                STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)
             if not pitchers:
                 raise Exception("No stat file found")
             awayMods, homeMods = [], []
