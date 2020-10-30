@@ -4,6 +4,7 @@ import csv
 import json
 import os
 import re
+import uuid
 from glob import glob
 import sys
 from scipy.optimize import differential_evolution
@@ -100,19 +101,30 @@ def get_attrs_from_paired_games(season_team_attrs, paired_games):
 STAT_CACHE = {}
 
 
+def debug_print(s, debug, run_id):
+    if debug:
+        print("{} - {}".format(run_id, s))
+
+
 def func(parameters, *data):
-    print("func start: {}".format(datetime.datetime.now()))
+    run_id = uuid.uuid4()
+    starttime = datetime.datetime.now()
     global BEST_RESULT
-    stat_file_map, game_list, team_attrs, mod, debug = data
+    stat_file_map, game_list, team_attrs, mod, debug, debug2, debug3 = data
+    debug_print("func start: {}".format(starttime), debug, run_id)
     terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(STLAT_LIST, zip(*[iter(parameters)] * 3))}
     game_counter, fail_counter = 0, 0
     for season in range(3, 12):
+        season_start = datetime.datetime.now()
+        debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
         pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
         season_team_attrs = team_attrs.get(str(season), {})
+        season_days = 0
         for day in range(1, 125):
             games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
             if not games:
                 continue
+            season_days += 1
             paired_games = pair_games(games)
             schedule = get_schedule_from_paired_games(paired_games)
             day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
@@ -152,16 +164,18 @@ def func(parameters, *data):
                 game_counter += 1
                 if (awayodds < .5 and away_rbi > home_rbi) or (awayodds > .5 and away_rbi < home_rbi):
                     fail_counter += 1
+        season_end = datetime.datetime.now()
+        debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)
     fail_rate = fail_counter / game_counter
-    if debug:
-        if fail_rate < BEST_RESULT:
-            BEST_RESULT = fail_rate
-            print("-"*20)
-            print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(STLAT_LIST, zip(*[iter(parameters)] * 3))))
-            print("Best so far - fail rate {:.2f}%".format(fail_rate * 100.0))
-            print("-" * 20)
-        print("- fail rate {:.2f}%".format(fail_rate * 100.0))
-    print("func end: {}".format(datetime.datetime.now()))
+    if fail_rate < BEST_RESULT:
+        BEST_RESULT = fail_rate
+        debug_print("-"*20, debug, run_id)
+        debug_print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(STLAT_LIST, zip(*[iter(parameters)] * 3))), debug, run_id)
+        debug_print("Best so far - fail rate {:.2f}%".format(fail_rate * 100.0), debug, run_id)
+        debug_print("-" * 20, debug, run_id)
+    debug_print("run fail rate {:.2f}%".format(fail_rate * 100.0), debug2, run_id)
+    endtime = datetime.datetime.now()
+    debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
     return fail_rate
 
 
@@ -171,6 +185,8 @@ def handle_args():
     parser.add_argument('--gamefile', help="path to game file")
     parser.add_argument('--mod', help="mod to calculate for")
     parser.add_argument('--debug', help="print output", action='store_true')
+    parser.add_argument('--debug2', help="print output", action='store_true')
+    parser.add_argument('--debug3', help="print output", action='store_true')
     args = parser.parse_args()
     return args
 
@@ -183,8 +199,9 @@ def main():
     game_list = get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
-    args = (stat_file_map, game_list, team_attrs, cmd_args.mod, cmd_args.debug)
-    result = differential_evolution(func, bounds, args=args, popsize=15, tol=0.001, mutation=0.075, workers=1, maxiter=1)
+    args = (stat_file_map, game_list, team_attrs, cmd_args.mod, cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
+    result = differential_evolution(func, bounds, args=args, popsize=15, tol=0.001, mutation=(0.05, 0.1), workers=1,
+                                    maxiter=1)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = func(result.x, stat_file_map, game_list, team_attrs, cmd_args.mod, False)
