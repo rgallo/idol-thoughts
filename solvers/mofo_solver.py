@@ -99,6 +99,7 @@ def get_attrs_from_paired_games(season_team_attrs, paired_games):
 
 
 STAT_CACHE = {}
+GAME_CACHE = {}
 
 
 def debug_print(s, debug, run_id):
@@ -121,9 +122,14 @@ def func(parameters, *data):
         season_team_attrs = team_attrs.get(str(season), {})
         season_days = 0
         for day in range(1, 125):
-            games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
-            if not games:
-                continue
+            cached_games = GAME_CACHE.get((season, day))
+            if cached_games:
+                games = cached_games
+            else:
+                games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
+                if not games:
+                    continue
+                GAME_CACHE[(season, day)] = games
             season_days += 1
             paired_games = pair_games(games)
             schedule = get_schedule_from_paired_games(paired_games)
@@ -170,8 +176,7 @@ def func(parameters, *data):
     if fail_rate < BEST_RESULT:
         BEST_RESULT = fail_rate
         debug_print("-"*20, debug, run_id)
-        debug_print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(STLAT_LIST, zip(*[iter(parameters)] * 3))), debug, run_id)
-        debug_print("Best so far - fail rate {:.2f}%".format(fail_rate * 100.0), debug, run_id)
+        debug_print("Best so far - fail rate {:.2f}%\n".format(fail_rate * 100.0) + "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(STLAT_LIST, zip(*[iter(parameters)] * 3))), debug, run_id)
         debug_print("-" * 20, debug, run_id)
     debug_print("run fail rate {:.2f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
