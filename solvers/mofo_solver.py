@@ -158,7 +158,7 @@ def func(parameters, *data):
                 if mod and (len(special_game_attrs) > 1 or special_game_attrs.pop() != mod):
                     continue
                 away_game, home_game = game["away"], game["home"]
-                away_rbi, home_rbi = float(away_game["pitcher_team_rbi"]), float(home_game["pitcher_team_rbi"])
+                home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])
                 if away_rbi == home_rbi:
                     continue
                 awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
