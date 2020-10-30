@@ -209,7 +209,7 @@ def main():
                                     maxiter=1)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
-    result_fail_rate = func(result.x, stat_file_map, game_list, team_attrs, cmd_args.mod, False)
+    result_fail_rate = func(result.x, stat_file_map, game_list, team_attrs, cmd_args.mod, False, False, False)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())
 
