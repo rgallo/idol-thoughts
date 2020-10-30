@@ -91,67 +91,65 @@ def debug_print(s, debug, run_id):
         print("{} - {}".format(run_id, s))
 
 
-def get_minimize_func(calc_func):
-    def minimize_func(parameters, *data):
-        run_id = uuid.uuid4()
-        starttime = datetime.datetime.now()
-        global BEST_RESULT
-        stlat_list, special_case_list, stat_file_map, game_list, team_attrs, mod, debug, debug2, debug3 = data
-        debug_print("func start: {}".format(starttime), debug3, run_id)
-        special_case_list = special_case_list or []
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}
-        special_cases = parameters[-len(special_case_list):] if special_case_list else []
-        game_counter, fail_counter = 0, 0
-        for season in range(3, 12):
-            season_start = datetime.datetime.now()
-            debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
-            pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
-            season_team_attrs = team_attrs.get(str(season), {})
-            season_days = 0
-            for day in range(1, 125):
-                cached_games = GAME_CACHE.get((season, day))
-                if cached_games:
-                    games = cached_games
-                else:
-                    games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
-                    if not games:
-                        continue
-                    GAME_CACHE[(season, day)] = games
-                season_days += 1
-                paired_games = pair_games(games)
-                schedule = get_schedule_from_paired_games(paired_games)
-                day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
-                cached_stats = STAT_CACHE.get((season, day))
-                if cached_stats:
-                    team_stat_data, pitcher_stat_data, pitchers = cached_stats
-                else:
-                    stat_filename = stat_file_map.get((season, day))
-                    if stat_filename:
-                        last_stat_filename = stat_filename
-                        pitchers = get_pitcher_id_lookup(stat_filename)
-                        team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)
-                    elif should_regen(day_mods):
-                        pitchers = get_pitcher_id_lookup(last_stat_filename)
-                        team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
-                    STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)
-                if not pitchers:
-                    raise Exception("No stat file found")
-                for game in paired_games:
-                    game_game_counter, game_fail_counter = calc_func(game, mod, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases)
-                    game_counter += game_game_counter
-                    fail_counter += game_fail_counter
-            season_end = datetime.datetime.now()
-            debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)
-        fail_rate = fail_counter / game_counter
-        if fail_rate < BEST_RESULT:
-            BEST_RESULT = fail_rate
-            debug_print("-"*20, debug, run_id)
-            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
-            special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
-            debug_print("Best so far - fail rate {:.2f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)
-            debug_print("-" * 20, debug, run_id)
-        debug_print("run fail rate {:.2f}%".format(fail_rate * 100.0), debug2, run_id)
-        endtime = datetime.datetime.now()
-        debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
-        return fail_rate
-    return minimize_func
+def minimize_func(parameters, *data):
+    run_id = uuid.uuid4()
+    starttime = datetime.datetime.now()
+    global BEST_RESULT
+    calc_func, stlat_list, special_case_list, stat_file_map, game_list, team_attrs, mod, debug, debug2, debug3 = data
+    debug_print("func start: {}".format(starttime), debug3, run_id)
+    special_case_list = special_case_list or []
+    terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}
+    special_cases = parameters[-len(special_case_list):] if special_case_list else []
+    game_counter, fail_counter = 0, 0
+    for season in range(3, 12):
+        season_start = datetime.datetime.now()
+        debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
+        pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
+        season_team_attrs = team_attrs.get(str(season), {})
+        season_days = 0
+        for day in range(1, 125):
+            cached_games = GAME_CACHE.get((season, day))
+            if cached_games:
+                games = cached_games
+            else:
+                games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
+                if not games:
+                    continue
+                GAME_CACHE[(season, day)] = games
+            season_days += 1
+            paired_games = pair_games(games)
+            schedule = get_schedule_from_paired_games(paired_games)
+            day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
+            cached_stats = STAT_CACHE.get((season, day))
+            if cached_stats:
+                team_stat_data, pitcher_stat_data, pitchers = cached_stats
+            else:
+                stat_filename = stat_file_map.get((season, day))
+                if stat_filename:
+                    last_stat_filename = stat_filename
+                    pitchers = get_pitcher_id_lookup(stat_filename)
+                    team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)
+                elif should_regen(day_mods):
+                    pitchers = get_pitcher_id_lookup(last_stat_filename)
+                    team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
+                STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)
+            if not pitchers:
+                raise Exception("No stat file found")
+            for game in paired_games:
+                game_game_counter, game_fail_counter = calc_func(game, mod, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases)
+                game_counter += game_game_counter
+                fail_counter += game_fail_counter
+        season_end = datetime.datetime.now()
+        debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)
+    fail_rate = fail_counter / game_counter
+    if fail_rate < BEST_RESULT:
+        BEST_RESULT = fail_rate
+        debug_print("-"*20, debug, run_id)
+        terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
+        special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
+        debug_print("Best so far - fail rate {:.2f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)
+        debug_print("-" * 20, debug, run_id)
+    debug_print("run fail rate {:.2f}%".format(fail_rate * 100.0), debug2, run_id)
+    endtime = datetime.datetime.now()
+    debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
+    return fail_rate

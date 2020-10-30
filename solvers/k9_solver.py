@@ -69,13 +69,16 @@ def main():
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
-    args = (K9_STLAT_LIST, K9_SPECIAL_CASES, stat_file_map, game_list, team_attrs, cmd_args.mod, cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
-    result = differential_evolution(base_solver.get_minimize_func(get_k9_results), bounds, args=args, popsize=15, tol=0.001, mutation=(0.05, 0.1), workers=1,
-                                    maxiter=1)
-    print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(K9_STLAT_LIST,
-                                                                                   zip(*[iter(result.x[:-len(K9_SPECIAL_CASES)])] * 3))))
+    args = (get_k9_results, K9_STLAT_LIST, K9_SPECIAL_CASES, stat_file_map, game_list, team_attrs, cmd_args.mod,
+            cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
+    result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.001,
+                                    mutation=(0.05, 0.1), workers=1, maxiter=1)
+    print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in
+                    zip(K9_STLAT_LIST, zip(*[iter(result.x[:-len(K9_SPECIAL_CASES)])] * 3))))
     print("factors,{},{}".format(result.x[-2], result.x[-1]))
-    result_fail_rate = base_solver.get_minimize_func(get_k9_results)(result.x, K9_STLAT_LIST, K9_SPECIAL_CASES, stat_file_map, game_list, team_attrs, cmd_args.mod, False, False, False)
+    result_fail_rate = base_solver.minimize_func(result.x, get_k9_results, K9_STLAT_LIST, K9_SPECIAL_CASES,
+                                                 stat_file_map, game_list, team_attrs, cmd_args.mod,
+                                                 False, False, False)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())
 
