@@ -96,9 +96,11 @@ def get_minimize_func(calc_func):
         run_id = uuid.uuid4()
         starttime = datetime.datetime.now()
         global BEST_RESULT
-        stlat_list, stat_file_map, game_list, team_attrs, mod, debug, debug2, debug3 = data
+        stlat_list, special_case_list, stat_file_map, game_list, team_attrs, mod, debug, debug2, debug3 = data
         debug_print("func start: {}".format(starttime), debug3, run_id)
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters)] * 3))}
+        special_case_list = special_case_list or []
+        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}
+        special_cases = parameters[-len(special_case_list):] if special_case_list else []
         game_counter, fail_counter = 0, 0
         for season in range(3, 12):
             season_start = datetime.datetime.now()
@@ -135,7 +137,7 @@ def get_minimize_func(calc_func):
                 if not pitchers:
                     raise Exception("No stat file found")
                 for game in paired_games:
-                    game_game_counter, game_fail_counter = calc_func(game, mod, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms)
+                    game_game_counter, game_fail_counter = calc_func(game, mod, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases)
                     game_counter += game_game_counter
                     fail_counter += game_fail_counter
             season_end = datetime.datetime.now()
@@ -144,7 +146,9 @@ def get_minimize_func(calc_func):
         if fail_rate < BEST_RESULT:
             BEST_RESULT = fail_rate
             debug_print("-"*20, debug, run_id)
-            debug_print("Best so far - fail rate {:.2f}%\n".format(fail_rate * 100.0) + "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters)] * 3))), debug, run_id)
+            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
+            special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
+            debug_print("Best so far - fail rate {:.2f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)
             debug_print("-" * 20, debug, run_id)
         debug_print("run fail rate {:.2f}%".format(fail_rate * 100.0), debug2, run_id)
         endtime = datetime.datetime.now()

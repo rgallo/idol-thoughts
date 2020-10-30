@@ -18,7 +18,7 @@ MOFO_STLAT_LIST = ("meantragicness", "meanpatheticism", "meanthwackability", "me
                    "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 
-def get_mofo_results(game, mod, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms):
+def get_mofo_results(game, mod, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases):
     awayMods, homeMods = [], []
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
     special_game_attrs = game_attrs - base_solver.ALLOWED_IN_BASE
@@ -59,12 +59,12 @@ def main():
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
-    args = (MOFO_STLAT_LIST, stat_file_map, game_list, team_attrs, cmd_args.mod, cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
+    args = (MOFO_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.mod, cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.get_minimize_func(get_mofo_results), bounds, args=args, popsize=15, tol=0.001, mutation=(0.05, 0.1), workers=1,
                                     maxiter=1)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
-    result_fail_rate = base_solver.get_minimize_func(get_mofo_results)(MOFO_STLAT_LIST, result.x, stat_file_map, game_list, team_attrs, cmd_args.mod, False, False, False)
+    result_fail_rate = base_solver.get_minimize_func(get_mofo_results)(result.x, MOFO_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.mod, False, False, False)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())
 
