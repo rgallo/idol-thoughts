@@ -111,7 +111,7 @@ def func(parameters, *data):
     starttime = datetime.datetime.now()
     global BEST_RESULT
     stat_file_map, game_list, team_attrs, mod, debug, debug2, debug3 = data
-    debug_print("func start: {}".format(starttime), debug, run_id)
+    debug_print("func start: {}".format(starttime), debug3, run_id)
     terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(STLAT_LIST, zip(*[iter(parameters)] * 3))}
     game_counter, fail_counter = 0, 0
     for season in range(3, 12):
