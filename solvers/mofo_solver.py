@@ -18,13 +18,11 @@ MOFO_STLAT_LIST = ("meantragicness", "meanpatheticism", "meanthwackability", "me
                    "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 
-def get_mofo_results(game, mod, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases):
+def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods):
     awayMods, homeMods = [], []
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
-    special_game_attrs = game_attrs - base_solver.ALLOWED_IN_BASE
-    if not mod and special_game_attrs:
-        return 0, 0
-    if mod and (len(special_game_attrs) > 1 or special_game_attrs.pop() != mod):
+    special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
+    if special_game_attrs:
         return 0, 0
     away_game, home_game = game["away"], game["home"]
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])
@@ -43,7 +41,6 @@ def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--statfolder', help="path to stat folder")
     parser.add_argument('--gamefile', help="path to game file")
-    parser.add_argument('--mod', help="mod to calculate for")
     parser.add_argument('--debug', help="print output", action='store_true')
     parser.add_argument('--debug2', help="print output", action='store_true')
     parser.add_argument('--debug3', help="print output", action='store_true')
@@ -59,14 +56,14 @@ def main():
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
-    args = (get_mofo_results, MOFO_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.mod, cmd_args.debug,
+    args = (get_mofo_results, MOFO_STLAT_LIST, None, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.001,
                                     mutation=(0.05, 0.1), workers=1, maxiter=1)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
-    result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, stat_file_map,
-                                                 game_list, team_attrs, cmd_args.mod, False, False, False)
+    result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, None, stat_file_map,
+                                                 game_list, team_attrs, False, False, False)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())
 

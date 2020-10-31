@@ -26,18 +26,23 @@ def geomean(numbers):
 TERM_RESULTS = {}
 
 
+def parse_terms(data, special_case_list):
+    results, special = {}, {}
+    splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
+    for row in splitdata:
+        name = row[0].lower()
+        if name in special_case_list:
+            special[name] = row[1:]
+        else:
+            results[name] = StlatTerm(float(row[1]), float(row[2]), float(row[3]))
+    return results, special
+
+
 def load_terms(term_url, special_cases=None):
     if term_url not in TERM_RESULTS:
         special_case_list = [case.lower() for case in special_cases] if special_cases else []
-        results, special = {}, {}
         data = requests.get(term_url).text
-        splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
-        for row in splitdata:
-            name = row[0].lower()
-            if name in special_case_list:
-                special[name] = row[1:]
-            else:
-                results[name] = StlatTerm(float(row[1]), float(row[2]), float(row[3]))
+        results, special = parse_terms(data, special_case_list)
         TERM_RESULTS[term_url] = (results, special)
     return TERM_RESULTS[term_url]
 
@@ -45,17 +50,25 @@ def load_terms(term_url, special_cases=None):
 MOD_RESULTS = {}
 
 
-def load_mods(mods_url, day):
+def growth_stlatterm(stlatterm, day):
+    return StlatTerm(stlatterm.a * (min(day / 99, 1)), stlatterm.b * (min(day / 99, 1)),
+                     stlatterm.c * (min(day / 99, 1)))
+
+
+def parse_mods(data):
+    mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
+    splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
+    for row in splitdata:
+        attr, team, name = [val.lower() for val in row[:3]]
+        a, b, c = float(row[3]), float(row[4]), float(row[5])
+        mods[attr][team][name] = StlatTerm(a, b, c)
+    return mods
+
+
+def load_mods(mods_url):
     if mods_url not in MOD_RESULTS:
-        mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
         data = requests.get(mods_url).text
-        splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
-        for row in splitdata:
-            attr, team, name = [val.lower() for val in row[:3]]
-            a, b, c = float(row[3]), float(row[4]), float(row[5])
-            if attr == "growth":
-                a, b, c = a * (min(day / 99, 1)), b * (min(day / 99, 1)), c * (min(day / 99, 1))
-            mods[attr][team][name] = StlatTerm(a, b, c)
+        mods = parse_mods(data)
         MOD_RESULTS[mods_url] = mods
     return MOD_RESULTS[mods_url]
 

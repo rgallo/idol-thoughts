@@ -3,7 +3,7 @@ from __future__ import print_function
 
 import collections
 
-from helpers import geomean, load_terms, get_weather_idx, load_mods
+from helpers import geomean, load_terms, get_weather_idx, load_mods, growth_stlatterm
 import os
 
 WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
@@ -71,11 +71,7 @@ def team_offense(terms, teamname, mods, team_stat_data):
     return calc_team(terms, termset, mods)
 
 
-def setup(day, weather, awayAttrs, homeAttrs):
-    terms_url = os.getenv("MOFO_TERMS")
-    terms, _ = load_terms(terms_url)
-    mods_url = os.getenv("MOFO_MODS")
-    mods = load_mods(mods_url, day)
+def get_mods(mods, awayAttrs, homeAttrs, weather):
     awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
     lowerHomeAttrs = [attr.lower() for attr in homeAttrs]
@@ -94,13 +90,23 @@ def setup(day, weather, awayAttrs, homeAttrs):
                 homeMods[name].append(stlatterm)
             for name, stlatterm in mods[attr]["opp"].items():
                 awayMods[name].append(stlatterm)
+    return awayMods, homeMods
+
+
+def setup(weather, awayAttrs, homeAttrs):
+    terms_url = os.getenv("MOFO_TERMS")
+    terms, _ = load_terms(terms_url)
+    mods_url = os.getenv("MOFO_MODS")
+    mods = load_mods(mods_url)
+    awayMods, homeMods = get_mods(mods, awayAttrs, homeAttrs, weather)
     return terms, awayMods, homeMods
 
 
 def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs,
               day, weather):
-    terms, awayMods, homeMods = setup(day, weather, awayAttrs, homeAttrs)
-    return get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods)
+    terms, awayMods, homeMods = setup(weather, awayAttrs, homeAttrs)
+    return get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods,
+                    homeMods)
 
 
 def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods):
