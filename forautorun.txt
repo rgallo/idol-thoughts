@@ -1,0 +1,1 @@
+python idolthoughts.py --discord --statfile=C:\Users\milicic\Downloads\Blaseball\idol-thoughts-master\output.csv --dayfile=C:\Users\milicic\Downloads\Blaseball\idol-thoughts-master\lastday.txt
