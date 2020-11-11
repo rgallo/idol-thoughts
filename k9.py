@@ -67,7 +67,7 @@ def get_k9(pitcher, pitchingteam, battingteam, team_stat_data, pitcher_stat_data
     everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_stat_data)
     factor_exp, factor_const = special_cases["factors"][:2]
     kplus1PI = (pitching ** float(factor_exp)) + everythingelse - float(factor_const)
-    k9 = (kplus1PI * 9) - 1
+    k9 = min((kplus1PI * 9) - 1, 27)
     return round(k9)
 
 

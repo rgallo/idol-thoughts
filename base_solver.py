@@ -93,6 +93,8 @@ def debug_print(s, debug, run_id):
     if debug:
         print("{} - {}".format(run_id, s))
 
+def get_best_result():
+    return BEST_RESULT
 
 def minimize_func(parameters, *data):
     run_id = uuid.uuid4()

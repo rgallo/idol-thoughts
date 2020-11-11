@@ -12,12 +12,15 @@ from idolthoughts import load_stat_data
 STAT_CACHE = {}
 GAME_CACHE = {}
 
-BEST_RESULT = 1.0
-
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
+
+BEST_RESULT = 100000000000000.0
+BEST_UNEXVAR_RESULT = 100000000000000.0
+BEST_FAIL_RESULT = 1.0
+CURRENT_ITERATION = 0
 
 
 def get_pitcher_id_lookup(filename):
@@ -93,11 +96,16 @@ def debug_print(s, debug, run_id):
     if debug:
         print("{} - {}".format(run_id, s))
 
+def get_best_result():
+    return BEST_RESULT
 
 def minimize_func(parameters, *data):
     run_id = uuid.uuid4()
     starttime = datetime.datetime.now()
     global BEST_RESULT
+    global CURRENT_ITERATION
+    global BEST_UNEXVAR_RESULT
+    global BEST_FAIL_RESULT
     calc_func, stlat_list, special_case_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []
@@ -110,7 +118,7 @@ def minimize_func(parameters, *data):
         terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}
         mods = {}
     special_cases = parameters[-len(special_case_list):] if special_case_list else []
-    game_counter, fail_counter = 0, 0
+    game_counter, fail_counter, unexvar_counter = 0, 0, 0
     for season in range(3, 12):
         season_start = datetime.datetime.now()
         debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
@@ -146,24 +154,47 @@ def minimize_func(parameters, *data):
             if not pitchers:
                 raise Exception("No stat file found")
             for game in paired_games:
-                game_game_counter, game_fail_counter = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods)
+                game_game_counter, game_fail_counter, game_unexvar_counter = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods)
                 game_counter += game_game_counter
                 fail_counter += game_fail_counter
+                unexvar_counter += game_unexvar_counter
         season_end = datetime.datetime.now()
         debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)
     fail_rate = fail_counter / game_counter
-    if fail_rate < BEST_RESULT:
-        BEST_RESULT = fail_rate
-        debug_print("-"*20, debug, run_id)
-        if type(stlat_list) == dict:
-            mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)))
-            debug_print("Best so far - fail rate {:.2f}%\n".format(fail_rate * 100.0) + mods_output, debug, run_id)
-        else:
-            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
-            special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
-            debug_print("Best so far - fail rate {:.2f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)
-        debug_print("-" * 20, debug, run_id)
-    debug_print("run fail rate {:.2f}%".format(fail_rate * 100.0), debug2, run_id)
+    CURRENT_ITERATION += 1
     endtime = datetime.datetime.now()
-    debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
-    return fail_rate
+    if fail_rate < 0.55:
+        current_result = fail_rate
+    else:
+        if unexvar_counter > 100000:
+            current_result = unexvar_counter
+        else:
+            current_result = unexvar_counter ** fail_rate
+    if unexvar_counter < BEST_UNEXVAR_RESULT or fail_rate < BEST_FAIL_RESULT:        
+        if fail_rate < BEST_FAIL_RESULT:
+            BEST_FAIL_RESULT = fail_rate            
+        else:
+            BEST_UNEXVAR_RESULT = unexvar_counter            
+        if type(stlat_list) == dict:            
+            debug_print("-"*20, debug, run_id)
+            mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)))
+            debug_print(mods_output, debug, run_id)
+            debug_print("-"*20, debug, run_id)            
+            debug_print("Best so far - fail rate {:.2f}%\n".format(fail_rate * 100.0), debug, run_id)
+        else:                    
+            if BEST_FAIL_RESULT < 0.6:
+                debug_print("-"*20, debug, run_id)
+                terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
+                special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
+                debug_print(terms_output + special_case_output, debug, run_id)
+                debug_print("-" * 20, debug, run_id)
+            debug_print("Best so far - fail rate {:.2f}% - unexplained variance {:.2f} - iteration #{}".format(fail_rate * 100.0, unexvar_counter, CURRENT_ITERATION), debug, endtime)            
+    if BEST_RESULT > current_result:
+        debug_print("Best Result improvement = {:.2f} - iteration #{}".format(BEST_RESULT-current_result, CURRENT_ITERATION), debug, endtime)
+        BEST_RESULT = current_result
+        debug_print("New Best Result = {:.2f} - iteration #{}".format(BEST_RESULT, CURRENT_ITERATION), debug, endtime)    
+    if CURRENT_ITERATION % 100 == 0:
+        debug_print("Best so far - fail rate {:.2f}% - unexvar {:.2f} - Best Result - {:.2f} - iteration #{}".format(BEST_FAIL_RESULT * 100, BEST_UNEXVAR_RESULT, BEST_RESULT, CURRENT_ITERATION), debug, endtime)
+    debug_print("run fail rate {:.2f}%".format(fail_rate * 100.0), debug2, run_id)    
+    debug_print("func end: {}, run time {}, {} iterations".format(endtime, endtime-starttime, CURRENT_ITERATION), debug3, run_id)    
+    return current_result
