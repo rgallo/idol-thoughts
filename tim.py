@@ -24,7 +24,7 @@ class TIM:
     DEFENSE_TERMS = ("unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness",
                      "meantragicness", "meanpatheticism", "meanomniscience", "maxomniscience",
                      "meantenaciousness", "maxtenaciousness", "meanwatchfulness", "maxwatchfulness", "meanchasiness",
-                     "maxchasiness")
+                     "maxchasiness", "meananticapitalism", "maxanticapitalism")
     OFFENSE_TERMS = ("meanthwackability", "meandivinity", "meanmoxie", "meanmusclitude", "meanmartyrdom",
                      "maxmartyrdom", "meanlaserlikeness", "maxlaserlikeness", "meanbasethirst", "maxbasethirst",
                      "meancontinuation", "maxcontinuation", "meangroundfriction", "maxgroundfriction",
@@ -38,13 +38,17 @@ class TIM:
         self.cutoffs = cutoffs
         self.color = color
 
-    def check(self, stlatdata):
+    def calc(self, stlatdata):
         defense = sum([self.terms[term].calc(stlatdata[term]) for term in self.DEFENSE_TERMS])
         offense = sum([self.terms[term].calc(stlatdata[term]) for term in self.OFFENSE_TERMS])
         numerator = defense - offense
         denominator = defense + offense
         formula = (numerator / denominator) if denominator else 0
         calc = 1.0 / (1.0 + math.exp(-1 * formula))
+        return calc
+
+    def check(self, stlatdata):
+        calc = self.calc(stlatdata)
         return calc, all(opfunc(calc, cutoff) if opfunc else True for opfunc, cutoff in zip(self.opfuncs, self.cutoffs)) if self.opfuncs else True
 
 
