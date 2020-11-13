@@ -44,7 +44,7 @@ class TIM:
         numerator = defense - offense
         denominator = defense + offense
         formula = (numerator / denominator) if denominator else 0
-        calc = 1.0 / (1.0 + math.exp(-1 * formula))
+        calc = 1.0 / (1.0 + (100 ** (-1 * formula)))
         return calc
 
     def check(self, stlatdata):

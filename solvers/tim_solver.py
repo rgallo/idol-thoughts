@@ -31,13 +31,15 @@ BIRD_WEATHER = get_weather_idx("Birds")
 
 TIM_STLAT_LIST = tim.TIM.OFFENSE_TERMS + tim.TIM.DEFENSE_TERMS
 
-
-def floor_to_five(val):
-    return math.floor(val / .05) * .05
+SHUTOUT_PCT = None
 
 
-def get_bucket_idx(val):
-    return int(floor_to_five(val) * 20)
+def floor_to_floor(val, floor):
+    return math.floor(val / floor) * floor
+
+
+def get_bucket_idx(val, floor):
+    return int(floor_to_floor(val) * (1 / floor))
 
 
 def run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, tim_tier):
@@ -60,6 +62,8 @@ def minimize_func(parameters, *data):
     run_id = uuid.uuid4()
     starttime = datetime.datetime.now()
     global BEST_RESULT
+    global SHUTOUT_PCT
+    floor = 0.05
     stlat_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     base_solver.debug_print("func start: {}".format(starttime), debug3, run_id)
     if type(stlat_list) == dict:  # mod mode
@@ -70,8 +74,9 @@ def minimize_func(parameters, *data):
     else:  # base mode
         terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters)] * 3))}
         mods = {}
-    results = [[] for _ in range(21)]
+    results = [[] for _ in range(int(1 / floor) + 1)]
     tim_tier = tim.TIM("asdf", terms, None, None, None)
+    min_sho_val, max_sho_val, min_nsho_val, max_nsho_val = 1.0, 0.0, 1.0, 0.0
     for season in range(3, 12):
         season_start = datetime.datetime.now()
         base_solver.debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
@@ -107,44 +112,126 @@ def minimize_func(parameters, *data):
             if not pitchers:
                 raise Exception("No stat file found")
             for game in paired_games:
-                awayTIM, awayShutout, homeTIM, homeShutout = run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, tim_tier)
+                awayTIM, awayShutout, homeTIM, homeShutout = run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, tim_tier)                
                 if awayTIM >= 0:
-                    away_bucket_idx = get_bucket_idx(awayTIM)
+                    away_bucket_idx = get_bucket_idx(awayTIM, floor)
                     results[away_bucket_idx].append(awayShutout)
+                    min_sho_val = awayTIM if awayTIM < min_sho_val and awayShutout else min_sho_val
+                    max_sho_val = awayTIM if awayTIM > max_sho_val and awayShutout else max_sho_val
+                    min_nsho_val = awayTIM if awayTIM < min_nsho_val and not awayShutout else min_nsho_val
+                    max_nsho_val = awayTIM if awayTIM > max_nsho_val and not awayShutout else max_nsho_val
                 if homeTIM >= 0:
-                    home_bucket_idx = get_bucket_idx(homeTIM)
+                    home_bucket_idx = get_bucket_idx(homeTIM, floor)
                     results[home_bucket_idx].append(homeShutout)
+                    min_sho_val = homeTIM if homeTIM < min_sho_val and homeShutout else min_sho_val
+                    max_sho_val = homeTIM if homeTIM > max_sho_val and homeShutout else max_sho_val
+                    min_nsho_val = homeTIM if homeTIM < min_nsho_val and not homeShutout else min_nsho_val
+                    max_nsho_val = homeTIM if homeTIM > max_nsho_val and not homeShutout else max_nsho_val
         season_end = datetime.datetime.now()
         base_solver.debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)
-    total_unexvar = 0.0
-    empty_buckets, max_unexvar = 0, 0.0
-    for idx, bucket in enumerate(results):
-        if bucket:
-            lower_target = (idx * 5.0) / 100.0
-            upper_target = lower_target + .05
-            actual = sum([val for val in bucket if val]) / len(bucket)
-            if not lower_target <= actual < upper_target:
-                target = upper_target if actual > upper_target else lower_target
-                unexvar = ((abs(target - actual) - target)*100) ** 2
+    if not SHUTOUT_PCT:
+        total_games, total_shutouts = 0, 0
+        for bucket in results:
+            total_shutouts += sum([val for val in bucket if val])
+            total_games += len(bucket)
+        SHUTOUT_PCT = total_shutouts / total_games
+    if (max_sho_val > max_nsho_val) and (min_sho_val > min_nsho_val):
+        total_unexvar = 0.0
+        full_buckets, total_sho_buckets, bonus_points, previous_actual, target_window, previous_upper = 0, 0, 0.0, 0.0, 0.0, 0.0        
+        total_sho_buckets = get_bucket_idx(max_sho_val, floor) - get_bucket_idx(min_sho_val, floor) + 1
+        for idx, bucket in enumerate(results):        
+            lower_target = (idx * (floor * 100)) / 100.0
+            upper_target = lower_target + floor
+            lower_tim_target, upper_tim_target = 0.0, 0.0
+            if lower_target < min_sho_val:
+                lower_tim_target = 0.0               
             else:
-                unexvar = 0.0
-            max_unexvar = max(max_unexvar, unexvar)
-            base_solver.debug_print("bucket {:.2f}-{:.2f}: actual {}, unexvar {}".format(lower_target, upper_target, actual, unexvar), debug3, run_id)
-            total_unexvar += unexvar
-        else:
-            empty_buckets += 1
-    total_unexvar += ((max_unexvar + 2500) * empty_buckets)
+                if lower_target > max_nsho_val:
+                    lower_tim_target = 1.0
+                else:
+                    lower_tim_target = previous_upper                    
+            if upper_target > max_nsho_val or lower_tim_target == 1.0:
+                upper_tim_target = 1.0
+            else:
+                if upper_target < min_sho_val:
+                    upper_tim_target = 0.0
+                else:                                                     
+                    upper_tim_target = min((lower_tim_target + (((max_nsho_val - min_sho_val) / (total_sho_buckets * (max_nsho_val - min_sho_val))))), 1.0)
+            previous_upper = upper_tim_target
+            target_window = max(upper_tim_target - lower_tim_target, target_window)
+            if bucket:            
+                full_buckets += 1
+                actual = sum([val for val in bucket if val]) / len(bucket)            
+                if previous_actual > actual:                    
+                    unexvar = 9999999999999.0
+                else:                    
+                    if lower_tim_target <= actual <= upper_tim_target:
+                        unexvar = 0.0            
+                    else:
+                        unexvar = ((actual - lower_tim_target if (actual < lower_tim_target) else upper_tim_target) * 100) ** 2
+                base_solver.debug_print("bucket {:.2f}-{:.2f}: actual {}, unexvar {}".format(lower_target, upper_target, actual, unexvar), debug3, run_id)            
+                total_unexvar += unexvar
+                if actual == 1.0:
+                    bonus_points += sum([val for val in bucket if val]) * 100
+                else:
+                    if previous_actual < actual and actual > SHUTOUT_PCT:                    
+                        bonus_points += (sum([val for val in bucket if val]) * 10.0) * actual              
+                if actual == 0.0:
+                    bonus_points += len(bucket) if (upper_tim_target == 0.0) else -(sum([val for val in bucket if val]))
+                previous_actual = actual            
+        total_unexvar -= bonus_points
+        if full_buckets < 7:
+            total_unexvar = 9999999999999999.0
+    else:
+        total_unexvar = 9999999999999999.0
     base_solver.debug_print("total unexvar {}".format(total_unexvar), debug2, run_id)
     if total_unexvar < BEST_RESULT:
         BEST_RESULT = total_unexvar
+        previous_actual, target_window, previous_upper = 0.0, 0.0 ,0.0
         base_solver.debug_print("-"*20, debug, run_id)
+        for idx, bucket in enumerate(results):        
+            lower_target = (idx * (floor * 100)) / 100.0
+            upper_target = lower_target + floor
+            lower_tim_target, upper_tim_target = 0.0, 0.0
+            if lower_target < min_sho_val:
+                lower_tim_target = 0.0               
+            else:
+                if lower_target > max_nsho_val:
+                    lower_tim_target = 1.0
+                else:
+                    lower_tim_target = previous_upper                    
+            if upper_target > max_nsho_val or lower_tim_target == 1.0:
+                upper_tim_target = 1.0
+            else:
+                if upper_target < min_sho_val:
+                    upper_tim_target = 0.0
+                else:
+                    # need to determine how many buckets we have to put sho into, knowing that one of them is going to be our only 100% case
+                    # we do this by determining what our current bucket is the first time we come into this expression, then dividing our total range of sho by the number of remaining buckets                    
+                    upper_tim_target = min((lower_tim_target + (((max_nsho_val - min_sho_val) / (total_sho_buckets * (max_nsho_val - min_sho_val))))), 1.0)
+            previous_upper = upper_tim_target
+            target_window = max(upper_tim_target - lower_tim_target, target_window)
+            if bucket:            
+                actual = sum([val for val in bucket if val]) / len(bucket)            
+                if previous_actual > actual:                    
+                    unexvar = 9999999999999.0
+                else:                                 
+                    if lower_tim_target <= actual <= upper_tim_target:
+                        unexvar = 0.0            
+                    else:
+                        unexvar = ((actual - lower_tim_target if (actual < lower_tim_target) else upper_tim_target) * 100) ** 2                
+                previous_actual = actual                            
+                base_solver.debug_print("bucket {:.2f}-{:.2f} :: tim bucket {:.2f}-{:.2f} :: actual {}, unexvar {}".format(lower_target, upper_target, lower_tim_target, upper_tim_target, actual, unexvar), debug, ":::::")                                       
+                base_solver.debug_print("{} shutouts in {} games".format(sum([val for val in bucket if val]), len(bucket)), debug, ":::::")                
+        base_solver.debug_print("# full buckets = {}, total sho buckets = {}, bonus points = {:.2f}".format(full_buckets, total_sho_buckets, bonus_points), debug, run_id)    
+        base_solver.debug_print("min sho = {:.4f}, min nsho = {:.4f}, max sho = {:.4f}, max nsho = {:.4f}".format(min_sho_val, min_nsho_val, max_sho_val, max_nsho_val), debug, run_id)
         if type(stlat_list) == dict:
             mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)))
             base_solver.debug_print("Best so far - unexvar {}\n".format(total_unexvar) + mods_output, debug, run_id)
         else:
             terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters)] * 3)))
             base_solver.debug_print("Best so far - unexvar {}\n".format(total_unexvar) + terms_output, debug, run_id)
-        base_solver.debug_print("-" * 20, debug, run_id)
+        base_solver.debug_print("-" * 20, debug, run_id)        
     endtime = datetime.datetime.now()
     base_solver.debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
     return total_unexvar
@@ -165,15 +252,15 @@ def handle_args():
 def main():
     print(datetime.datetime.now())
     cmd_args = handle_args()
-    bounds = [[0, 9], [0, 3], [-6, 2]] * len(TIM_STLAT_LIST)
+    bounds = [[0, 9], [0, 3], [-6, 6]] * len(TIM_STLAT_LIST)
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     args = (TIM_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
-    result = differential_evolution(minimize_func, bounds, args=args, popsize=15, tol=0.001,
-                                    mutation=(0.05, 0.1), workers=1, maxiter=1)
+    result = differential_evolution(minimize_func, bounds, args=args, popsize=15, tol=0.0001,
+                                    mutation=(0.05, 0.1), workers=-1, maxiter=100)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = minimize_func(result.x, TIM_STLAT_LIST, None, None, stat_file_map,
