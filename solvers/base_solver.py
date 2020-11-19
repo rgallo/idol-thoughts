@@ -157,13 +157,13 @@ def minimize_func(parameters, *data):
         debug_print("-"*20, debug, run_id)
         if type(stlat_list) == dict:
             mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)))
-            debug_print("Best so far - fail rate {:.2f}%\n".format(fail_rate * 100.0) + mods_output, debug, run_id)
+            debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + mods_output, debug, run_id)
         else:
             terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
             special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
-            debug_print("Best so far - fail rate {:.2f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)
+            debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)
         debug_print("-" * 20, debug, run_id)
-    debug_print("run fail rate {:.2f}%".format(fail_rate * 100.0), debug2, run_id)
+    debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
     return fail_rate

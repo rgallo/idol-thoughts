@@ -40,9 +40,9 @@ def get_k9_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, p
     except ValueError:
         home_k9 = -100
     fail_k9 = 2
-    if away_so9 - 1 < away_k9 < away_so9 + 1:
+    if away_so9 - 1 <= away_k9 <= away_so9 + 1:
         fail_k9 -= 1
-    if home_so9 - 1 < home_k9 < home_so9 + 1:
+    if home_so9 - 1 <= home_k9 <= home_so9 + 1:
         fail_k9 -= 1
     return 2, fail_k9
 
@@ -61,15 +61,15 @@ def handle_args():
 def main():
     print(datetime.datetime.now())
     cmd_args = handle_args()
-    bounds = [[-3, 4]] * 3 * len(K9_STLAT_LIST) + [[-3, 4], [-2, 2]]
+    bounds = [[-1, 1.5], [0, 2.5], [0, 2.5]] * len(K9_STLAT_LIST) + [[0, 2.5], [-1, 1]]
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     args = (get_k9_results, K9_STLAT_LIST, K9_SPECIAL_CASES, [], stat_file_map, game_list, team_attrs,
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
-    result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.001,
-                                    mutation=(0.05, 0.1), workers=1, maxiter=1)
+    result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.0001,
+                                    mutation=(0.5, 1.5), workers=-1, maxiter=1000)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in
                     zip(K9_STLAT_LIST, zip(*[iter(result.x[:-len(K9_SPECIAL_CASES)])] * 3))))
     print("factors,{},{}".format(result.x[-2], result.x[-1]))
