@@ -12,7 +12,7 @@ from idolthoughts import load_stat_data
 STAT_CACHE = {}
 GAME_CACHE = {}
 
-BEST_RESULT = 1.0
+BEST_RESULT = 10000000.0
 
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
@@ -93,6 +93,28 @@ def debug_print(s, debug, run_id):
     if debug:
         print("{} - {}".format(run_id, s))
 
+def calc_linear_unex_error(vals, wins_losses, games):
+    wins, idx = 0, 0
+    high_val, low_val, high_ratio, low_ratio, error, max_error, min_error = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0
+    high_val = vals[idx]
+    while (high_val < 0.5 and idx < len(vals)):        
+        wins += wins_losses[idx]
+        idx += 1
+        high_val = vals[idx]
+    while (idx < len(vals)):        
+        wins += wins_losses[idx]
+        high_val = vals[idx]        
+        high_ratio = float(wins) / float(games)
+        error += (high_ratio - high_val) ** 2
+        max_error = max(high_ratio, high_val) - min(high_ratio, high_val) if max(high_ratio, high_val) - min(high_ratio, high_val) > max_error else max_error
+        min_error = max(high_ratio, high_val) - min(high_ratio, high_val) if max(high_ratio, high_val) - min(high_ratio, high_val) < min_error else min_error            
+        low_ratio = 1.0 - high_ratio
+        low_val = 1.0 - high_val
+        error += (low_ratio - low_val) ** 2        
+        max_error = max(low_ratio, low_val) - min(low_ratio, low_val) if max(low_ratio, low_val) - min(low_ratio, low_val) > max_error else max_error
+        min_error = max(low_ratio, low_val) - min(low_ratio, low_val) if max(low_ratio, low_val) - min(low_ratio, low_val) < min_error else min_error            
+        idx += 1
+    return error, max_error, min_error
 
 def minimize_func(parameters, *data):
     run_id = uuid.uuid4()
@@ -111,6 +133,8 @@ def minimize_func(parameters, *data):
         mods = {}
     special_cases = parameters[-len(special_case_list):] if special_case_list else []
     game_counter, fail_counter = 0, 0
+    all_vals = []
+    win_loss = []
     for season in range(3, 12):
         season_start = datetime.datetime.now()
         debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
@@ -146,14 +170,32 @@ def minimize_func(parameters, *data):
             if not pitchers:
                 raise Exception("No stat file found")
             for game in paired_games:
-                game_game_counter, game_fail_counter = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods)
+                game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods)
                 game_counter += game_game_counter
                 fail_counter += game_fail_counter
+                if game_game_counter == 1:
+                    all_vals.append(game_away_val)   
+                    if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
+                        win_loss.append(1)
+                        win_loss.append(0)
+                    else:
+                        win_loss.append(0)
+                        win_loss.append(1)
+                    all_vals.append(game_home_val)
         season_end = datetime.datetime.now()
         debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)
     fail_rate = fail_counter / game_counter
-    if fail_rate < BEST_RESULT:
-        BEST_RESULT = fail_rate
+    # need to sort win_loss to match up with what will be the sorted set of vals
+    # also need to only do this when solving MOFO
+    if len(win_loss) > 0:
+        sorted_win_loss = [x for _,x in sorted(zip(all_vals, win_loss))]
+        all_vals.sort()
+        linear_error, max_linear_error, min_linear_error = calc_linear_unex_error(all_vals, sorted_win_loss, game_counter)    
+        linear_fail = (fail_rate * 100.0) + linear_error
+    else:
+        linear_fail = fail_rate
+    if linear_fail < BEST_RESULT:
+        BEST_RESULT = linear_fail
         debug_print("-"*20, debug, run_id)
         if type(stlat_list) == dict:
             mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)))
@@ -161,9 +203,13 @@ def minimize_func(parameters, *data):
         else:
             terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
             special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
-            debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)
+            if len(win_loss) > 0:
+                debug_print("Best so far - fail rate {:.4f}%, linear error {:.4f}, {} games\n".format(fail_rate * 100.0, linear_error, game_counter) + terms_output + special_case_output, debug, run_id)
+                debug_print("Max linear error {:.4f}%, Min linear error {:.4f}%\n".format(max_linear_error * 100.0, min_linear_error * 100.0), debug, run_id)
+            else:
+                debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)
         debug_print("-" * 20, debug, run_id)
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
-    return fail_rate
+    return linear_fail

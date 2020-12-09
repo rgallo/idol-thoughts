@@ -119,5 +119,5 @@ def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitch
     if not denominator:
         return .5, .5
     away_formula = numerator / denominator
-    away_odds = (1 / (1 + 10 ** (-1 * away_formula)))
+    away_odds = (1 / (1 + 100 ** (-1 * away_formula)))
     return away_odds, 1.0 - away_odds
