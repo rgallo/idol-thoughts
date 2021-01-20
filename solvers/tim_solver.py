@@ -47,6 +47,7 @@ BEST_CUTOFF = 0.0
 LAST_MEAN_RATIO = 1.0
 LAST_CHECKTIME = 0.0
 BEST_SABL = 0
+LAST_SPAN = 0.0
 
 def get_bucket_idx(val, bucket_bounds, min_sho_val, max_nsho_val):
     start_bucket, end_bucket = 0.00, 0.00
@@ -76,25 +77,41 @@ def constr_fn(x):
 def calc_linearity(sorted_sho_nsho, red_hots):
     linears, lin_denominator, hots, shos_above_baseline = 0, 0, 0, 0
     lin_points, current_ratio, past_ratio, last_ratio, best_ratio = 0.0, 0.0, 0.0, 0.0, 0.0
-    window_start, window_end, summation_start = 0, 499, 0
-    back_list = []
-    front_list = []
-    previous_ratios = collections.deque([0] * 20)
-    while window_end < len(sorted_sho_nsho):        
-        previous_ratios.rotate(-1)        
-        previous_ratios[19] = sum(sorted_sho_nsho[window_start:window_end])
-        back_list = itertools.islice(previous_ratios, 0, 9)
-        front_list = itertools.islice(previous_ratios, 10, 19)
-        past_ratio = sum(back_list)
-        current_ratio = sum(front_list)                
-        lin_denominator += 1
-        if current_ratio >= past_ratio:
-            linears += 1        
+    window_start, window_end, summation_start, sabls = 0, 1, 0, 0
+    #window_start, window_end, summation_start, sabls = 0, 299, 0, 0    
+    #back_list = []
+    #front_list = []
+    #previous_ratios = collections.deque([0] * 20)
+    while window_end < len(sorted_sho_nsho):                        
         if sorted_sho_nsho[window_end] == 1:
-            summation_start = window_end - 49
-            shos_above_baseline += (sum(sorted_sho_nsho[summation_start:window_end])) / 50.0
-        window_start += 1
+            lin_denominator += 1
+            current_ratio = sum(sorted_sho_nsho[window_start:window_end]) / (window_end + 1)
+            if past_ratio > 0 and current_ratio >= past_ratio:
+                linears += 1        
+            past_ratio = current_ratio
+            if sorted_sho_nsho[window_end] == 1 and window_end > 198:
+                summation_start = window_end - 199            
+                sabl_ratio = (sum(sorted_sho_nsho[summation_start:window_end])) / 200.0
+                shos_above_baseline += sabl_ratio
+                sabls += 1 if sabl_ratio > 0.075 else 0        
         window_end += 1
+    #while window_end < len(sorted_sho_nsho):        
+    #    previous_ratios.rotate(-1)        
+    #    previous_ratios[19] = sum(sorted_sho_nsho[window_start:window_end])
+    #    back_list = itertools.islice(previous_ratios, 0, 9)
+    #    front_list = itertools.islice(previous_ratios, 10, 19)
+    #    past_ratio = sum(back_list)
+    #    current_ratio = sum(front_list)                
+    #    lin_denominator += 1
+    #    if current_ratio >= past_ratio:
+    #        linears += 1        
+    #    if sorted_sho_nsho[window_end] == 1:
+    #        summation_start = window_end - 199            
+    #        sabl_ratio = (sum(sorted_sho_nsho[summation_start:window_end])) / 200.0
+    #        shos_above_baseline += sabl_ratio
+    #        sabls += 1 if sabl_ratio > 0.06 else 0
+    #    window_start += 1
+    #    window_end += 1
     # we've exited the loop, so now window end should be = to len sorted sho nsho; now we get our best hot ratio
     window_end = len(sorted_sho_nsho) - red_hots - 1
     window_start = window_end
@@ -112,7 +129,7 @@ def calc_linearity(sorted_sho_nsho, red_hots):
     if lin_denominator > 0:
         lin_points = float(linears) / float(lin_denominator)
     # best possible hot ratio, should favor solutions of equal red hots with better hot ratios    
-    return lin_points, best_ratio, hots, shos_above_baseline
+    return lin_points, best_ratio, hots, shos_above_baseline, sabls
 
 def run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, tim_tier):
     awayMods, homeMods = [], []
@@ -144,6 +161,7 @@ def minimize_func(parameters, *data):
     global LAST_CANDIDATE
     global LAST_CHECKTIME
     global BEST_SABL
+    global LAST_SPAN
     if len(parameters) > 5:
         coefficients = parameters
         bucket_bounds = [0.2, 0.2, 0.2, 0.2, 0.2]
@@ -169,22 +187,26 @@ def minimize_func(parameters, *data):
     all_vals = []
     sho_nsho = []
     reject_solution, viability_unchecked = False, True
-    quarter_mean_ratio = 1.0
+    quarter_mean_ratio, quarter_span = 1.0, 0.0
     min_sho_val, max_sho_val, min_nsho_val, max_nsho_val, median_sho_val, median_nsho_val, mean_sho_val, mean_nsho_val, shos, nshos = 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0, 0    
     for season in range(3, 12):        
         season_start = datetime.datetime.now()
         base_solver.debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
         pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
         season_team_attrs = team_attrs.get(str(season), {})
-        season_days = 0
-        time.sleep(0.2)
-        if TOTAL_SHUTOUTS > 0 and len(sho_vals) >= (TOTAL_SHUTOUTS / 4) and viability_unchecked:
-            # check this solution for viability for later rejection criteria
-            quarter_mean_ratio = (sum(sho_vals) * len(nsho_vals)) / (len(sho_vals) * sum(nsho_vals))             
-            viability_unchecked = False
-            if (quarter_mean_ratio / LAST_MEAN_RATIO) < 0.98 and quarter_mean_ratio < 1.5:
-                reject_solution = True
-                break
+        season_days = 0        
+        if static_bounds:
+            if TOTAL_SHUTOUTS > 0 and len(sho_vals) >= (TOTAL_SHUTOUTS / 4) and viability_unchecked:
+                # check this solution for viability for later rejection criteria
+                quarter_mean_ratio = (sum(sho_vals) * len(nsho_vals)) / (len(sho_vals) * sum(nsho_vals))      
+                quarter_span = max(sho_vals) - min(nsho_vals)
+                viability_unchecked = False
+                if (quarter_mean_ratio / LAST_MEAN_RATIO) < 0.95 and quarter_mean_ratio < 1.45:
+                    reject_solution = True
+                    break
+                if (LAST_SPAN * 0.9) > quarter_span:
+                    reject_solution = True
+                    break
         for day in range(1, 125):
             cached_games = GAME_CACHE.get((season, day))
             if cached_games:
@@ -245,7 +267,6 @@ def minimize_func(parameters, *data):
     nshos = len(nsho_vals)
     mean_sho_val = sum(sho_vals) / shos
     mean_nsho_val = sum(nsho_vals) / nshos
-    reject_solution = mean_sho_val / (mean_nsho_val * LAST_MEAN_RATIO) < 0.98
     if not reject_solution:        
         all_vals_array = np.array(all_vals)
         sho_nsho_array = np.array(sho_nsho)
@@ -301,43 +322,59 @@ def minimize_func(parameters, *data):
         full_buckets = full_buckets + (1 if dead_colds > 0 else 0)
 
         cool_shos = sum(map(lambda x : (x < bucket_end[1] and x >= bucket_end[0]), sho_vals))
-        cools = sum(map(lambda x : (x < bucket_end[1] and x >= bucket_end[0]), nsho_vals))
+        cools = sum(map(lambda x : (x < bucket_end[1] and x >= bucket_end[0]), nsho_vals)) + cool_shos
         full_buckets = full_buckets + (1 if (cools + cool_shos) > 0 else 0)
 
         temperate_shos = sum(map(lambda x : (x < bucket_end[2] and x >= bucket_end[1]), sho_vals))
-        temperates = sum(map(lambda x : (x < bucket_end[2] and x >= bucket_end[1]), nsho_vals))
+        temperates = sum(map(lambda x : (x < bucket_end[2] and x >= bucket_end[1]), nsho_vals)) + temperate_shos
         full_buckets = full_buckets + (1 if (temperates + temperate_shos) > 0 else 0)
 
         tepid_shos = sum(map(lambda x : (x < bucket_end[3] and x >= bucket_end[2]), sho_vals))
-        tepids = sum(map(lambda x : (x < bucket_end[3] and x >= bucket_end[2]), nsho_vals))
+        tepids = sum(map(lambda x : (x < bucket_end[3] and x >= bucket_end[2]), nsho_vals)) + tepid_shos
         full_buckets = full_buckets + (1 if (tepids + tepid_shos) > 0 else 0)
 
         warm_shos = sum(map(lambda x : (x < bucket_end[4] and x >= bucket_end[3]), sho_vals))
-        warms = sum(map(lambda x : (x < bucket_end[4] and x >= bucket_end[3]), nsho_vals))
+        warms = sum(map(lambda x : (x < bucket_end[4] and x >= bucket_end[3]), nsho_vals)) + warm_shos
         full_buckets = full_buckets + (1 if (warms + warm_shos) > 0 else 0)
 
         hot_shos = sum(map(lambda x : (x <= bucket_end[5] and x >= bucket_end[4]), sho_vals))
-        hots = sum(map(lambda x : (x <= bucket_end[5] and x >= bucket_end[4]), nsho_vals))
+        hots = sum(map(lambda x : (x <= bucket_end[5] and x >= bucket_end[4]), nsho_vals)) + hot_shos
         full_buckets = full_buckets + (1 if (hots + hot_shos) > 0 else 0)
 
         red_hots = sum(map(lambda x : x > bucket_end[5], sho_vals))        
         full_buckets = full_buckets + (1 if red_hots > 0 else 0)
-        lin_bonus, ratio_bonus, hyp_hots, shos_above_baseline = calc_linearity(sorted_sho_nsho, red_hots)        
+        lin_bonus, ratio_bonus, hyp_hots, sum_sabl_actual, sabls = calc_linearity(sorted_sho_nsho, red_hots)        
+        shos_above_baseline = (sabls / TOTAL_SHUTOUTS) * sum_sabl_actual
+
+        red_hot_mod = high_shos / high_nshos
+        hsho_points = inspect_cutoff * 600000.0 * red_hot_mod * lin_bonus
+        val_span = max_sho_val - min_nsho_val
+        cool_points, temperate_points, tepid_points, warm_points, hot_points = 0.0, 0.0, 0.0, 0.0, 0.0
                      
-        if static_bounds:                        
-            red_hot_mod = high_shos / high_nshos
-            red_hot_points = red_hots * 30000000.0 * red_hot_mod * lin_bonus * (shos_above_baseline / len(sho_vals))
-            dead_cold_points = dead_colds * 300000.0 * red_hot_mod * lin_bonus * (shos_above_baseline / len(sho_vals))
-            bonus_points += dead_cold_points + red_hot_points + (15000000.0 * (hyp_hots ** ratio_bonus) * ratio_bonus * red_hot_mod * lin_bonus * (shos_above_baseline / len(sho_vals)))          
-            hsho_points = inspect_cutoff * 3000000.0 * red_hot_mod * lin_bonus * (shos_above_baseline / len(sho_vals))
+        if static_bounds:                                    
+            red_hot_points = red_hots * 30000000.0 * lin_bonus
+            dead_cold_points = dead_colds * 300000.0 * lin_bonus
+            bonus_points += dead_cold_points + red_hot_points + (15000000.0 * (hyp_hots ** ratio_bonus) * ratio_bonus * red_hot_mod * lin_bonus)                      
             bonus_points += hsho_points
-            bonus_points += 100000000 * (shos_above_baseline / len(sho_vals))
+            bonus_points += 10000000 * shos_above_baseline * lin_bonus            
         else:                     
-            bonus_points += (((hot_shos / hots) - (warm_shos / warms) - SHUTOUT_PCT) * 60750000.0) + (hot_shos * 100)
-            bonus_points += (((warm_shos / warms) - (tepid_shos / tepids) - SHUTOUT_PCT) * 20250000.0) + (warm_shos * 100)
-            bonus_points += (((tepid_shos / tepids) - (temperate_shos / temperates) - SHUTOUT_PCT) * 6750000.0) + (tepid_shos * 100)
-            bonus_points += (((temperate_shos / temperates) - SHUTOUT_PCT) * 2250000.0) + (temperate_shos * 100)
-            bonus_points += ((cool_shos / cools) * 750000.0) + (cool_shos * 100)
+            cool_points = ((1 - (cool_shos / cools)) * 30750000.0) + ((len(sho_vals) - cool_shos) * 100)
+            temperate_points = (((temperate_shos / temperates) - SHUTOUT_PCT) * 2250000.0) + (temperate_shos * 100)
+
+            tepid_points = ((((tepid_shos / tepids) - (temperate_shos / temperates)) * 6750000.0) + (tepid_shos * 100)) 
+            if (tepid_points > 0 and temperate_points <= 0): 
+                tepid_points = 0
+
+            warm_points = (((warm_shos / warms) - (tepid_shos / tepids)) * 20250000.0) + (warm_shos * 100)
+            if (warm_points > 0 and tepid_points <= 0): 
+                warm_points = 0
+
+            hot_points = (((hot_shos / hots) - (warm_shos / warms)) * 60750000.0) + (hot_shos * 100)           
+            if (hot_points > 0 and warm_points <= 0): 
+                hot_points = 0
+
+            bonus_points += cool_points + temperate_points + tepid_points + warm_points + hot_points
+            
             sum_actuals = (hot_shos / hots) + (warm_shos / warms) + (tepid_shos / tepids) + (temperate_shos / temperates) + (cool_shos / cools)
             red_hot_points = (red_hots + sum_actuals) * 30000000.0
             dead_cold_points = dead_colds * 300000.0 * sum_actuals
@@ -349,7 +386,8 @@ def minimize_func(parameters, *data):
     if total_unexvar < BEST_RESULT:
         BEST_RESULT = total_unexvar        
         MIN_SHO = min_sho_val
-        MAX_NSHO = max_nsho_val            
+        MAX_NSHO = max_nsho_val         
+        LAST_SPAN = val_span
         base_solver.debug_print("-" * 20, debug, run_id)
         actual, points = 0.0, 0.0        
 
@@ -362,7 +400,7 @@ def minimize_func(parameters, *data):
             points = 0.0
         else:
             actual = cool_shos / cools        
-            points = ((cool_shos / cools) * 750000.0) + (cool_shos * 100)
+            points = cool_points
         base_solver.debug_print("{:.4f}-{:.4f} :: actual {:.4f}, points {}".format(bucket_end[0], bucket_end[1], actual, points), debug, ":::::")                                       
         base_solver.debug_print("cool: {} shutouts in {} games".format(cool_shos, cools), debug, ":::::")                                                                    
         
@@ -371,7 +409,7 @@ def minimize_func(parameters, *data):
             points = 0.0
         else:
             actual = temperate_shos / temperates
-            points = (((temperate_shos / temperates) - SHUTOUT_PCT) * 2250000.0) + (temperate_shos * 100)
+            points = temperate_points
         base_solver.debug_print("{:.4f}-{:.4f} :: actual {:.4f}, points {}".format(bucket_end[1], bucket_end[2], actual, points), debug, ":::::")                                               
         base_solver.debug_print("temperate: {} shutouts in {} games".format(temperate_shos, temperates), debug, ":::::")                                                            
         
@@ -380,7 +418,7 @@ def minimize_func(parameters, *data):
             points = 0.0
         else:
             actual = tepid_shos / tepids
-            points = (((tepid_shos / tepids) - (temperate_shos / temperates) - SHUTOUT_PCT) * 6750000.0) + (tepid_shos * 100)
+            points = tepid_points
         base_solver.debug_print("{:.4f}-{:.4f} :: actual {:.4f}, points {}".format(bucket_end[2], bucket_end[3], actual, points), debug, ":::::")                                               
         base_solver.debug_print("tepid: {} shutouts in {} games".format(tepid_shos, tepids), debug, ":::::")                                                            
         
@@ -389,7 +427,7 @@ def minimize_func(parameters, *data):
             points = 0.0
         else:
             actual = warm_shos / warms
-            points = (((warm_shos / warms) - (tepid_shos / tepids) - SHUTOUT_PCT) * 20250000.0) + (warm_shos * 100)
+            points = warm_points
         base_solver.debug_print("{:.4f}-{:.4f} :: actual {:.4f}, points {}".format(bucket_end[3], bucket_end[4], actual, points), debug, ":::::")                                               
         base_solver.debug_print("warm: {} shutouts in {} games".format(warm_shos, warms), debug, ":::::")                                                            
         
@@ -398,7 +436,7 @@ def minimize_func(parameters, *data):
             points = 0.0
         else:
             actual = hot_shos / hots
-            points = (((hot_shos / hots) - (warm_shos / warms) - SHUTOUT_PCT) * 60750000.0) + (hot_shos * 100)
+            points = hot_points
         base_solver.debug_print("{:.4f}-{:.4f} :: actual {:.4f}, points {}".format(bucket_end[4], bucket_end[5], actual, points), debug, ":::::")                                               
         base_solver.debug_print("hot: {} shutouts in {} games".format(hot_shos, hots), debug, ":::::")                                                            
 
@@ -409,6 +447,7 @@ def minimize_func(parameters, *data):
         base_solver.debug_print("# full buckets = {}, bonus points = {:.2f}, hsho points = {:.2f}, inspecting {:.0f}, best {:.0f}, iteration # {}, SABL {:.2f}, best {:.2f}".format(full_buckets, bonus_points, hsho_points, inspect_cutoff, BEST_CUTOFF, CURRENT_ITERATION, shos_above_baseline, BEST_SABL), debug, ":::::")            
         base_solver.debug_print("Best Result so far - {:.0f}, {} red hots, linearity bonus = {:.4f}, {} hots at = {:.4f}, {:.2f} % high shos, {:.2f} % high nshos, {} dead colds".format(BEST_RESULT, red_hots, lin_bonus, hyp_hots, ratio_bonus, ((high_shos / len(sho_vals)) * 100), ((high_nshos / len(nsho_vals)) * 100), dead_colds), debug, ":::::")
         base_solver.debug_print("mean ratio {:.4f}, quarter mean ratio {:.4f}, last mean ratio = {:.4f}, quarter over last mean = {:.4f}".format((mean_sho_val / mean_nsho_val), quarter_mean_ratio, LAST_MEAN_RATIO, (quarter_mean_ratio / LAST_MEAN_RATIO)), debug, ":::::")        
+        base_solver.debug_print("Shutouts above baseline % = {}, {:.2f}%, span = {:.4f}, quarter span = {:.4f}".format(sabls, (sabls / TOTAL_SHUTOUTS) * 100, val_span, quarter_span), debug, ":::::")        
         if red_hots >= MOST_RED_HOTS:            
             if type(stlat_list) == dict:
                 mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(coefficients)] * 3)))
@@ -425,7 +464,7 @@ def minimize_func(parameters, *data):
         LAST_MEAN_RATIO = (mean_sho_val / mean_nsho_val) if ((mean_sho_val / mean_nsho_val) > LAST_MEAN_RATIO) else LAST_MEAN_RATIO
     endtime = datetime.datetime.now()
     base_solver.debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)        
-    if (CURRENT_ITERATION % 100 == 0):
+    if (CURRENT_ITERATION % 500 == 0):
         base_solver.debug_print("Best so far - {:.0f}, iteration # {}, {} red hots, {:.0f} net high shos, {:.2f} shutouts above baseline".format(BEST_RESULT, CURRENT_ITERATION, MOST_RED_HOTS, BEST_CUTOFF, BEST_SABL), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1    
     current_time = time.process_time()
@@ -453,7 +492,7 @@ def main():
     global MIN_SHO_VAL
     global MAX_NSHO_VAL
     cmd_args = handle_args()
-    bounds = [[0, 9], [0, 3], [-6, 6]] * len(TIM_STLAT_LIST)
+    bounds = [[-3, 9], [0, 3], [-2, 6]] * len(TIM_STLAT_LIST)
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
@@ -462,7 +501,7 @@ def main():
             cmd_args.debug2, cmd_args.debug3)
     # nlc = NonlinearConstraint(constr_f, 1.0, 1.0)
     result = differential_evolution(minimize_func, bounds, args=args, popsize=15, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.6, workers=4, maxiter=1000)
+                                    mutation=(0.05, 1.99), recombination=0.6, workers=4, maxiter=100)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     # now we want to take our stlat coefficients list and optimize the bounds for the best result
@@ -471,21 +510,27 @@ def main():
     args = (coefficients, TIM_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
     nlc = NonlinearConstraint(constr_fn, 1.0, 1.0)
-    start_second_stage = input("Press enter to start optimizing the bounds")
-    result = differential_evolution(minimize_func, bounds, args=args, popsize=15, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.6, workers=4, constraints=(nlc), maxiter=1000)
+    # start_second_stage = input("Press enter to start optimizing the bounds")
+    results = differential_evolution(minimize_func, bounds, args=args, popsize=15, tol=0.0001,
+                                    mutation=(0.05, 1.99), recombination=0.7, workers=4, constraints=(nlc), maxiter=1000)
     #now that we have our solution
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(coefficients)] * 3))))
-    bucket_bounds = result.x
-    start_bucket, end_bucket = 0.00, MIN_SHO
-    print("\n {} - {}".format(start_bucket, end_bucket))
-    for idx, interval in enumerate(bucket_bounds):
-        start_bucket = end_bucket
-        end_bucket = start_bucket + (bucket_bounds[idx] * (MAX_NSHO - MIN_SHO))                        
-        print("\n {} - {}".format(start_bucket, end_bucket))
-    start_bucket, end_bucket = MAX_NSHO, 1.00
-    print("\n {} - {}".format(start_bucket, end_bucket))
+    bucket_bounds = results.x
+    args = (coefficients, TIM_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
+            cmd_args.debug2, cmd_args.debug3)
+
+    print("Outputting final solution parameters.")    
+    final_unexvar = minimize_func(bucket_bounds, args)
+
+    # start_bucket, end_bucket = 0.00, MIN_SHO
+    # print("\n {} - {}".format(start_bucket, end_bucket))
+    # for idx, interval in enumerate(bucket_bounds):
+    #    start_bucket = end_bucket
+    #    end_bucket = start_bucket + (bucket_bounds[idx] * (MAX_NSHO - MIN_SHO))                        
+    #    print("\n {} - {}".format(start_bucket, end_bucket))
+    # start_bucket, end_bucket = MAX_NSHO, 1.00
+    # print("\n {} - {}".format(start_bucket, end_bucket))
     # result_fail_rate = minimize_func(result.x[:-5], TIM_STLAT_LIST, None, stat_file_map,
     #                                             game_list, team_attrs, False, False, False)
     # print("Result fail rate: {:.2f}%".format(result_fail_rate * 100.0))
