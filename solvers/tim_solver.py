@@ -15,7 +15,7 @@ import numpy as np
 import itertools
 
 from scipy.optimize import differential_evolution
-from scipy.optimize import NonlinearConstraint
+from scipy.optimize import LinearConstraint
 
 sys.path.append("..")
 
@@ -65,14 +65,10 @@ def get_bucket_idx(val, bucket_bounds, min_sho_val, max_nsho_val):
                 if end_bucket >= val >= start_bucket:
                     indexofval = idx + 1            
                 start_bucket = end_bucket
-    return indexofval    
-    
+    return indexofval      
 
-def constr_f(x):
-    return np.array(x[111] + x[112] + x[113] + x[114] + x[115])
-
-def constr_fn(x):
-    return np.array(x[0] + x[1] + x[2] + x[3] + x[4])
+def constr_fn(x):    
+    return np.array(x[0], x[1], x[2], x[3], x[4])
 
 def calc_linearity(sorted_sho_nsho, red_hots):
     linears, lin_denominator, hots, shos_above_baseline = 0, 0, 0, 0
@@ -379,7 +375,7 @@ def minimize_func(parameters, *data):
             red_hot_points = (red_hots + sum_actuals) * 30000000.0
             dead_cold_points = dead_colds * 300000.0 * sum_actuals
    
-        if full_buckets > 6 or static_bounds:                    
+        if full_buckets > 6 or static_bounds:             
             total_unexvar -= bonus_points                                  
      
     base_solver.debug_print("total unexvar {}".format(total_unexvar), debug2, run_id)        
@@ -492,7 +488,8 @@ def main():
     global MIN_SHO_VAL
     global MAX_NSHO_VAL
     cmd_args = handle_args()
-    bounds = [[-3, 9], [0, 3], [-2, 6]] * len(TIM_STLAT_LIST)
+    bounds = [[-1, 9], [0, 3], [-1, 6]] * len(TIM_STLAT_LIST)
+    lc = LinearConstraint(constr_fn, 1.0, 1.0)
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
@@ -500,8 +497,8 @@ def main():
     args = (TIM_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
     # nlc = NonlinearConstraint(constr_f, 1.0, 1.0)
-    result = differential_evolution(minimize_func, bounds, args=args, popsize=15, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.6, workers=4, maxiter=100)
+    result = differential_evolution(minimize_func, bounds, args=args, popsize=2, tol=0.1,
+                                    mutation=(0.05, 1.99), recombination=0.6, workers=4, maxiter=1)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     # now we want to take our stlat coefficients list and optimize the bounds for the best result
@@ -509,19 +506,19 @@ def main():
     bounds = [[0.00001, 0.99990]] * 5
     args = (coefficients, TIM_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
-    nlc = NonlinearConstraint(constr_fn, 1.0, 1.0)
+    
     # start_second_stage = input("Press enter to start optimizing the bounds")
-    results = differential_evolution(minimize_func, bounds, args=args, popsize=15, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.7, workers=4, constraints=(nlc), maxiter=1000)
+
+    print("***** Starting Second Stage ********")
+    results = differential_evolution(minimize_func, bounds, args=args, popsize=50, tol=0.0001,
+                                    mutation=(0.05, 1.99), recombination=0.7, workers=4, constraints=(lc), maxiter=1000)
     #now that we have our solution
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(coefficients)] * 3))))
     bucket_bounds = results.x
-    args = (coefficients, TIM_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
-            cmd_args.debug2, cmd_args.debug3)
-
+    
     print("Outputting final solution parameters.")    
-    final_unexvar = minimize_func(bucket_bounds, args)
+    final_unexvar = minimize_func(bucket_bounds, *args)
 
     # start_bucket, end_bucket = 0.00, MIN_SHO
     # print("\n {} - {}".format(start_bucket, end_bucket))
