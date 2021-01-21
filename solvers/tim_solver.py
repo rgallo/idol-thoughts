@@ -48,6 +48,8 @@ LAST_MEAN_RATIO = 1.0
 LAST_CHECKTIME = 0.0
 BEST_SABL = 0
 LAST_SPAN = 0.0
+FINAL_SHO_VALS = []
+FINAL_NSHO_VALS = []
 
 def get_bucket_idx(val, bucket_bounds, min_sho_val, max_nsho_val):
     start_bucket, end_bucket = 0.00, 0.00
@@ -158,6 +160,8 @@ def minimize_func(parameters, *data):
     global LAST_CHECKTIME
     global BEST_SABL
     global LAST_SPAN
+    global FINAL_SHO_VALS
+    global FINAL_NSHO_VALS
     if len(parameters) > 4:
         coefficients = parameters
         bucket_bounds = [0.2, 0.2, 0.2, 0.2]
@@ -184,79 +188,87 @@ def minimize_func(parameters, *data):
     sho_nsho = []
     reject_solution, viability_unchecked = False, True
     quarter_mean_ratio, quarter_span = 1.0, 0.0
-    min_sho_val, max_sho_val, min_nsho_val, max_nsho_val, median_sho_val, median_nsho_val, mean_sho_val, mean_nsho_val, shos, nshos = 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0, 0    
-    for season in range(3, 12):        
-        season_start = datetime.datetime.now()
-        base_solver.debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
-        pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
-        season_team_attrs = team_attrs.get(str(season), {})
-        season_days = 0        
-        if static_bounds:
-            if TOTAL_SHUTOUTS > 0 and len(sho_vals) >= (TOTAL_SHUTOUTS / 4) and viability_unchecked:
-                # check this solution for viability for later rejection criteria
-                quarter_mean_ratio = (sum(sho_vals) * len(nsho_vals)) / (len(sho_vals) * sum(nsho_vals))      
-                quarter_span = max(sho_vals) - min(nsho_vals)
-                viability_unchecked = False
-                if (quarter_mean_ratio / LAST_MEAN_RATIO) < 0.95 and quarter_mean_ratio < 1.45:
-                    reject_solution = True
-                    break
-                if (LAST_SPAN * 0.9) > quarter_span:
-                    reject_solution = True
-                    break
-        for day in range(1, 125):
-            cached_games = GAME_CACHE.get((season, day))
-            if cached_games:
-                games = cached_games
-            else:
-                games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
-                if not games:
-                    continue
-                GAME_CACHE[(season, day)] = games
-            season_days += 1
-            paired_games = base_solver.pair_games(games)
-            schedule = base_solver.get_schedule_from_paired_games(paired_games)
-            day_mods = base_solver.get_attrs_from_paired_games(season_team_attrs, paired_games)
-            cached_stats = STAT_CACHE.get((season, day))
-            if cached_stats:
-                team_stat_data, pitcher_stat_data, pitchers = cached_stats
-            else:
-                stat_filename = stat_file_map.get((season, day))
-                if stat_filename:
-                    last_stat_filename = stat_filename
-                    pitchers = base_solver.get_pitcher_id_lookup(stat_filename)
-                    team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)
-                elif base_solver.should_regen(day_mods):
-                    pitchers = base_solver.get_pitcher_id_lookup(last_stat_filename)
-                    team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
-                STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)
-            if not pitchers:
-                raise Exception("No stat file found")
-            for game in paired_games:
-                awayTIM, awayShutout, homeTIM, homeShutout = run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, tim_tier)                
-                if awayTIM > 0:
-                    min_sho_val = awayTIM if awayTIM < min_sho_val and awayShutout else min_sho_val
-                    max_sho_val = awayTIM if awayTIM > max_sho_val and awayShutout else max_sho_val
-                    min_nsho_val = awayTIM if awayTIM < min_nsho_val and not awayShutout else min_nsho_val
-                    max_nsho_val = awayTIM if awayTIM > max_nsho_val and not awayShutout else max_nsho_val
-                    all_vals.append(awayTIM)
-                    if awayShutout:
-                        sho_vals.append(awayTIM)                            
-                        sho_nsho.append(1)
-                    else:
-                        nsho_vals.append(awayTIM)                                                                        
-                        sho_nsho.append(0)
-                if homeTIM > 0:
-                    min_sho_val = homeTIM if homeTIM < min_sho_val and homeShutout else min_sho_val
-                    max_sho_val = homeTIM if homeTIM > max_sho_val and homeShutout else max_sho_val
-                    min_nsho_val = homeTIM if homeTIM < min_nsho_val and not homeShutout else min_nsho_val
-                    max_nsho_val = homeTIM if homeTIM > max_nsho_val and not homeShutout else max_nsho_val  
-                    all_vals.append(homeTIM)
-                    if homeShutout:
-                        sho_vals.append(homeTIM)                                                
-                        sho_nsho.append(1)
-                    else:
-                        nsho_vals.append(homeTIM)                           
-                        sho_nsho.append(0)    
+    min_sho_val, max_sho_val, min_nsho_val, max_nsho_val, median_sho_val, median_nsho_val, mean_sho_val, mean_nsho_val, shos, nshos = 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0, 0
+    if not FINAL_SHO_VALS:
+        for season in range(3, 12):        
+            season_start = datetime.datetime.now()
+            base_solver.debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
+            pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
+            season_team_attrs = team_attrs.get(str(season), {})
+            season_days = 0        
+            if static_bounds:
+                if TOTAL_SHUTOUTS > 0 and len(sho_vals) >= (TOTAL_SHUTOUTS / 4) and viability_unchecked:
+                    # check this solution for viability for later rejection criteria
+                    quarter_mean_ratio = (sum(sho_vals) * len(nsho_vals)) / (len(sho_vals) * sum(nsho_vals))      
+                    quarter_span = max(sho_vals) - min(nsho_vals)
+                    viability_unchecked = False
+                    if (quarter_mean_ratio / LAST_MEAN_RATIO) < 0.95 and quarter_mean_ratio < 1.45:
+                        reject_solution = True
+                        break
+                    if (LAST_SPAN * 0.9) > quarter_span:
+                        reject_solution = True
+                        break
+            for day in range(1, 125):
+                cached_games = GAME_CACHE.get((season, day))
+                if cached_games:
+                    games = cached_games
+                else:
+                    games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
+                    if not games:
+                        continue
+                    GAME_CACHE[(season, day)] = games
+                season_days += 1
+                paired_games = base_solver.pair_games(games)
+                schedule = base_solver.get_schedule_from_paired_games(paired_games)
+                day_mods = base_solver.get_attrs_from_paired_games(season_team_attrs, paired_games)
+                cached_stats = STAT_CACHE.get((season, day))
+                if cached_stats:
+                    team_stat_data, pitcher_stat_data, pitchers = cached_stats
+                else:
+                    stat_filename = stat_file_map.get((season, day))
+                    if stat_filename:
+                        last_stat_filename = stat_filename
+                        pitchers = base_solver.get_pitcher_id_lookup(stat_filename)
+                        team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)
+                    elif base_solver.should_regen(day_mods):
+                        pitchers = base_solver.get_pitcher_id_lookup(last_stat_filename)
+                        team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
+                    STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)
+                if not pitchers:
+                    raise Exception("No stat file found")
+                for game in paired_games:
+                    awayTIM, awayShutout, homeTIM, homeShutout = run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, tim_tier)                
+                    if awayTIM > 0:
+                        min_sho_val = awayTIM if awayTIM < min_sho_val and awayShutout else min_sho_val
+                        max_sho_val = awayTIM if awayTIM > max_sho_val and awayShutout else max_sho_val
+                        min_nsho_val = awayTIM if awayTIM < min_nsho_val and not awayShutout else min_nsho_val
+                        max_nsho_val = awayTIM if awayTIM > max_nsho_val and not awayShutout else max_nsho_val
+                        all_vals.append(awayTIM)
+                        if awayShutout:
+                            sho_vals.append(awayTIM)                            
+                            sho_nsho.append(1)
+                        else:
+                            nsho_vals.append(awayTIM)                                                                        
+                            sho_nsho.append(0)
+                    if homeTIM > 0:
+                        min_sho_val = homeTIM if homeTIM < min_sho_val and homeShutout else min_sho_val
+                        max_sho_val = homeTIM if homeTIM > max_sho_val and homeShutout else max_sho_val
+                        min_nsho_val = homeTIM if homeTIM < min_nsho_val and not homeShutout else min_nsho_val
+                        max_nsho_val = homeTIM if homeTIM > max_nsho_val and not homeShutout else max_nsho_val  
+                        all_vals.append(homeTIM)
+                        if homeShutout:
+                            sho_vals.append(homeTIM)                                                
+                            sho_nsho.append(1)
+                        else:
+                            nsho_vals.append(homeTIM)                           
+                            sho_nsho.append(0)    
+
+    if not static_bounds and not FINAL_SHO_VALS:
+        FINAL_SHO_VALS = sho_vals
+        FINAL_NSHO_VALS = nsho_vals
+    if not static_bounds:
+        sho_vals = FINAL_SHO_VALS
+        nsho_vals = FINAL_NSHO_VALS
         
     total_unexvar = 1000000000.0
     shos = len(sho_vals)
@@ -375,6 +387,9 @@ def minimize_func(parameters, *data):
                     hot_points = 0
 
                 bonus_points += cool_points + temperate_points + tepid_points + warm_points + hot_points
+
+                # penalize the solution by how far we are from the determined "best" hot %
+                bonus_points -= (ratio_bonus - (hot_shos / hots)) * 60750000.0
             
                 sum_actuals = (hot_shos / hots) + (warm_shos / warms) + (tepid_shos / tepids) + (temperate_shos / temperates) + (cool_shos / cools)
                 red_hot_points = (red_hots + sum_actuals) * 30000000.0
@@ -491,12 +506,10 @@ def handle_args():
 
 def main():
     print(datetime.datetime.now())
-    global MIN_SHO_VAL
-    global MAX_NSHO_VAL
+    global BEST_RESULT    
     cmd_args = handle_args()
     bounds = [[-1, 9], [0, 3], [-1, 6]] * len(TIM_STLAT_LIST)
-    nlc = NonlinearConstraint(constr_fn, 0.01, 0.99, keep_feasible=True)
-    
+    nlc = NonlinearConstraint(constr_fn, 0.01, 0.99, keep_feasible=True)    
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
@@ -505,9 +518,11 @@ def main():
             cmd_args.debug2, cmd_args.debug3)
     # nlc = NonlinearConstraint(constr_f, 1.0, 1.0)
     result = differential_evolution(minimize_func, bounds, args=args, popsize=2, tol=0.1,
-                                    mutation=(0.05, 1.99), recombination=0.8, workers=4, maxiter=1)
+                                    mutation=(0.05, 1.99), recombination=0.5, workers=4, maxiter=1)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
+
+    BEST_RESULT = 1000000000.0
     # now we want to take our stlat coefficients list and optimize the bounds for the best result
     coefficients = result.x
     bounds = [[0.001, 0.9]] * 4
@@ -523,6 +538,8 @@ def main():
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(coefficients)] * 3))))
     bucket_bounds = results.x
+
+    BEST_RESULT = 1000000000.0                  
     
     print("Outputting final solution parameters.")    
     final_unexvar = minimize_func(bucket_bounds, *args)
