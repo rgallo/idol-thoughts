@@ -68,7 +68,7 @@ def get_bucket_idx(val, bucket_bounds, min_sho_val, max_nsho_val):
     return indexofval      
 
 def constr_fn(x):    
-    return np.array(x[0], x[1], x[2], x[3], x[4])
+    return (x[0] + x[1] + x[2] + x[3] + x[4])
 
 def calc_linearity(sorted_sho_nsho, red_hots):
     linears, lin_denominator, hots, shos_above_baseline = 0, 0, 0, 0
@@ -489,7 +489,8 @@ def main():
     global MAX_NSHO_VAL
     cmd_args = handle_args()
     bounds = [[-1, 9], [0, 3], [-1, 6]] * len(TIM_STLAT_LIST)
-    lc = LinearConstraint(constr_fn, 1.0, 1.0)
+    lc = LinearConstraint(constr_fn, 1.0, 1.0, True)
+    
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
