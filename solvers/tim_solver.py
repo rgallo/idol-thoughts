@@ -15,7 +15,7 @@ import numpy as np
 import itertools
 
 from scipy.optimize import differential_evolution
-from scipy.optimize import LinearConstraint
+from scipy.optimize import NonlinearConstraint
 
 sys.path.append("..")
 
@@ -68,7 +68,7 @@ def get_bucket_idx(val, bucket_bounds, min_sho_val, max_nsho_val):
     return indexofval      
 
 def constr_fn(x):    
-    return (x[0] + x[1] + x[2] + x[3] + x[4])
+    return np.array(x[0] + x[1] + x[2] + x[3])
 
 def calc_linearity(sorted_sho_nsho, red_hots):
     linears, lin_denominator, hots, shos_above_baseline = 0, 0, 0, 0
@@ -158,9 +158,9 @@ def minimize_func(parameters, *data):
     global LAST_CHECKTIME
     global BEST_SABL
     global LAST_SPAN
-    if len(parameters) > 5:
+    if len(parameters) > 4:
         coefficients = parameters
-        bucket_bounds = [0.2, 0.2, 0.2, 0.2, 0.2]
+        bucket_bounds = [0.2, 0.2, 0.2, 0.2]
         static_bounds = True
         stlat_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     else:
@@ -354,26 +354,31 @@ def minimize_func(parameters, *data):
             bonus_points += hsho_points
             bonus_points += 10000000 * shos_above_baseline * lin_bonus            
         else:                     
-            cool_points = ((1 - (cool_shos / cools)) * 30750000.0) + ((len(sho_vals) - cool_shos) * 100)
-            temperate_points = (((temperate_shos / temperates) - SHUTOUT_PCT) * 2250000.0) + (temperate_shos * 100)
+            if full_buckets > 6:
+                cool_points = ((1 - (cool_shos / cools)) * 30750000.0) + ((len(sho_vals) - cool_shos) * 100)
+                temperate_points = (((temperate_shos / temperates) - SHUTOUT_PCT) * 2250000.0)
+                temperate_points += (temperate_shos * 100) if (temperate_points > 0) else 0
 
-            tepid_points = ((((tepid_shos / tepids) - (temperate_shos / temperates)) * 6750000.0) + (tepid_shos * 100)) 
-            if (tepid_points > 0 and temperate_points <= 0): 
-                tepid_points = 0
+                tepid_points = (((tepid_shos / tepids) - (temperate_shos / temperates)) * 6750000.0)
+                tepid_points += (tepid_shos * 100) if (tepid_points > 0) else 0
+                if (tepid_points > 0 and temperate_points <= 0): 
+                    tepid_points = 0
 
-            warm_points = (((warm_shos / warms) - (tepid_shos / tepids)) * 20250000.0) + (warm_shos * 100)
-            if (warm_points > 0 and tepid_points <= 0): 
-                warm_points = 0
+                warm_points = (((warm_shos / warms) - (tepid_shos / tepids)) * 20250000.0)
+                warm_points += (warm_shos * 100) if (warm_points > 0) else 0
+                if (warm_points > 0 and tepid_points <= 0): 
+                    warm_points = 0
 
-            hot_points = (((hot_shos / hots) - (warm_shos / warms)) * 60750000.0) + (hot_shos * 100)           
-            if (hot_points > 0 and warm_points <= 0): 
-                hot_points = 0
+                hot_points = (((hot_shos / hots) - (warm_shos / warms)) * 60750000.0)
+                hot_points += (hot_shos * 100) if (hot_points > 0) else 0
+                if (hot_points > 0 and warm_points <= 0): 
+                    hot_points = 0
 
-            bonus_points += cool_points + temperate_points + tepid_points + warm_points + hot_points
+                bonus_points += cool_points + temperate_points + tepid_points + warm_points + hot_points
             
-            sum_actuals = (hot_shos / hots) + (warm_shos / warms) + (tepid_shos / tepids) + (temperate_shos / temperates) + (cool_shos / cools)
-            red_hot_points = (red_hots + sum_actuals) * 30000000.0
-            dead_cold_points = dead_colds * 300000.0 * sum_actuals
+                sum_actuals = (hot_shos / hots) + (warm_shos / warms) + (tepid_shos / tepids) + (temperate_shos / temperates) + (cool_shos / cools)
+                red_hot_points = (red_hots + sum_actuals) * 30000000.0
+                dead_cold_points = dead_colds * 300000.0 * sum_actuals
    
         if full_buckets > 6 or static_bounds:             
             total_unexvar -= bonus_points                                  
@@ -460,7 +465,7 @@ def minimize_func(parameters, *data):
         LAST_MEAN_RATIO = (mean_sho_val / mean_nsho_val) if ((mean_sho_val / mean_nsho_val) > LAST_MEAN_RATIO) else LAST_MEAN_RATIO
     endtime = datetime.datetime.now()
     base_solver.debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)        
-    if (CURRENT_ITERATION % 500 == 0):
+    if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or CURRENT_ITERATION % 500 == 0):
         base_solver.debug_print("Best so far - {:.0f}, iteration # {}, {} red hots, {:.0f} net high shos, {:.2f} shutouts above baseline".format(BEST_RESULT, CURRENT_ITERATION, MOST_RED_HOTS, BEST_CUTOFF, BEST_SABL), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1    
     current_time = time.process_time()
@@ -469,6 +474,7 @@ def minimize_func(parameters, *data):
         time.sleep(10)
     if (CURRENT_ITERATION % 25000 == 0):
         time.sleep(600)
+        print("10 minute power nap")
     return total_unexvar
 
 
@@ -489,7 +495,7 @@ def main():
     global MAX_NSHO_VAL
     cmd_args = handle_args()
     bounds = [[-1, 9], [0, 3], [-1, 6]] * len(TIM_STLAT_LIST)
-    lc = LinearConstraint(constr_fn, 1.0, 1.0, True)
+    nlc = NonlinearConstraint(constr_fn, 0.01, 0.99, keep_feasible=True)
     
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
@@ -499,20 +505,20 @@ def main():
             cmd_args.debug2, cmd_args.debug3)
     # nlc = NonlinearConstraint(constr_f, 1.0, 1.0)
     result = differential_evolution(minimize_func, bounds, args=args, popsize=2, tol=0.1,
-                                    mutation=(0.05, 1.99), recombination=0.6, workers=4, maxiter=1)
+                                    mutation=(0.05, 1.99), recombination=0.8, workers=4, maxiter=1)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     # now we want to take our stlat coefficients list and optimize the bounds for the best result
     coefficients = result.x
-    bounds = [[0.00001, 0.99990]] * 5
+    bounds = [[0.001, 0.9]] * 4
     args = (coefficients, TIM_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
     
     # start_second_stage = input("Press enter to start optimizing the bounds")
 
-    print("***** Starting Second Stage ********")
-    results = differential_evolution(minimize_func, bounds, args=args, popsize=50, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.7, workers=4, constraints=(lc), maxiter=1000)
+    print("****** Starting Second Stage ******")
+    results = differential_evolution(minimize_func, bounds, args=args, popsize=50, tol=0.1,
+                                    mutation=(0.05, 1.99), recombination=0.7, workers=4, constraints=(nlc), maxiter=10)
     #now that we have our solution
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(coefficients)] * 3))))
