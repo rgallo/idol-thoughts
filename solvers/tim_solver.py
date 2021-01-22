@@ -114,7 +114,7 @@ def calc_linearity(sorted_sho_nsho, red_hots):
     window_end = len(sorted_sho_nsho) - red_hots - 1
     window_start = window_end
     target_shos = 0
-    while target_shos < 160:
+    while target_shos < 160 and window_start > 0:
         window_start -= 1	
         last_ratio = sum(sorted_sho_nsho[window_start:window_end]) / (window_end - window_start + 1)
         if last_ratio >= best_ratio:
@@ -273,6 +273,10 @@ def minimize_func(parameters, *data):
     total_unexvar = 1000000000.0
     shos = len(sho_vals)
     nshos = len(nsho_vals)
+    max_sho_val = max(sho_vals)
+    max_nsho_val = max(nsho_vals)
+    min_sho_val = min(sho_vals)
+    min_nsho_val = min(nsho_vals)
     mean_sho_val = sum(sho_vals) / shos
     mean_nsho_val = sum(nsho_vals) / nshos
     if not reject_solution:        
@@ -518,11 +522,10 @@ def main():
             cmd_args.debug2, cmd_args.debug3)
     # nlc = NonlinearConstraint(constr_f, 1.0, 1.0)
     result = differential_evolution(minimize_func, bounds, args=args, popsize=2, tol=0.1,
-                                    mutation=(0.05, 1.99), recombination=0.5, workers=4, maxiter=1)
+                                    mutation=(0.05, 1.99), recombination=0.9, workers=4, maxiter=1)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
-
-    BEST_RESULT = 1000000000.0
+    
     # now we want to take our stlat coefficients list and optimize the bounds for the best result
     coefficients = result.x
     bounds = [[0.001, 0.9]] * 4
@@ -532,16 +535,18 @@ def main():
     # start_second_stage = input("Press enter to start optimizing the bounds")
 
     print("****** Starting Second Stage ******")
-    results = differential_evolution(minimize_func, bounds, args=args, popsize=50, tol=0.1,
+    results = differential_evolution(minimize_func, bounds, args=args, popsize=50, tol=0.0001,
                                     mutation=(0.05, 1.99), recombination=0.7, workers=4, constraints=(nlc), maxiter=10)
     #now that we have our solution
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(coefficients)] * 3))))
-    bucket_bounds = results.x
-
-    BEST_RESULT = 1000000000.0                  
+    bucket_bounds = results.x    
     
+    print("*****")    
+    print("*****")    
     print("Outputting final solution parameters.")    
+    print("*****")    
+    print("*****")    
     final_unexvar = minimize_func(bucket_bounds, *args)
 
     # start_bucket, end_bucket = 0.00, MIN_SHO
@@ -551,10 +556,8 @@ def main():
     #    end_bucket = start_bucket + (bucket_bounds[idx] * (MAX_NSHO - MIN_SHO))                        
     #    print("\n {} - {}".format(start_bucket, end_bucket))
     # start_bucket, end_bucket = MAX_NSHO, 1.00
-    # print("\n {} - {}".format(start_bucket, end_bucket))
-    # result_fail_rate = minimize_func(result.x[:-5], TIM_STLAT_LIST, None, stat_file_map,
-    #                                             game_list, team_attrs, False, False, False)
-    # print("Result fail rate: {:.2f}%".format(result_fail_rate * 100.0))
+    # print("\n {} - {}".format(start_bucket, end_bucket))    
+    
     print(datetime.datetime.now())
 
 
