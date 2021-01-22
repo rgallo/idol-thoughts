@@ -50,6 +50,8 @@ BEST_SABL = 0
 LAST_SPAN = 0.0
 FINAL_SHO_VALS = []
 FINAL_NSHO_VALS = []
+FINAL_ALL_VALS = []
+FINAL_SHO_NSHO = []
 
 def get_bucket_idx(val, bucket_bounds, min_sho_val, max_nsho_val):
     start_bucket, end_bucket = 0.00, 0.00
@@ -162,6 +164,8 @@ def minimize_func(parameters, *data):
     global LAST_SPAN
     global FINAL_SHO_VALS
     global FINAL_NSHO_VALS
+    global FINAL_ALL_VALS
+    global FINAL_SHO_NSHO
     if len(parameters) > 4:
         coefficients = parameters
         bucket_bounds = [0.2, 0.2, 0.2, 0.2]
@@ -266,11 +270,20 @@ def minimize_func(parameters, *data):
     if not static_bounds and not FINAL_SHO_VALS:
         FINAL_SHO_VALS = sho_vals
         FINAL_NSHO_VALS = nsho_vals
+        FINAL_ALL_VALS = all_vals
+        FINAL_SHO_NSHO = sho_nsho
     if not static_bounds:
         sho_vals = FINAL_SHO_VALS
         nsho_vals = FINAL_NSHO_VALS
+        all_vals = FINAL_ALL_VALS
+        sho_nsho = FINAL_SHO_NSHO
         
     total_unexvar = 1000000000.0
+    cool_points, temperate_points, tepid_points, warm_points, hot_points = 0.0, 0.0, 0.0, 0.0, 0.0
+    bonus_points, red_hot_points, dead_cold_points, hsho_points, sum_actuals, full_buckets = 0.0, 0.0, 0.0, 0.0, 0.0, 0
+    lin_bonus, ratio_bonus = 1.0, 0.0
+    red_hots, hyp_hots, hot_shos, warm_shos, tepid_shos, temperate_shos, cool_shos = 0, 0, 0, 0, 0, 0, 0
+    hots, warms, tepids, temperates, cools, dead_colds = 0, 0, 0, 0, 0, 0            
     shos = len(sho_vals)
     nshos = len(nsho_vals)
     max_sho_val = max(sho_vals)
@@ -299,7 +312,7 @@ def minimize_func(parameters, *data):
         median_nsho_val = (nsho_vals[left_center] + nsho_vals[right_center]) / 2.0        
 
         # we need to automatically reject solutions that are unlikely to give a beter solution, which will save time
-        reject_solution = (max_sho_val <= max_nsho_val) or (min_sho_val <= min_nsho_val) or (mean_sho_val <= mean_nsho_val) or (median_sho_val <= median_nsho_val) or (median_sho_val <= mean_nsho_val)    
+        reject_solution = (max_sho_val <= max_nsho_val) or (min_sho_val <= min_nsho_val) or (mean_sho_val <= mean_nsho_val) or (median_sho_val <= median_nsho_val) or (median_sho_val <= mean_nsho_val)
     
     if not reject_solution:                                       
         # establish the actual bucket bounds without using a loop, for referencing in map functions
@@ -314,12 +327,8 @@ def minimize_func(parameters, *data):
         warm_end = min_sho_val + ((max_nsho_val - min_sho_val) * (bucket_bounds[3] + bucket_bounds[2] + bucket_bounds[1] + bucket_bounds[0]))
         bucket_end.append(warm_end)
         bucket_end.append(max_nsho_val)    
-        bucket_end.append(1.00)                    
-    
-        bonus_points, red_hot_points, dead_cold_points, hsho_points, sum_actuals, full_buckets = 0.0, 0.0, 0.0, 0.0, 0.0, 0
-        lin_bonus, ratio_bonus = 1.0, 0.0
-        red_hots, hyp_hots, hot_shos, warm_shos, tepid_shos, temperate_shos, cool_shos = 0, 0, 0, 0, 0, 0, 0
-        hots, warms, tepids, temperates, cools, dead_colds = 0, 0, 0, 0, 0, 0            
+        bucket_end.append(1.00)                                
+        
         high_shos = sum(map(lambda x : x > mean_nsho_val, sho_vals))
         high_nshos = sum(map(lambda x : x >= mean_nsho_val, nsho_vals))
         inspect_cutoff = high_shos - (high_nshos * (shos / nshos))
@@ -360,8 +369,7 @@ def minimize_func(parameters, *data):
 
         red_hot_mod = high_shos / high_nshos
         hsho_points = inspect_cutoff * 600000.0 * red_hot_mod * lin_bonus
-        val_span = max_sho_val - min_nsho_val
-        cool_points, temperate_points, tepid_points, warm_points, hot_points = 0.0, 0.0, 0.0, 0.0, 0.0
+        val_span = max_sho_val - min_nsho_val        
                      
         if static_bounds:                                    
             red_hot_points = red_hots * 30000000.0 * lin_bonus
@@ -402,8 +410,12 @@ def minimize_func(parameters, *data):
         if full_buckets > 6 or static_bounds:             
             total_unexvar -= bonus_points                                  
      
-    base_solver.debug_print("total unexvar {}".format(total_unexvar), debug2, run_id)        
+    base_solver.debug_print("total unexvar {}".format(total_unexvar), debug2, run_id)
+    if CURRENT_ITERATION == 1:
+        base_solver.debug_print("First iteration, before checking total_unexvar = {}, best = {}".format(total_unexvar, BEST_RESULT), debug, ":::::::::::::::")
     if total_unexvar < BEST_RESULT:
+        if CURRENT_ITERATION == 1:
+            base_solver.debug_print("First iteration, total_unexvar is less than best result", debug, ":::::::::::::::")
         BEST_RESULT = total_unexvar        
         MIN_SHO = min_sho_val
         MAX_NSHO = max_nsho_val         
@@ -521,8 +533,8 @@ def main():
     args = (TIM_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
     # nlc = NonlinearConstraint(constr_f, 1.0, 1.0)
-    result = differential_evolution(minimize_func, bounds, args=args, popsize=2, tol=0.1,
-                                    mutation=(0.05, 1.99), recombination=0.9, workers=4, maxiter=1)
+    result = differential_evolution(minimize_func, bounds, args=args, popsize=15, tol=0.0001,
+                                    mutation=(0.05, 1.99), recombination=0.5, workers=4, maxiter=400)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     
@@ -531,17 +543,26 @@ def main():
     bounds = [[0.001, 0.9]] * 4
     args = (coefficients, TIM_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
+
+    print("BEST RESULT before Reset = {}".format(BEST_RESULT))
+    BEST_RESULT = 1000000000.0
+    CURRENT_ITERATION = 1
+    print("BEST RESULT after Reset = {}".format(BEST_RESULT))
     
     # start_second_stage = input("Press enter to start optimizing the bounds")
 
     print("****** Starting Second Stage ******")
     results = differential_evolution(minimize_func, bounds, args=args, popsize=50, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.7, workers=4, constraints=(nlc), maxiter=10)
+                                    mutation=(0.05, 1.99), recombination=0.7, workers=4, constraints=(nlc), maxiter=1000)
     #now that we have our solution
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(coefficients)] * 3))))
     bucket_bounds = results.x    
     
+    print("BEST RESULT before Reset = {}".format(BEST_RESULT))
+    BEST_RESULT = 1000000000.0
+    CURRENT_ITERATION = 1
+    print("BEST RESULT after Reset = {}".format(BEST_RESULT))
     print("*****")    
     print("*****")    
     print("Outputting final solution parameters.")    
