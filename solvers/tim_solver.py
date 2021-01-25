@@ -75,7 +75,7 @@ def constr_fn(x):
     return np.array(x[0] + x[1] + x[2] + x[3])
 
 def calc_linearity(sorted_sho_nsho, red_hots):
-    linears, lin_denominator, hots, shos_above_baseline = 0, 0, 0, 0
+    linears, lin_denominator, hots, shos_above_baseline, lowest_hot = 0, 0, 0, 0, 0
     lin_points, current_ratio, past_ratio, last_ratio, best_ratio = 0.0, 0.0, 0.0, 0.0, 0.0
     window_start, window_end, summation_start, sabls = 0, 1, 0, 0
     #window_start, window_end, summation_start, sabls = 0, 299, 0, 0    
@@ -122,6 +122,7 @@ def calc_linearity(sorted_sho_nsho, red_hots):
         if last_ratio >= best_ratio:
             best_ratio = last_ratio
             hots = sum(sorted_sho_nsho[window_start:window_end])
+            lowest_hot = window_start if sorted_sho_nsho[window_start] == 1 else lowest_hot
         else:
             target_shos = (best_ratio * (window_end - window_start + 1)) - sum(sorted_sho_nsho[window_start:window_end])
             target_shos = target_shos / (1 - best_ratio)       
@@ -129,7 +130,7 @@ def calc_linearity(sorted_sho_nsho, red_hots):
     if lin_denominator > 0:
         lin_points = float(linears) / float(lin_denominator)
     # best possible hot ratio, should favor solutions of equal red hots with better hot ratios    
-    return lin_points, best_ratio, hots, shos_above_baseline, sabls
+    return lin_points, best_ratio, hots, shos_above_baseline, sabls, lowest_hot
 
 def run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, tim_tier):
     awayMods, homeMods = [], []
@@ -176,14 +177,15 @@ def minimize_func(parameters, *data):
         static_bounds = False
         coefficients, stlat_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     base_solver.debug_print("func start: {}".format(starttime), debug3, run_id)
-    if type(stlat_list) == dict:  # mod mode
-        terms = stlat_list
-        mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
-        for mod, (a, b, c) in zip(mod_list, zip(*[iter(coefficients)] * 3)):
-            mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)
-    else:  # base mode
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(coefficients)] * 3))}
-        mods = {}
+    if not FINAL_SHO_VALS:
+        if type(stlat_list) == dict:  # mod mode
+            terms = stlat_list
+            mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
+            for mod, (a, b, c) in zip(mod_list, zip(*[iter(coefficients)] * 3)):
+                mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)
+        else:  # base mode
+            terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(coefficients)] * 3))}
+            mods = {}
     results = [[] for _ in range(7)]    
     tim_tier = tim.TIM("asdf", terms, None, None, None)
     sho_vals = []
@@ -314,21 +316,25 @@ def minimize_func(parameters, *data):
         # we need to automatically reject solutions that are unlikely to give a beter solution, which will save time
         reject_solution = (max_sho_val <= max_nsho_val) or (min_sho_val <= min_nsho_val) or (mean_sho_val <= mean_nsho_val) or (median_sho_val <= median_nsho_val) or (median_sho_val <= mean_nsho_val)
     
-    if not reject_solution:                                       
+    if not reject_solution:                                              
+
+        red_hots = sum(map(lambda x : x > max_nsho_val, sho_vals))
+        lin_bonus, ratio_bonus, hyp_hots, sum_sabl_actual, sabls, first_hot = calc_linearity(sorted_sho_nsho, red_hots)            
+
         # establish the actual bucket bounds without using a loop, for referencing in map functions
         bucket_end = []
         bucket_end.append(min_sho_val)
-        cool_end = min_sho_val + ((max_nsho_val - min_sho_val) * bucket_bounds[0])
+        warm_end = all_vals_array.item(first_hot)
+        cool_end = min_sho_val + ((warm_end - min_sho_val) * bucket_bounds[0])
         bucket_end.append(cool_end)
-        temp_end = min_sho_val + ((max_nsho_val - min_sho_val) * (bucket_bounds[1] + bucket_bounds[0]))
+        temp_end = min_sho_val + ((warm_end - min_sho_val) * (bucket_bounds[1] + bucket_bounds[0]))
         bucket_end.append(temp_end)
-        tepid_end = min_sho_val + ((max_nsho_val - min_sho_val) * (bucket_bounds[2] + bucket_bounds[1] + bucket_bounds[0]))
-        bucket_end.append(tepid_end)
-        warm_end = min_sho_val + ((max_nsho_val - min_sho_val) * (bucket_bounds[3] + bucket_bounds[2] + bucket_bounds[1] + bucket_bounds[0]))
+        tepid_end = min_sho_val + ((warm_end - min_sho_val) * (bucket_bounds[2] + bucket_bounds[1] + bucket_bounds[0]))
+        bucket_end.append(tepid_end)      
         bucket_end.append(warm_end)
         bucket_end.append(max_nsho_val)    
-        bucket_end.append(1.00)                                
-        
+        bucket_end.append(1.00)                              
+
         high_shos = sum(map(lambda x : x > mean_nsho_val, sho_vals))
         high_nshos = sum(map(lambda x : x >= mean_nsho_val, nsho_vals))
         inspect_cutoff = high_shos - (high_nshos * (shos / nshos))
@@ -361,10 +367,9 @@ def minimize_func(parameters, *data):
         hot_shos = sum(map(lambda x : (x <= bucket_end[5] and x >= bucket_end[4]), sho_vals))
         hots = sum(map(lambda x : (x <= bucket_end[5] and x >= bucket_end[4]), nsho_vals)) + hot_shos
         full_buckets = full_buckets + (1 if (hots + hot_shos) > 0 else 0)
-
-        red_hots = sum(map(lambda x : x > bucket_end[5], sho_vals))        
+        
         full_buckets = full_buckets + (1 if red_hots > 0 else 0)
-        lin_bonus, ratio_bonus, hyp_hots, sum_sabl_actual, sabls = calc_linearity(sorted_sho_nsho, red_hots)        
+        
         shos_above_baseline = (sabls / TOTAL_SHUTOUTS) * sum_sabl_actual
 
         red_hot_mod = high_shos / high_nshos
@@ -374,7 +379,10 @@ def minimize_func(parameters, *data):
         if static_bounds:                                    
             red_hot_points = red_hots * 30000000.0 * lin_bonus
             dead_cold_points = dead_colds * 300000.0 * lin_bonus
-            bonus_points += dead_cold_points + red_hot_points + (15000000.0 * (hyp_hots ** ratio_bonus) * ratio_bonus * red_hot_mod * lin_bonus)                      
+            hot_points = ((hot_shos ** 2) / hots) * 15000000.0 * lin_bonus
+            hot_points += (hot_shos * 100) if (hot_points > 0) else 0
+            hot_points = 0 if hots > warms else hot_points
+            bonus_points += dead_cold_points + red_hot_points + hot_points
             bonus_points += hsho_points
             bonus_points += 10000000 * shos_above_baseline * lin_bonus            
         else:                     
@@ -399,9 +407,6 @@ def minimize_func(parameters, *data):
                     hot_points = 0
 
                 bonus_points += cool_points + temperate_points + tepid_points + warm_points + hot_points
-
-                # penalize the solution by how far we are from the determined "best" hot %
-                bonus_points -= (ratio_bonus - (hot_shos / hots)) * 60750000.0
             
                 sum_actuals = (hot_shos / hots) + (warm_shos / warms) + (tepid_shos / tepids) + (temperate_shos / temperates) + (cool_shos / cools)
                 red_hot_points = (red_hots + sum_actuals) * 30000000.0
@@ -533,8 +538,8 @@ def main():
     args = (TIM_STLAT_LIST, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
     # nlc = NonlinearConstraint(constr_f, 1.0, 1.0)
-    result = differential_evolution(minimize_func, bounds, args=args, popsize=15, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.5, workers=4, maxiter=400)
+    result = differential_evolution(minimize_func, bounds, args=args, popsize=20, tol=0.0001,
+                                    mutation=(0.05, 1.99), recombination=0.7, workers=4, maxiter=500)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     
