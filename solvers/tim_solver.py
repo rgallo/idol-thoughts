@@ -34,7 +34,7 @@ FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
 
-TIM_STLAT_LIST = tim.TIM.OFFENSE_TERMS + tim.TIM.DEFENSE_TERMS
+TIM_STLAT_LIST = tim.OFFENSE_TERMS + tim.DEFENSE_TERMS
 
 SHUTOUT_PCT = None
 TOTAL_SHUTOUTS = 0
@@ -132,7 +132,7 @@ def calc_linearity(sorted_sho_nsho, red_hots):
     # best possible hot ratio, should favor solutions of equal red hots with better hot ratios    
     return lin_points, best_ratio, hots, shos_above_baseline, sabls, lowest_hot
 
-def run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, tim_tier):
+def run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods):
     awayMods, homeMods = [], []
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
     special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
@@ -145,7 +145,8 @@ def run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitcher
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
     awayStlatdata = calc_stlat_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
     homeStlatdata = calc_stlat_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
-    return tim_tier.calc(awayStlatdata), is_away_shutout, tim_tier.calc(homeStlatdata), is_home_shutout
+    return tim.get_tim_value(terms, awayStlatdata), is_away_shutout, tim.get_tim_value(terms, homeStlatdata), is_home_shutout
+
 
 def minimize_func(parameters, *data):
     run_id = uuid.uuid4()
@@ -177,6 +178,13 @@ def minimize_func(parameters, *data):
         static_bounds = False
         coefficients, stlat_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     base_solver.debug_print("func start: {}".format(starttime), debug3, run_id)
+    sho_vals = []
+    nsho_vals = []
+    all_vals = []
+    sho_nsho = []
+    reject_solution, viability_unchecked = False, True
+    quarter_mean_ratio, quarter_span = 1.0, 0.0
+    min_sho_val, max_sho_val, min_nsho_val, max_nsho_val, median_sho_val, median_nsho_val, mean_sho_val, mean_nsho_val, shos, nshos = 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0, 0
     if not FINAL_SHO_VALS:
         if type(stlat_list) == dict:  # mod mode
             terms = stlat_list
@@ -186,16 +194,6 @@ def minimize_func(parameters, *data):
         else:  # base mode
             terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(coefficients)] * 3))}
             mods = {}
-    results = [[] for _ in range(7)]    
-    tim_tier = tim.TIM("asdf", terms, None, None, None)
-    sho_vals = []
-    nsho_vals = []
-    all_vals = []
-    sho_nsho = []
-    reject_solution, viability_unchecked = False, True
-    quarter_mean_ratio, quarter_span = 1.0, 0.0
-    min_sho_val, max_sho_val, min_nsho_val, max_nsho_val, median_sho_val, median_nsho_val, mean_sho_val, mean_nsho_val, shos, nshos = 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0, 0
-    if not FINAL_SHO_VALS:
         for season in range(3, 12):        
             season_start = datetime.datetime.now()
             base_solver.debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
@@ -243,7 +241,7 @@ def minimize_func(parameters, *data):
                 if not pitchers:
                     raise Exception("No stat file found")
                 for game in paired_games:
-                    awayTIM, awayShutout, homeTIM, homeShutout = run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, tim_tier)                
+                    awayTIM, awayShutout, homeTIM, homeShutout = run_tims(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods)
                     if awayTIM > 0:
                         min_sho_val = awayTIM if awayTIM < min_sho_val and awayShutout else min_sho_val
                         max_sho_val = awayTIM if awayTIM > max_sho_val and awayShutout else max_sho_val
@@ -539,7 +537,7 @@ def main():
             cmd_args.debug2, cmd_args.debug3)
     # nlc = NonlinearConstraint(constr_f, 1.0, 1.0)
     result = differential_evolution(minimize_func, bounds, args=args, popsize=20, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.7, workers=4, maxiter=500)
+                                    mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=500)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     
