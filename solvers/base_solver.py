@@ -1,5 +1,7 @@
 import collections
 import csv
+import time
+import math
 import datetime
 import os
 import re
@@ -13,6 +15,10 @@ STAT_CACHE = {}
 GAME_CACHE = {}
 
 BEST_RESULT = 10000000.0
+BEST_FAIL_RATE = 1.0
+BEST_LINEAR_ERROR = 1.0
+CURRENT_ITERATION = 1
+LAST_CHECKTIME = 0.0
 
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
@@ -95,7 +101,7 @@ def debug_print(s, debug, run_id):
 
 def calc_linear_unex_error(vals, wins_losses, games):
     wins, idx = 0, 0
-    high_val, low_val, high_ratio, low_ratio, error, max_error, min_error = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0
+    high_val, low_val, high_ratio, low_ratio, error, max_error, min_error, max_error_val, max_error_ratio = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0
     high_val = vals[idx]
     while (high_val < 0.5 and idx < len(vals)):        
         wins += wins_losses[idx]
@@ -105,21 +111,31 @@ def calc_linear_unex_error(vals, wins_losses, games):
         wins += wins_losses[idx]
         high_val = vals[idx]        
         high_ratio = float(wins) / float(games)
-        error += (high_ratio - high_val) ** 2
-        max_error = max(high_ratio, high_val) - min(high_ratio, high_val) if max(high_ratio, high_val) - min(high_ratio, high_val) > max_error else max_error
-        min_error = max(high_ratio, high_val) - min(high_ratio, high_val) if max(high_ratio, high_val) - min(high_ratio, high_val) < min_error else min_error            
+        if high_ratio < 0.80:
+            error += (high_ratio - high_val) ** 2
+            max_error_val = high_val if (max(high_ratio, high_val) - min(high_ratio, high_val) > max_error) else max_error_val
+            max_error_ratio = high_ratio if (max(high_ratio, high_val) - min(high_ratio, high_val) > max_error) else max_error_ratio
+            max_error = max(high_ratio, high_val) - min(high_ratio, high_val) if (max(high_ratio, high_val) - min(high_ratio, high_val) > max_error) else max_error
+            min_error = max(high_ratio, high_val) - min(high_ratio, high_val) if (max(high_ratio, high_val) - min(high_ratio, high_val) < min_error) else min_error            
         low_ratio = 1.0 - high_ratio
         low_val = 1.0 - high_val
-        error += (low_ratio - low_val) ** 2        
-        max_error = max(low_ratio, low_val) - min(low_ratio, low_val) if max(low_ratio, low_val) - min(low_ratio, low_val) > max_error else max_error
-        min_error = max(low_ratio, low_val) - min(low_ratio, low_val) if max(low_ratio, low_val) - min(low_ratio, low_val) < min_error else min_error            
+        if low_ratio > 0.20:
+            error += (low_ratio - low_val) ** 2        
+            max_error_val = low_val if (max(low_ratio, low_val) - min(low_ratio, low_val) > max_error) else max_error_val
+            max_error_ratio = low_ratio if (max(low_ratio, low_val) - min(low_ratio, low_val) > max_error) else max_error_ratio
+            max_error = max(low_ratio, low_val) - min(low_ratio, low_val) if (max(low_ratio, low_val) - min(low_ratio, low_val) > max_error) else max_error
+            min_error = max(low_ratio, low_val) - min(low_ratio, low_val) if (max(low_ratio, low_val) - min(low_ratio, low_val) < min_error) else min_error                        
         idx += 1
-    return error, max_error, min_error
+    return error, max_error, min_error, max_error_val, max_error_ratio
 
 def minimize_func(parameters, *data):
     run_id = uuid.uuid4()
     starttime = datetime.datetime.now()
     global BEST_RESULT
+    global CURRENT_ITERATION
+    global BEST_FAIL_RATE
+    global BEST_LINEAR_ERROR
+    global LAST_CHECKTIME
     calc_func, stlat_list, special_case_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []
@@ -190,12 +206,15 @@ def minimize_func(parameters, *data):
     if len(win_loss) > 0:
         sorted_win_loss = [x for _,x in sorted(zip(all_vals, win_loss))]
         all_vals.sort()
-        linear_error, max_linear_error, min_linear_error = calc_linear_unex_error(all_vals, sorted_win_loss, game_counter)    
-        linear_fail = (fail_rate * 100.0) + linear_error
+        linear_error, max_linear_error, min_linear_error, max_error_value, max_error_ratio = calc_linear_unex_error(all_vals, sorted_win_loss, game_counter)    
+        linear_fail = (((fail_rate + 0.0001) * 100.0) ** 2) + linear_error + (max_linear_error * 100)
     else:
         linear_fail = fail_rate
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail
+        if len(win_loss) > 0:
+            BEST_FAIL_RATE = fail_rate
+            BEST_LINEAR_ERROR = linear_error
         debug_print("-"*20, debug, run_id)
         if type(stlat_list) == dict:
             mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)))
@@ -205,10 +224,19 @@ def minimize_func(parameters, *data):
             special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
             if len(win_loss) > 0:
                 debug_print("Best so far - fail rate {:.4f}%, linear error {:.4f}, {} games\n".format(fail_rate * 100.0, linear_error, game_counter) + terms_output + special_case_output, debug, run_id)
-                debug_print("Max linear error {:.4f}%, Min linear error {:.4f}%\n".format(max_linear_error * 100.0, min_linear_error * 100.0), debug, run_id)
+                debug_print("Max linear error {:.4f}% ({:.4f} actual, {:.4f} calculated), Min linear error {:.4f}%\n".format(max_linear_error * 100.0, max_error_ratio * 100, max_error_value * 100, min_linear_error * 100.0), debug, run_id)
             else:
                 debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)
         debug_print("-" * 20, debug, run_id)
+    if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or CURRENT_ITERATION % 500 == 0):
+        if len(win_loss) > 0:
+            debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, linear error {:.4f}".format(BEST_RESULT, CURRENT_ITERATION, (BEST_FAIL_RATE * 100.0), BEST_LINEAR_ERROR), debug, datetime.datetime.now())
+        else:
+            debug_print("Best so far - {:.2f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
+    CURRENT_ITERATION += 1   
+    if (CURRENT_ITERATION % 25000 == 0):
+        time.sleep(600)
+        print("10 minute power nap")
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
