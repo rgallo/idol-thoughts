@@ -603,7 +603,7 @@ def main():
             send_discord_message("Sorry!", message[:DISCORD_SPLIT_LIMIT])
         else:
             print("Generating new stat file, please stand by.")
-        blaseball_stat_csv.generate_file(args.statfile, False, args.archive)
+        blaseball_stat_csv.generate_file(args.statfile, False, args.archive, False)
     team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, game_schedule, day)
     if args.lineupfile:
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data, stat_season_number)
