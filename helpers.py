@@ -86,9 +86,12 @@ def load_data(data_url):
     return DATA_RESULTS[data_url]
 
 
-WEATHERS = ["Void", "Sun 2", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
-            "Glitter", "Blooddrain", "Peanuts", "Birds", "Feedback", "Reverb", "Black Hole"]
+WEATHERS = []
 
 
 def get_weather_idx(weather):
+    if not WEATHERS:
+        weather_json = requests.get("https://raw.githubusercontent.com/xSke/blaseball-site-files/main/data/weather.json"
+                                    "").json()
+        WEATHERS.extend([weather["name"] for weather in weather_json])
     return WEATHERS.index(weather)
