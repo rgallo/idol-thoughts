@@ -220,7 +220,7 @@ def get_stream_snapshot():
     while json_snapshot is None and retries < 5:
         if retries:
             time.sleep(2)  # Sleep after first time
-        json_snapshot = get_testing_snapshot()
+        json_snapshot = get_blaseball_snapshot()
         retries += 1
     if not json_snapshot:
         raise Exception("Unable to get stream snapshot")
