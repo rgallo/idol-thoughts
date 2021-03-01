@@ -379,17 +379,20 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
     awayTIM, awayTIMRank, awayTIMCalc = tim.calculate(awayStlatStats)
     awayAttrs, homeAttrs = get_team_attributes()[awayTeam], get_team_attributes()[homeTeam]
     awayMOFO, homeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs, day, game["weather"])
+    # noModAwayMOFO, noModHomeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs, day, game["weather"], skip_mods=True)
+    # print("Away: {}, Modded MOFO: {}, Unmodded MOFO: {}".format(awayTeam, awayMOFO, noModAwayMOFO))
+    # print("Home: {}, Modded MOFO: {}, Unmodded MOFO: {}".format(homeTeam, homeMOFO, noModHomeMOFO))
     awayK9 = k9.calculate(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
     homeK9 = k9.calculate(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
     results.append(MatchupData(awayPitcher, awayPitcherId, awayTeam, gameId,
-                               float(awayPitcherStats.get("k_per_9", -1.0)), float(awayPitcherStats.get("era", -1.0)),
+                               float(awayPitcherStats.get("strikeouts_per_9", -1.0)), float(awayPitcherStats.get("earned_run_average", -1.0)),
                                awayEmoji, homeTeam, homeEmoji,
                                get_def_off_ratio(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data),
                                awayTIM, awayTIMRank, awayTIMCalc, awayStarStats, game.get("homeBalls", 4),
                                game["homeStrikes"], game["homeBases"], game["awayTeamNickname"],
                                game["homeTeamNickname"], game["awayOdds"], awayMOFO, awayK9))
     results.append(MatchupData(homePitcher, homePitcherId, homeTeam, gameId,
-                               float(homePitcherStats.get("k_per_9", -1.0)), float(homePitcherStats.get("era", -1.0)),
+                               float(homePitcherStats.get("strikeouts_per_9", -1.0)), float(homePitcherStats.get("earned_run_average", -1.0)),
                                homeEmoji, awayTeam, awayEmoji,
                                get_def_off_ratio(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data),
                                homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, game.get("awayBalls", 4),
@@ -430,8 +433,8 @@ def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team
     stlatStats = calc_stlat_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
     timTier, timRank, timCalc = tim.calculate(stlatStats)
     pitcherk9 = k9.calculate(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    return MatchupData(pitcherName, None, None, None, float(pitcherStats.get("k_per_9", -1.0)),
-                       float(pitcherStats.get("era", -1.0)), None, otherTeam, None,
+    return MatchupData(pitcherName, None, None, None, float(pitcherStats.get("strikeouts_per_9", -1.0)),
+                       float(pitcherStats.get("earned_run_average", -1.0)), None, otherTeam, None,
                        get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
                        timTier, timRank, timCalc, starStats, 4, 3, 4, None, None, None, -1, pitcherk9)
 

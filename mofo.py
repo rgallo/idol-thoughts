@@ -10,18 +10,19 @@ WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic"
             "Glitter", "Blooddrain", "Peanuts", "Birds", "Feedback", "Reverb"]
 
 
-def calc_team(terms, termset, mods):
+def calc_team(terms, termset, mods, skip_mods=False):
     total = 0.0
     for termname, val in termset:
         term = terms[termname]
         total += term.calc(val)
-        modterms = (mods or {}).get(termname, [])
-        for modterm in modterms:
-            total += modterm.calc(val)
+        if not skip_mods:
+            modterms = (mods or {}).get(termname, [])
+            for modterm in modterms:
+                total += modterm.calc(val)
     return total
 
 
-def team_defense(terms, pitcher, teamname, mods, team_stat_data, pitcher_stat_data):
+def team_defense(terms, pitcher, teamname, mods, team_stat_data, pitcher_stat_data, skip_mods=False):
     pitcher_data = pitcher_stat_data[pitcher]
     team_data = team_stat_data[teamname]
     termset = (
@@ -40,10 +41,10 @@ def team_defense(terms, pitcher, teamname, mods, team_stat_data, pitcher_stat_da
         ("maxwatchfulness", max(team_data["watchfulness"])),
         ("maxanticapitalism", max(team_data["anticapitalism"])),
         ("maxchasiness", max(team_data["chasiness"])))
-    return calc_team(terms, termset, mods)
+    return calc_team(terms, termset, mods, skip_mods=skip_mods)
 
 
-def team_offense(terms, teamname, mods, team_stat_data):
+def team_offense(terms, teamname, mods, team_stat_data, skip_mods=False):
     team_data = team_stat_data[teamname]
     termset = (
             ("meantragicness", geomean(team_data["tragicness"])),
@@ -68,7 +69,7 @@ def team_offense(terms, teamname, mods, team_stat_data):
             ("maxcontinuation", max(team_data["continuation"])),
             ("maxgroundfriction", max(team_data["groundFriction"])),
             ("maxindulgence", max(team_data["indulgence"])))
-    return calc_team(terms, termset, mods)
+    return calc_team(terms, termset, mods, skip_mods=skip_mods)
 
 
 def get_mods(mods, awayAttrs, homeAttrs, weather):
@@ -103,17 +104,20 @@ def setup(weather, awayAttrs, homeAttrs):
 
 
 def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs,
-              day, weather):
+              day, weather, skip_mods=False):
     terms, awayMods, homeMods = setup(weather, awayAttrs, homeAttrs)
     return get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods,
-                    homeMods)
+                    homeMods, skip_mods=skip_mods)
 
 
-def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods):
-    away_offense = abs(team_offense(terms, awayTeam, awayMods, team_stat_data))
-    away_defense = abs(team_defense(terms, awayPitcher, awayTeam, awayMods, team_stat_data, pitcher_stat_data))
-    home_offense = abs(team_offense(terms, homeTeam, homeMods, team_stat_data))
-    home_defense = abs(team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data))
+def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods,
+             skip_mods=False):
+    away_offense = abs(team_offense(terms, awayTeam, awayMods, team_stat_data, skip_mods=skip_mods))
+    away_defense = abs(team_defense(terms, awayPitcher, awayTeam, awayMods, team_stat_data, pitcher_stat_data,
+                                    skip_mods=skip_mods))
+    home_offense = abs(team_offense(terms, homeTeam, homeMods, team_stat_data, skip_mods=skip_mods))
+    home_defense = abs(team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data,
+                                    skip_mods=skip_mods))
     numerator = (away_offense - home_defense) - (home_offense - away_defense)
     denominator = (away_offense - home_defense) + (home_offense - away_defense)
     if not denominator:
