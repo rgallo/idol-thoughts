@@ -166,9 +166,11 @@ def minimize_func(parameters, *data):
     calc_func, stlat_list, special_case_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []
+    mod_mode = False
     if type(stlat_list) == dict:  # mod mode
         terms = stlat_list
         mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
+        mod_mode = True
         for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)):
             mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)
     else:  # base mode
@@ -178,6 +180,7 @@ def minimize_func(parameters, *data):
     game_counter, fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0
     quarter_fail = 100.0
     linear_fail = 100.0
+    linear_error = 0.0
     reject_solution, viability_unchecked = False, True
     all_vals = []
     win_loss = []
@@ -267,13 +270,16 @@ def minimize_func(parameters, *data):
     # need to sort win_loss to match up with what will be the sorted set of vals
     # also need to only do this when solving MOFO    
     fail_points, linear_points = 0.0, 0.0
-    if len(win_loss) > 0:
+    if len(win_loss) > 0 and not mod_mode:
         sorted_win_loss = [x for _,x in sorted(zip(all_vals, win_loss))]
         all_vals.sort()
         linear_error, max_linear_error, min_linear_error, max_error_value, max_error_ratio, errors, shape = calc_linear_unex_error(all_vals, sorted_win_loss, game_counter)    
         fail_points = ((fail_rate * 1000.0) ** 2) * 2.5
         linear_points = (linear_error + ((max_linear_error + max(max_error_ratio, max_error_value)) ** 2) + ((min_linear_error * 10000) ** 2) + (sum(shape) ** 2)) * 2.5
         linear_fail = fail_points + linear_points
+    elif len(win_loss) > 0 and mod_mode:
+        fail_points = ((fail_rate * 1000.0) ** 2) * 2.5
+        linear_fail = fail_points
     elif game_counter == TOTAL_GAME_COUNTER:        
         pass_exact = (pass_exact / game_counter) * 100.0
         pass_within_one = (pass_within_one / game_counter) * 100.0
