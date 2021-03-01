@@ -6,7 +6,6 @@ import collections
 import csv
 import json
 import linecache
-import math
 import os
 import random
 import sys
@@ -188,23 +187,42 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     return results
 
 
-def get_stream_snapshot():
+def get_blaseball_snapshot():
     snapshot = None
+    response = requests.get("https://www.blaseball.com/events/streamData", stream=True)
+    for line in response.iter_lines():
+        snapshot = line
+        break
+    try:
+        json_snapshot = json.loads(snapshot.decode("utf-8")[6:])
+    except json.decoder.JSONDecodeError:
+        return None
+    return json_snapshot
+
+
+def get_testing_snapshot():
+    snapshot = None
+    with requests.get("https://api-test.sibr.dev/replay/v1/replay?from=2020-10-19T22:45:00Z", stream=True) as response:
+        for line in response.iter_lines():
+            if line and line.decode("utf-8").startswith("data"):
+                snapshot = line
+                break
+    try:
+        json_snapshot = json.loads(snapshot.decode("utf-8")[5:])
+    except json.decoder.JSONDecodeError:
+        return None
+    return json_snapshot
+
+
+def get_stream_snapshot():
     json_snapshot = None
     retries = 0
-    while snapshot is None and retries < 5:
+    while json_snapshot is None and retries < 5:
         if retries:
             time.sleep(2)  # Sleep after first time
-        response = requests.get("https://www.blaseball.com/events/streamData", stream=True)
-        for line in response.iter_lines():
-            snapshot = line
-            break
+        json_snapshot = get_testing_snapshot()
         retries += 1
-        try:
-            json_snapshot = json.loads(snapshot.decode("utf-8")[6:])
-        except json.decoder.JSONDecodeError:
-            snapshot = None
-    if not snapshot:
+    if not json_snapshot:
         raise Exception("Unable to get stream snapshot")
     return json_snapshot
 
@@ -304,16 +322,6 @@ def get_all_pitcher_performance_stats(pitcher_ids, season):
     return {pitcher["player_id"]: pitcher for pitcher in resjson}
 
 
-def get_tim(stlatdata, non_shutout=False):
-    tim_tiers = tim.get_tiers() if not non_shutout else [tim.DEAD_COLD]
-    tier_length = len(tim_tiers)
-    for idx, tier in enumerate(tim_tiers):
-        calc, check = tier.check(stlatdata)
-        if check:
-            return tier, tier_length-idx, calc
-    return tim.TIM_ERROR, -1, -1
-
-
 def calc_star_max_mean_stats(pitcher, defenseteamname, offenseteamname, team_stat_data, pitcher_stat_data):
     pitchingstars = pitcher_stat_data[pitcher]["pitchingStars"]
     maxbatstars = max(team_stat_data[offenseteamname]["battingStars"])
@@ -367,8 +375,8 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
     homeStarStats = calc_star_max_mean_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
     awayStlatStats = calc_stlat_stats(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
     homeStlatStats = calc_stlat_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
-    awayTIM, awayTIMRank, awayTIMCalc = get_tim(awayStlatStats)
-    homeTIM, homeTIMRank, homeTIMCalc = get_tim(homeStlatStats)
+    homeTIM, homeTIMRank, homeTIMCalc = tim.calculate(homeStlatStats)
+    awayTIM, awayTIMRank, awayTIMCalc = tim.calculate(awayStlatStats)
     awayAttrs, homeAttrs = get_team_attributes()[awayTeam], get_team_attributes()[homeTeam]
     awayMOFO, homeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs, day, game["weather"])
     awayK9 = k9.calculate(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
@@ -420,12 +428,12 @@ def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team
     pitcherStats = pitcher_performance_stats.get(pitcherId, {})
     starStats = calc_star_max_mean_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
     stlatStats = calc_stlat_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    tim, timRank, timCalc = get_tim(stlatStats)
+    timTier, timRank, timCalc = tim.calculate(stlatStats)
     pitcherk9 = k9.calculate(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
     return MatchupData(pitcherName, None, None, None, float(pitcherStats.get("k_per_9", -1.0)),
                        float(pitcherStats.get("era", -1.0)), None, otherTeam, None,
                        get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
-                       tim, timRank, timCalc, starStats, 4, 3, 4, None, None, None, -1, pitcherk9)
+                       timTier, timRank, timCalc, starStats, 4, 3, 4, None, None, None, -1, pitcherk9)
 
 
 def sort_results(results):

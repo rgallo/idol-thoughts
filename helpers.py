@@ -2,6 +2,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import os
 from functools import reduce
 import requests
 
@@ -41,7 +42,7 @@ def parse_terms(data, special_case_list):
 def load_terms(term_url, special_cases=None):
     if term_url not in TERM_RESULTS:
         special_case_list = [case.lower() for case in special_cases] if special_cases else []
-        data = requests.get(term_url).text
+        data = requests.get(term_url, headers={"Authorization": "token {}".format(os.getenv("GITHUB_TOKEN"))}).text
         results, special = parse_terms(data, special_case_list)
         TERM_RESULTS[term_url] = (results, special)
     return TERM_RESULTS[term_url]
@@ -67,15 +68,30 @@ def parse_mods(data):
 
 def load_mods(mods_url):
     if mods_url not in MOD_RESULTS:
-        data = requests.get(mods_url).text
+        data = requests.get(mods_url, headers={"Authorization": "token {}".format(os.getenv("GITHUB_TOKEN"))}).text
         mods = parse_mods(data)
         MOD_RESULTS[mods_url] = mods
     return MOD_RESULTS[mods_url]
 
 
-WEATHERS = ["Void", "Sun 2", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
-            "Glitter", "Blooddrain", "Peanuts", "Birds", "Feedback", "Reverb", "Black Hole"]
+DATA_RESULTS = {}
+
+
+def load_data(data_url):
+    if data_url not in DATA_RESULTS:
+        data = requests.get(data_url, headers={"Authorization": "token {}".format(os.getenv("GITHUB_TOKEN"))}).text
+        splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
+        result = {row[0].lower(): row[1:] for row in splitdata}
+        DATA_RESULTS[data_url] = result
+    return DATA_RESULTS[data_url]
+
+
+WEATHERS = []
 
 
 def get_weather_idx(weather):
+    if not WEATHERS:
+        weather_json = requests.get("https://raw.githubusercontent.com/xSke/blaseball-site-files/main/data/weather.json"
+                                    "").json()
+        WEATHERS.extend([weather["name"] for weather in weather_json])
     return WEATHERS.index(weather)
