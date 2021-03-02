@@ -303,6 +303,7 @@ def minimize_func(parameters, *data):
         if type(stlat_list) == dict:
             mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)))
             debug_print("Best so far - fail rate {:.4f}%, quarter fail {:.4f}\n".format(fail_rate * 100.0, quarter_fail * 100) + mods_output, debug, run_id)
+            debug_print("Best so far - fail rate {:.4f}%, quarter fail {:.4f}\n".format(fail_rate * 100.0, quarter_fail * 100), debug, run_id)
         else:
             terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
             special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
