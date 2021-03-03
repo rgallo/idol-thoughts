@@ -26,7 +26,7 @@ from helpers import geomean, get_weather_idx
 MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "so9", "era", "defemoji",
                                          "vsteam", "offemoji", "defoff", "tim", "timrank", "timcalc",
                                          "stardata", "ballcount", "strikecount", "basecount", "pitcherteamnickname",
-                                         "vsteamnickname", "websiteodds", "mofoodds", "k9"])
+                                         "vsteamnickname", "websiteodds", "mofoodds", "k9", "weather"])
 
 MatchupPair = namedtuple("MatchupPair", ["awayMatchupData", "homeMatchupData"])
 
@@ -154,6 +154,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
                                     max(matchup_pair.awayMatchupData.mofoodds, matchup_pair.homeMatchupData.mofoodds))
     sorted_pairs = sorted(matchup_pairs, key=sortkey, reverse=True)
     batches = len(matchup_pairs)
+    sun2weather, bhweather = get_weather_idx("Sun 2"), get_weather_idx("Black Hole")
     webhooks = [Webhook(url=discord_webhook_url,
                         content="__**Day {}**__".format(day) if not batch else discord_hr(10, char='-')) for batch in range(batches)]
     odds_mismatch, notify, picks_to_click = [], [], []
@@ -188,10 +189,11 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         results.append(webhook.execute())
         time.sleep(.5)
     if picks_to_click:
-        p2c_description = "\n".join(["{} @ {} - EV: {}".format(
+        p2c_description = "\n".join(["{} @ {} - EV: {} {}".format(
             "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
             "**{}**".format(result.homeMatchupData.pitcherteamnickname) if result.homeMatchupData.mofoodds > result.awayMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
-            "{:.2f}".format(get_ev(result.awayMatchupData, result.homeMatchupData))
+            "{:.2f}".format(get_ev(result.awayMatchupData, result.homeMatchupData)),
+            ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else ""
         ) for result in sorted(picks_to_click, key=lambda result: get_ev(result.awayMatchupData, result.homeMatchupData), reverse=True)])
         results.append(send_discord_message("__Picks To Click__", p2c_description, screen=screen))
     if odds_mismatch:
@@ -418,14 +420,14 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
                                get_def_off_ratio(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data),
                                awayTIM, awayTIMRank, awayTIMCalc, awayStarStats, game.get("homeBalls", 4),
                                game["homeStrikes"], game["homeBases"], game["awayTeamNickname"],
-                               game["homeTeamNickname"], game["awayOdds"], awayMOFO, awayK9))
+                               game["homeTeamNickname"], game["awayOdds"], awayMOFO, awayK9, game["weather"]))
     results.append(MatchupData(homePitcher, homePitcherId, homeTeam, gameId,
                                float(homePitcherStats.get("strikeouts_per_9", -1.0)), float(homePitcherStats.get("earned_run_average", -1.0)),
                                homeEmoji, awayTeam, awayEmoji,
                                get_def_off_ratio(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data),
                                homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, game.get("awayBalls", 4),
                                game["awayStrikes"], game["awayBases"], game["homeTeamNickname"],
-                               game["awayTeamNickname"], game["homeOdds"], homeMOFO, homeK9))
+                               game["awayTeamNickname"], game["homeOdds"], homeMOFO, homeK9, game["weather"]))
     return results
 
 
@@ -464,7 +466,7 @@ def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team
     return MatchupData(pitcherName, None, None, None, float(pitcherStats.get("strikeouts_per_9", -1.0)),
                        float(pitcherStats.get("earned_run_average", -1.0)), None, otherTeam, None,
                        get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
-                       timTier, timRank, timCalc, starStats, 4, 3, 4, None, None, None, -1, pitcherk9)
+                       timTier, timRank, timCalc, starStats, 4, 3, 4, None, None, None, -1, pitcherk9, None)
 
 
 def sort_results(results):
