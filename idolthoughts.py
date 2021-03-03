@@ -130,6 +130,21 @@ def add_score_adjustments(description, matchup_data, score_adjustments):
     return new_description
 
 
+def webodds_payout(odds, amt):
+    if odds == .5:
+        return 2 * amt
+    if odds < .5:
+        return amt * (2 + (.0015 * ((100 * (.5 - odds)) ** 2.2)))
+    else:
+        return amt * (.571 + 1.429 / (1 + (3 * (odds - .5)) ** .77))
+
+
+def get_ev(awayMatchupData, homeMatchupData):
+    mofoodds, webodds = (awayMatchupData.mofoodds, awayMatchupData.websiteodds) if awayMatchupData.mofoodds > homeMatchupData.mofoodds else (homeMatchupData.mofoodds, homeMatchupData.websiteodds)
+    payout = webodds_payout(webodds, 1.0)
+    return payout * mofoodds
+
+
 def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pitchers, score_adjustments, screen=False):
     Webhook, Embed = (PrintWebhook, PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
@@ -141,7 +156,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     batches = len(matchup_pairs)
     webhooks = [Webhook(url=discord_webhook_url,
                         content="__**Day {}**__".format(day) if not batch else discord_hr(10, char='-')) for batch in range(batches)]
-    odds_mismatch, notify = [], []
+    odds_mismatch, notify, picks_to_click = [], [], []
     for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
         awayOdds, homeOdds = get_formatted_odds(awayMatchupData.websiteodds, homeMatchupData.websiteodds)
@@ -158,6 +173,9 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         homeOutput = add_score_adjustments(homeOutput, homeMatchupData, score_adjustments)
         if (awayMatchupData.mofoodds < .5 < awayMatchupData.websiteodds) or (awayMatchupData.mofoodds > .5 > awayMatchupData.websiteodds) or (.495 <= awayMatchupData.websiteodds < .505):
             odds_mismatch.append(result)
+        ev = get_ev(awayMatchupData, homeMatchupData)
+        if ev >= 1.0:
+            picks_to_click.append(result)
         if notify_tim_rank and notify_role:
             if awayMatchupData.timrank >= int(notify_tim_rank):
                 notify.append(awayMatchupData)
@@ -169,6 +187,13 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     for webhook in webhooks:
         results.append(webhook.execute())
         time.sleep(.5)
+    if picks_to_click:
+        p2c_description = "\n".join(["{} @ {} - EV: {}".format(
+            "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
+            "**{}**".format(result.homeMatchupData.pitcherteamnickname) if result.homeMatchupData.mofoodds > result.awayMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
+            "{:.2f}".format(get_ev(result.awayMatchupData, result.homeMatchupData))
+        ) for result in sorted(picks_to_click, key=lambda result: get_ev(result.awayMatchupData, result.homeMatchupData), reverse=True)])
+        results.append(send_discord_message("__Picks To Click__", p2c_description, screen=screen))
     if odds_mismatch:
         odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, MOFO: **{}** {:.2f}%".format(
             "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
@@ -315,11 +340,14 @@ def get_player_slug(playername):
 def get_all_pitcher_performance_stats(pitcher_ids, season):
     if not pitcher_ids:
         return {}
-    url = ("https://api.blaseball-reference.com/v1/playerStats?category=pitching&season={}&playerIds={}"
+    url = ("https://api.blaseball-reference.com/v2/stats?group=pitching&type=season&season={}&gameType=R&playerIds={}"
            "").format(season, ",".join(pitcher_ids))
-    response = requests.get(url)
-    resjson = response.json()
-    return {pitcher["player_id"]: pitcher for pitcher in resjson}
+    try:
+        response = requests.get(url)
+        resjson = response.json()
+        return {split["player"]["id"]: split["stat"] for split in resjson[0]["splits"]}
+    except:
+        return {}
 
 
 def calc_star_max_mean_stats(pitcher, defenseteamname, offenseteamname, team_stat_data, pitcher_stat_data):
