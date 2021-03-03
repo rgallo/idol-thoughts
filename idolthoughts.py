@@ -511,7 +511,8 @@ def write_day(filepath, season_number, day):
 
 def print_results(day, results, score_adjustments):
     print("Day {}".format(day))
-    odds_mismatch = []
+    odds_mismatch, picks_to_click = [], []
+    sun2weather, bhweather = get_weather_idx("Sun 2"), get_weather_idx("Black Hole")
     for result in sort_results(results):
         print(("{} ({}, {} K9, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat), {:.2f} D/O^2, {:.2f}% WSO, {:.2f}% MOFO"
                "").format(result.pitchername, result.tim.name, result.k9, result.so9, result.era, result.vsteam,
@@ -525,6 +526,15 @@ def print_results(day, results, score_adjustments):
                                                   score_adjustment.score))
         if (result.mofoodds > .5 and result.websiteodds < .5) or (.495 <= result.websiteodds < .505 and result.mofoodds >= .5):
             odds_mismatch.append(result)
+        payout = webodds_payout(result.websiteodds, 1.0)
+        if payout * result.mofoodds >= 1.0:
+            picks_to_click.append(result)
+    if picks_to_click:
+        print("Picks To Click")
+        print("\n".join(["{} - EV: {} {}".format(
+            result.pitcherteamnickname, "{:.2f}".format(webodds_payout(result.websiteodds, 1.0) * result.mofoodds),
+            "(Sun 2)" if result.weather == sun2weather else "(Black Hole)" if result.weather == bhweather else ""
+        ) for result in sorted(picks_to_click, key=lambda result: webodds_payout(result.websiteodds, 1.0) * result.mofoodds, reverse=True)]))
     if odds_mismatch:
         print("Odds Mismatches")
         print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in odds_mismatch))
