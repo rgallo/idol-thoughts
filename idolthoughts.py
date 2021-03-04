@@ -325,11 +325,12 @@ def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):
             for key in (PITCHING_STLATS + ["pitchingStars"]):
                 pitcherstatdata[new_row["name"]][key] = float(new_row[key])
         elif new_row["position"] == "lineup":
-            if "SHELLED" not in new_row["permAttr"]:
+            if "SHELLED" not in new_row["permAttr"] and "ELSEWHERE" not in new_row["permAttr"]:
                 for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
                     teamstatdata[team][key].append(float(new_row[key]))
-            for key in (DEFENSE_STLATS + ["defenseStars"]):
-                teamstatdata[team][key].append(float(new_row[key]))
+            if "ELSEWHERE" not in new_row["permAttr"]:
+                for key in (DEFENSE_STLATS + ["defenseStars"]):
+                    teamstatdata[team][key].append(float(new_row[key]))
     return teamstatdata, pitcherstatdata
 
 
