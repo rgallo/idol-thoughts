@@ -76,7 +76,7 @@ def main():
     args = (get_k9_results, K9_STLAT_LIST, K9_SPECIAL_CASES, [], stat_file_map, game_list, team_attrs,
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.5, workers=4, maxiter=1000)
+                                    mutation=(0.05, 1.99), recombination=0.5, workers=1, maxiter=1000)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in
                     zip(K9_STLAT_LIST, zip(*[iter(result.x[:-len(K9_SPECIAL_CASES)])] * 3))))
     print("factors,{},{}".format(result.x[-2], result.x[-1]))
