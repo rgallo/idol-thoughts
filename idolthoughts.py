@@ -638,7 +638,10 @@ def main():
                     message = message.format(total_seconds // 60, "" if total_seconds // 60 == 1 else "s",
                                              "{} seconds ".format(total_seconds % 60) if total_seconds % 60 else "")
                     if args.discord:
-                        is_magic = len([game["finalized"] is False and "Magic" in (game["awayTeamNickname"], game["homeTeamNickname"]) for game in today_schedule])
+                        is_magic = False
+                        for game in today_schedule:
+                            if not game["finalized"] and "Magic" in (game["awayTeamNickname"], game["homeTeamNickname"]):
+                                is_magic = True
                         send_discord_message("Sorry!{}".format(" :frog:" if is_magic else ""), message)
                     else:
                         print(message)
@@ -656,6 +659,9 @@ def main():
                 print(message)
     stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
     game_schedule = today_schedule if args.today else streamdata['value']['games']['tomorrowSchedule']
+    if not game_schedule and day >= 100 and not args.today:
+        time.sleep(30)
+        game_schedule = get_stream_snapshot()['value']['games']['tomorrowSchedule']
     if not game_schedule and not args.lineupfile:
         print("No games found for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
