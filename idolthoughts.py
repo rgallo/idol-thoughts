@@ -621,10 +621,11 @@ def main():
         print("Already ran for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
     today_schedule = streamdata['value']['games']['schedule']
-    games_complete = False
     retry_count = int(os.getenv("RETRY_COUNT", 10))
     show_waiting_message = int(os.getenv("SHOW_WAITING_MESSAGE", 1))
     sleep_interval = int(os.getenv("WAIT_INTERVAL", 30))
+    games_complete = all([game["finalized"] for game in today_schedule])
+    is_postseason = any([game["isPostseason"] for game in today_schedule])
     if not args.today and not args.forcerun and not args.testfile and retry_count > 0:
         first_try = True
         for _ in range(retry_count):
@@ -664,6 +665,8 @@ def main():
         game_schedule = get_stream_snapshot()['value']['games']['tomorrowSchedule']
     if not game_schedule and not args.lineupfile:
         print("No games found for Season {} Day {}, exiting.".format(season_number+1, day))
+        if games_complete and is_postseason:
+            write_day(args.dayfile, season_number, day)
         sys.exit(0)
     all_pitcher_ids = []
     for game in game_schedule:
