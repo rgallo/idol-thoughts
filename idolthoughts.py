@@ -289,18 +289,35 @@ def adjust_by_pct(row, pct, stlats, star_func):
     new_row = row.copy()
     original_stars = star_func(row)
     new_stars = original_stars
-    while new_stars < original_stars * (1.0 + pct):
+    op = operator.lt if pct >= 0.0 else operator.gt
+    while op(new_stars, original_stars * (1.0 + pct)):
         for stlat in stlats:
-            if stlat in INVERSE_STLATS and stlat != "tragicness":
-                new_row[stlat] = max(float(new_row[stlat]) - .01, .01)
-            elif stlat not in INVERSE_STLATS:
-                new_row[stlat] = float(new_row[stlat]) + .01
+            if pct >= 0.0:
+                if stlat in INVERSE_STLATS and stlat != "tragicness":
+                    new_row[stlat] = max(float(new_row[stlat]) - .01, .001)
+                elif stlat not in INVERSE_STLATS:
+                    new_row[stlat] = float(new_row[stlat]) + .01
+            else:
+                if stlat in INVERSE_STLATS and stlat != "tragicness":
+                    new_row[stlat] = float(new_row[stlat]) + .01
+                elif stlat not in INVERSE_STLATS:
+                    new_row[stlat] = max(float(new_row[stlat]) - .01, .001)
         new_stars = star_func(new_row)
     return new_row
 
 
-def adjust_stlats(row, game, day, team_attrs=None):
+def adjust_stlats(row, game, day, player_attrs, team_attrs=None):
     new_row = row.copy()
+    if "UNDERPERFORMING" in player_attrs:
+        new_row = adjust_by_pct(new_row, -0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
+        new_row = adjust_by_pct(new_row, -0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
+        new_row = adjust_by_pct(new_row, -0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
+        new_row = adjust_by_pct(new_row, -0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
+    if "OVERPERFORMING" in player_attrs:
+        new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
+        new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
+        new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
+        new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
     if game:
         team = row["team"]
         current_team_attrs = (team_attrs if team_attrs is not None else get_team_attributes()).get(team, {})
@@ -319,6 +336,11 @@ def adjust_stlats(row, game, day, team_attrs=None):
         if "AFFINITY_FOR_CROWS" in current_team_attrs and game["weather"] == bird_weather:
             new_row = adjust_by_pct(new_row, 0.50, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
             new_row = adjust_by_pct(new_row, 0.50, BATTING_STLATS, blaseball_stat_csv.batting_stars)
+        if ("EARLBIRDS" in current_team_attrs and 1 <= day <= 27) or ("LATE_TO_PARTY" in current_team_attrs and 73 <= day <= 99):
+            new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
+            new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
+            new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
+            new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
     return new_row
 
 
@@ -332,20 +354,21 @@ def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):
     pitcherstatdata = collections.defaultdict(lambda: {})
     teamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: []))
     for row in filedata:
+        player_attrs = row["permAttr"] + row["seasAttr"] + row["weekAttr"] + row["gameAttr"]
         team = row["team"]
         if games:
             game = games.get(team)
-            new_row = adjust_stlats(row, game, day, team_attrs)
+            new_row = adjust_stlats(row, game, day, player_attrs, team_attrs)
         else:
             new_row = row
         if new_row["position"] == "rotation":
             for key in (PITCHING_STLATS + ["pitchingStars"]):
                 pitcherstatdata[new_row["name"]][key] = float(new_row[key])
         elif new_row["position"] == "lineup":
-            if "SHELLED" not in new_row["permAttr"] and "ELSEWHERE" not in new_row["permAttr"]:
+            if "SHELLED" not in player_attrs and "ELSEWHERE" not in player_attrs:
                 for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
                     teamstatdata[team][key].append(float(new_row[key]))
-            if "ELSEWHERE" not in new_row["permAttr"]:
+            if "ELSEWHERE" not in player_attrs:
                 for key in (DEFENSE_STLATS + ["defenseStars"]):
                     teamstatdata[team][key].append(float(new_row[key]))
     return teamstatdata, pitcherstatdata
