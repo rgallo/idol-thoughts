@@ -1,5 +1,7 @@
 import collections
 import csv
+import time
+import math
 import datetime
 import json
 import os
@@ -217,8 +219,9 @@ def minimize_func(parameters, *data):
     reject_solution, viability_unchecked = False, True
     all_vals = []
     win_loss = []    
-    for season in range(3, 13):
-        if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
+    for season in range(3, 12):
+        # if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
+        if (season in HAS_GAMES and not HAS_GAMES[season]):
             continue
         season_start = datetime.datetime.now()
         debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
