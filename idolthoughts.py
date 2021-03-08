@@ -649,6 +649,9 @@ def main():
     sleep_interval = int(os.getenv("WAIT_INTERVAL", 30))
     games_complete = all([game["finalized"] for game in today_schedule])
     is_postseason = any([game["isPostseason"] for game in today_schedule])
+    if all([(game["day"] == 0 and game["gameStart"] is False) for game in today_schedule]):
+        print("This season's games haven't started yet")
+        sys.exit(0)
     if not args.today and not args.forcerun and not args.testfile and retry_count > 0:
         first_try = True
         for _ in range(retry_count):
