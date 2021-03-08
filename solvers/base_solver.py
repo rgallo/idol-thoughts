@@ -1,6 +1,7 @@
 import collections
 import csv
 import datetime
+import json
 import os
 import re
 import uuid
@@ -55,10 +56,25 @@ def get_stat_file_map(stat_folder):
     return results
 
 
-def get_schedule_from_paired_games(paired_games):
+def get_team_name(team_id, season, day, team_lookup={}):
+    if not team_lookup:
+        with open('team_lookup.json') as f:
+            team_lookup.update(json.load(f))
+    results = team_lookup[team_id]
+    if len(results) == 1:
+        return results[0][2]
+    last_result = results[0]
+    for result_season, result_day, team_name in results:
+        if result_season > season or (result_season == season and result_day > day):
+            return last_result[2]
+        last_result = [result_season, result_day, team_name]
+    return last_result[2]
+
+
+def get_schedule_from_paired_games(paired_games, season, day):
     return [{
-        "homeTeamName": game["home"]["team_name"],
-        "awayTeamName": game["away"]["team_name"],
+        "homeTeamName": get_team_name(game["home"]["team_id"], season, day),
+        "awayTeamName": get_team_name(game["away"]["team_id"], season, day),
         "weather": int(game["home"]["weather"]),
     } for game in paired_games]
 
@@ -152,7 +168,7 @@ def minimize_func(parameters, *data):
                 GAME_CACHE[(season, day)] = games
             season_days += 1
             paired_games = pair_games(games)
-            schedule = get_schedule_from_paired_games(paired_games)
+            schedule = get_schedule_from_paired_games(paired_games, season, day)
             day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
             cached_stats = STAT_CACHE.get((season, day))
             if cached_stats:
