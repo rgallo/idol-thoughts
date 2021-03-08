@@ -137,7 +137,7 @@ def webodds_payout(odds, amt):
     if odds < .5:
         return amt * (2 + (.0015 * ((100 * (.5 - odds)) ** 2.2)))
     else:
-        return amt * (.571 + 1.429 / (1 + (3 * (odds - .5)) ** .77))
+        return amt * (3.206 / (1 + ((.443 * (odds - .5)) ** .95)) - 1.206)
 
 
 def get_ev(awayMatchupData, homeMatchupData, loser=False):
