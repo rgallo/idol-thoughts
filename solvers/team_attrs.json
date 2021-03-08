@@ -116,6 +116,9 @@
     "Miami Dalé": [
       "WALK_IN_THE_PARK"
     ],
+    "San Francisco Lovers": [
+      "LOVE"
+    ],
     "Unlimited Tacos": [
       "WALK_IN_THE_PARK"
     ],
@@ -127,6 +130,26 @@
     ],
     "Boston Flowers": [
       "WALK_IN_THE_PARK",
+      "GROWTH"
+    ],
+    "Philly Pies": [
+      "AFFINITY_FOR_CROWS"
+    ]
+  },
+  "12": {
+    "Yellowstone Magic": [
+      "O_NO"
+    ],
+    "Charleston Shoe Thieves": [
+      "TRAVELING"
+    ],
+    "Hellmouth Sunbeams": [
+      "BASE_INSTINCTS"
+    ],
+    "San Francisco Lovers": [
+      "LOVE"
+    ],
+    "Boston Flowers": [
       "GROWTH"
     ],
     "Philly Pies": [
