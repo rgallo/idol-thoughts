@@ -85,7 +85,7 @@ def should_regen(day_mods):
 
 def get_attrs_from_game(season_team_attrs, game, side):
     attrs = set()
-    team_attrs = season_team_attrs.get(game.get("team_name"), [])
+    team_attrs = season_team_attrs.get(get_team_name(game["team_id"], int(game["season"]), int(game["day"])), [])
     for attr in team_attrs:
         if (attr == "TRAVELING" and side != "away") or (
                 attr == "AFFINITY_FOR_CROWS" and int(game["weather"]) != BIRD_WEATHER):
