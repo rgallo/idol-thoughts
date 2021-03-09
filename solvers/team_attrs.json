@@ -134,9 +134,6 @@
     ],
     "Philly Pies": [
       "AFFINITY_FOR_CROWS"
-    ],
-    "San Francisco Lovers": [
-      "LOVE"
     ]
   },
   "12": {
@@ -157,26 +154,6 @@
     ],
     "San Francisco Lovers": [
       "LOVE"
-    ]
-  },
-  "12": {
-    "Yellowstone Magic": [
-      "O_NO"
-    ],
-    "Charleston Shoe Thieves": [
-      "TRAVELING"
-    ],
-    "Hellmouth Sunbeams": [
-      "BASE_INSTINCTS"
-    ],
-    "San Francisco Lovers": [
-      "LOVE"
-    ],
-    "Boston Flowers": [
-      "GROWTH"
-    ],
-    "Philly Pies": [
-      "AFFINITY_FOR_CROWS"
     ]
   }
 }
