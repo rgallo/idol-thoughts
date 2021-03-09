@@ -84,7 +84,7 @@ def get_mofo_list(game_list, team_attrs, stat_file_map, season):
             away_odds, home_odds = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data,
                                                   pitcher_stat_data, season_team_attrs.get(awayTeam, []),
                                                   season_team_attrs.get(homeTeam, []), day, away_game["weather"])
-            mofo_list.append([homeTeam, game["away"]["game_id"], away_odds])
+            mofo_list.append([homeTeam, game["away"]["game_id"], away_odds*100.0])
     return mofo_list
 
 
