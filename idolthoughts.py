@@ -144,7 +144,7 @@ def get_ev(awayMatchupData, homeMatchupData, loser=False):
     op = operator.gt if not loser else operator.le
     mofoodds, webodds = (awayMatchupData.mofoodds, awayMatchupData.websiteodds) if op(awayMatchupData.mofoodds, homeMatchupData.mofoodds) else (homeMatchupData.mofoodds, homeMatchupData.websiteodds)
     payout = webodds_payout(webodds, 1.0)
-    return payout * mofoodds
+    return payout * min(mofoodds, 0.8)
 
 
 def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pitchers, score_adjustments, screen=False):
@@ -568,7 +568,7 @@ def print_results(day, results, score_adjustments):
         if (result.mofoodds > .5 and result.websiteodds < .5) or (.495 <= result.websiteodds < .505 and result.mofoodds >= .5):
             odds_mismatch.append(result)
         payout = webodds_payout(result.websiteodds, 1.0)
-        if payout * result.mofoodds >= 1.0:
+        if payout * min(result.mofoodds, 0.8) >= 1.0:
             if result.mofoodds >= .5:
                 picks_to_click.append(result)
             else:
@@ -578,13 +578,13 @@ def print_results(day, results, score_adjustments):
         print("\n".join(["{} - EV: {:.2f} {}".format(
             result.pitcherteamnickname, webodds_payout(result.websiteodds, 1.0) * result.mofoodds,
             "(Sun 2)" if result.weather == sun2weather else "(Black Hole)" if result.weather == bhweather else ""
-        ) for result in sorted(picks_to_click, key=lambda result: webodds_payout(result.websiteodds, 1.0) * result.mofoodds, reverse=True)]))
+        ) for result in sorted(picks_to_click, key=lambda result: webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8), reverse=True)]))
     if not_your_dad:
         print("Look, I'm Not Your Dad")
         print("\n".join(["{} - EV: {:.2f}, MOFO {:.2f}% {}".format(
             result.pitcherteamnickname, webodds_payout(result.websiteodds, 1.0) * result.mofoodds, result.mofoodds * 100.0,
             "(Sun 2)" if result.weather == sun2weather else "(Black Hole)" if result.weather == bhweather else ""
-        ) for result in sorted(not_your_dad, key=lambda result: webodds_payout(result.websiteodds, 1.0) * result.mofoodds, reverse=True)]))
+        ) for result in sorted(not_your_dad, key=lambda result: webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8), reverse=True)]))
     if odds_mismatch:
         print("Odds Mismatches")
         print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in odds_mismatch))
