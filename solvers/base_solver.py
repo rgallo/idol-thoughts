@@ -212,14 +212,14 @@ def minimize_func(parameters, *data):
     quarter_fail = 100.0
     linear_fail = 100.0
     linear_error = 0.0
-    love_rate, instinct_rate, ono_rate, wip_rate, exk_rate, exb_rate = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    love_rate, instinct_rate, ono_rate, wip_rate, exk_rate, exb_rate = 100.0, 100.0, 100.0, 100.0, 100.0, 100.0
     k9_max_err, k9_min_err = 0, 0
     mod_fails = [0] * 6
     mod_games = [0] * 6
     reject_solution, viability_unchecked = False, True
     all_vals = []
     win_loss = []    
-    for season in range(3, 12):
+    for season in range(11, 14):
         # if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
         if (season in HAS_GAMES and not HAS_GAMES[season]):
             continue
@@ -373,10 +373,12 @@ def minimize_func(parameters, *data):
         love_rate = (mod_fails[0] / mod_games[0]) * 100.0
         instinct_rate = (mod_fails[1] / mod_games[1]) * 100.0
         ono_rate = (mod_fails[2] / mod_games[2]) * 100.0
-        wip_rate = (mod_fails[3] / mod_games[3]) * 100.0
+        #currently no new data available for WIP or EXB
+        #wip_rate = (mod_fails[3] / mod_games[3]) * 100.0
         exk_rate = (mod_fails[4] / mod_games[4]) * 100.0
-        exb_rate = (mod_fails[5] / mod_games[5]) * 100.0              
-        tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB)) / 2.0
+        #exb_rate = (mod_fails[5] / mod_games[5]) * 100.0              
+        #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB)) / 2.0
+        tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK)) / 2.0
         if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (wip_rate <= BEST_WIP) or (exk_rate <= BEST_EXK) or (exb_rate <= BEST_EXB):
             if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (wip_rate <= BEST_WIP + tolerance) and (exk_rate <= BEST_EXK + tolerance) and (exb_rate <= BEST_EXB + tolerance):
                 linear_fail = (love_rate + instinct_rate + ono_rate + wip_rate + exk_rate + exb_rate) / 6.0
