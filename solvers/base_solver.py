@@ -16,7 +16,7 @@ from mofo import get_mods
 STAT_CACHE = {}
 GAME_CACHE = {}
 
-BEST_RESULT = 10000000.0
+BEST_RESULT = 10000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
 BEST_EXACT = 10000000000.0
@@ -360,16 +360,16 @@ def minimize_func(parameters, *data):
         TOTAL_GAME_COUNTER = game_counter if (game_counter > TOTAL_GAME_COUNTER) else TOTAL_GAME_COUNTER                
     # need to sort win_loss to match up with what will be the sorted set of vals
     # also need to only do this when solving MOFO        
-    fail_points, linear_points = 0.0, 0.0
+    fail_points, linear_points = 10000000000.0, 10000000000.0
     sorted_win_loss = [x for _,x in sorted(zip(all_vals, win_loss))]
     all_vals.sort()
     linear_error, max_linear_error, min_linear_error, max_error_value, max_error_ratio, errors, shape = calc_linear_unex_error(all_vals, sorted_win_loss, game_counter)
     linear_points = (linear_error + ((max_linear_error + max(max_error_ratio, max_error_value)) ** 2) + ((min_linear_error * 10000) ** 2) + (sum(shape) ** 2)) * 2.5
+    linear_fail = 90000000000.0
     if len(win_loss) > 0 and not mod_mode:            
         fail_points = ((fail_rate * 1000.0) ** 2) * 2.5        
         linear_fail = fail_points + linear_points
-    elif len(win_loss) > 0 and mod_mode:
-        fail_points = fail_rate * 100.0        
+    elif len(win_loss) > 0 and mod_mode:        
         love_rate = (mod_fails[0] / mod_games[0]) * 100.0
         instinct_rate = (mod_fails[1] / mod_games[1]) * 100.0
         ono_rate = (mod_fails[2] / mod_games[2]) * 100.0
@@ -379,12 +379,14 @@ def minimize_func(parameters, *data):
         #exb_rate = (mod_fails[5] / mod_games[5]) * 100.0              
         #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB)) / 2.0
         tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK)) / 2.0
-        if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (wip_rate <= BEST_WIP) or (exk_rate <= BEST_EXK) or (exb_rate <= BEST_EXB):
-            if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (wip_rate <= BEST_WIP + tolerance) and (exk_rate <= BEST_EXK + tolerance) and (exb_rate <= BEST_EXB + tolerance):
+        #if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (wip_rate <= BEST_WIP) or (exk_rate <= BEST_EXK) or (exb_rate <= BEST_EXB):
+        if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (exk_rate <= BEST_EXK):
+            #if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (wip_rate <= BEST_WIP + tolerance) and (exk_rate <= BEST_EXK + tolerance) and (exb_rate <= BEST_EXB + tolerance):
+            if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (exk_rate <= BEST_EXK + tolerance):
                 #linear_fail = (love_rate + instinct_rate + ono_rate + wip_rate + exk_rate + exb_rate) / 6.0
-                linear_fail = (((love_rate + instinct_rate + ono_rate + exk_rate) * 2.5) ** 2) * 2.5
-                linear_fail += linear_points
-    elif game_counter == TOTAL_GAME_COUNTER:        
+                fail_points = ((love_rate + instinct_rate + ono_rate + exk_rate) * 2.5) ** 2.0                
+                linear_fail = fail_points + linear_points
+    elif game_counter == TOTAL_GAME_COUNTER and TOTAL_GAME_COUNTER > 0:        
         pass_exact = (pass_exact / game_counter) * 100.0
         pass_within_one = (pass_within_one / game_counter) * 100.0
         pass_within_two = (pass_within_two / game_counter) * 100.0
@@ -412,12 +414,12 @@ def minimize_func(parameters, *data):
             mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)))
             debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + mods_output, debug, run_id)
             debug_print("{} games".format(game_counter), debug, run_id)
-            debug_print("Love fail rate {:.4f}%, Best {:.4f}%".format(love_rate, BEST_LOVE), debug, run_id)
-            debug_print("Base Instincts fail rate {:.4f}%, Best {:.4f}%".format(instinct_rate, BEST_INSTINCT), debug, run_id)
-            debug_print("O No fail rate {:.4f}%, Best {:.4f}%".format(ono_rate, BEST_ONO), debug, run_id)
-            #debug_print("Walk in the Park fail rate {:.4f}%, Best {:.4f}%".format(wip_rate, BEST_WIP), debug, run_id)
-            debug_print("Extra Strike fail rate {:.4f}%, Best {:.4f}%".format(exk_rate, BEST_EXK), debug, run_id)            
-            #debug_print("Extra Base fail rate {:.4f}%, Best {:.4f}%".format(exb_rate, BEST_EXB), debug, run_id)                        
+            debug_print("{:.4f}% Love fail rate, Best {:.4f}%".format(love_rate, BEST_LOVE), debug, run_id)
+            debug_print("{:.4f}% Base Instincts fail rate, Best {:.4f}%".format(instinct_rate, BEST_INSTINCT), debug, run_id)
+            debug_print("{:.4f}% O No fail rate, Best {:.4f}%".format(ono_rate, BEST_ONO), debug, run_id)
+            #debug_print("{:.4f}% Walk in the Park fail rate, Best {:.4f}%".format(wip_rate, BEST_WIP), debug, run_id)
+            debug_print("{:.4f}% Extra Strike fail rate%, Best {:.4f}%".format(exk_rate, BEST_EXK), debug, run_id)            
+            #debug_print("{:.4f}% Extra Base fail rate, Best {:.4f}%".format(exb_rate, BEST_EXB), debug, run_id)                        
             debug_print("Best so far - fail rate {:.4f}%, linear error {:.4f}".format(fail_rate * 100.0, linear_error), debug, run_id)
             debug_print("Max linear error {:.4f}% ({:.4f} actual, {:.4f} calculated), Min linear error {:.4f}%".format(max_linear_error, max_error_ratio, max_error_value, min_linear_error), debug, run_id)
             if len(errors) > 0:
@@ -429,8 +431,7 @@ def minimize_func(parameters, *data):
                 shape_output = ", ".join(map(str, shape))
                 debug_print("Notable errors: " + shape_output, debug, run_id)
             else:
-                debug_print("Somehow no errors", debug, run_id)
-            debug_print("{} games".format(game_counter), debug, run_id)
+                debug_print("Somehow no errors", debug, run_id)            
             debug_print("Fail error points = {:.4f}, Linearity error points = {:.4f}, total = {:.4f}".format(fail_points, linear_points, linear_fail), debug, run_id)
         else:
             terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
