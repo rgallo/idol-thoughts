@@ -391,7 +391,7 @@ def minimize_func(parameters, *data):
         if fail_rate < BEST_EXACT:
             BEST_EXACT = fail_rate
             debug_print("Fail rate = {:.4f}".format(fail_rate), debug, "::::::::")
-            linear_fail = (k9_max_err - k9_min_err) + fail_rate - (pass_exact / 100.0) - (pass_within_one / 1000.0) - (pass_within_two / 10000.0) - (pass_within_three / 20000.0) - (pass_within_four / 40000.0)                
+            linear_fail = (k9_max_err - k9_min_err) + (fail_rate * 100) - pass_exact - (pass_within_one / 2.0) - (pass_within_two / 4.0) - (pass_within_three / 8.0) - (pass_within_four / 16.0)                
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail        
         if len(win_loss) > 0:

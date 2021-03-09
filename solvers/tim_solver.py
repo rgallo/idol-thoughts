@@ -198,7 +198,7 @@ def minimize_func(parameters, *data):
     quarter_mean_ratio, quarter_span = 1.0, 0.0
     min_sho_val, max_sho_val, min_nsho_val, max_nsho_val, median_sho_val, median_nsho_val, mean_sho_val, mean_nsho_val, shos, nshos = 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0, 0
     if not FINAL_SHO_VALS:        
-        for season in range(3, 12):     
+        for season in range(11, 14):     
             if season in HAS_GAMES and not HAS_GAMES[season]:
                 continue
             season_start = datetime.datetime.now()
@@ -555,7 +555,7 @@ def main():
             cmd_args.debug2, cmd_args.debug3)
     # nlc = NonlinearConstraint(constr_f, 1.0, 1.0)
     result = differential_evolution(minimize_func, bounds, args=args, popsize=20, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.5, workers=1, maxiter=500)
+                                    mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=500)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(TIM_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     
