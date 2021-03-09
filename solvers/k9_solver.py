@@ -35,11 +35,11 @@ def get_k9_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, p
         away_innings, home_innings = float(away_game["innings_pitched"]), float(home_game["innings_pitched"])
         away_so9, home_so9 = round((away_strikeouts / away_innings) * 9.0), round((home_strikeouts / home_innings) * 9.0)   
         try:
-            away_k9 = get_k9(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases})
+            away_k9 = get_k9(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases}, 10000)
         except ValueError:
             away_k9 = -100
         try:
-            home_k9 = get_k9(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases})
+            home_k9 = get_k9(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases}, 10000)
         except ValueError:
             home_k9 = -100
         fail_k9, away_fail_by, home_fail_by = 2, 0, 0

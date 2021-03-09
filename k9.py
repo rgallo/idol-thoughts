@@ -62,14 +62,12 @@ def setup():
     return terms, special_cases
 
 
-def get_k9(pitcher, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, terms, special_cases):
+def get_k9(pitcher, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, terms, special_cases, ceiling=27):
     pitching = calc_pitching(terms, pitcher, pitcher_stat_data)
     everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_stat_data)
     factor_exp, factor_const = special_cases["factors"][:2]
-    kplus1PI = (pitching ** float(factor_exp)) + everythingelse - float(factor_const)
-    k9 = max((kplus1PI * 9) - 1, 0)
-    #specifically for soling, need to not limit the output to 27
-    #k9 = max(min((kplus1PI * 9) - 1, 27), 0)
+    kplus1PI = (pitching ** float(factor_exp)) + everythingelse - float(factor_const)    
+    k9 = max(min((kplus1PI * 9) - 1, ceiling), 0)
     return round(k9)
 
 
