@@ -576,13 +576,13 @@ def print_results(day, results, score_adjustments):
     if picks_to_click:
         print("Picks To Click")
         print("\n".join(["{} - EV: {:.2f} {}".format(
-            result.pitcherteamnickname, webodds_payout(result.websiteodds, 1.0) * result.mofoodds,
+            result.pitcherteamnickname, webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8),
             "(Sun 2)" if result.weather == sun2weather else "(Black Hole)" if result.weather == bhweather else ""
         ) for result in sorted(picks_to_click, key=lambda result: webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8), reverse=True)]))
     if not_your_dad:
         print("Look, I'm Not Your Dad")
         print("\n".join(["{} - EV: {:.2f}, MOFO {:.2f}% {}".format(
-            result.pitcherteamnickname, webodds_payout(result.websiteodds, 1.0) * result.mofoodds, result.mofoodds * 100.0,
+            result.pitcherteamnickname, webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8), result.mofoodds * 100.0,
             "(Sun 2)" if result.weather == sun2weather else "(Black Hole)" if result.weather == bhweather else ""
         ) for result in sorted(not_your_dad, key=lambda result: webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8), reverse=True)]))
     if odds_mismatch:
