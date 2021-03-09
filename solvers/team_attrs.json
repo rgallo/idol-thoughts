@@ -155,5 +155,27 @@
     "San Francisco Lovers": [
       "LOVE"
     ]
+  },
+  "13": {
+    "San Francisco Lovers": [
+      "EXTRA_STRIKE",
+      "LOVE"
+    ],
+    "Breckenridge Jazz Hands": [
+      "EXTRA_STRIKE"
+    ],
+    "Baltimore Crabs": [
+      "EXTRA_STRIKE"
+    ],
+    "Hellmouth Sunbeams": [
+      "BASE_INSTINCTS"
+    ],
+    "Yellowstone Magic": [
+      "O_NO"
+    ],
+    "Charleston Shoe Thieves": [
+      "EXTRA_STRIKE",
+      "TRAVELING"
+    ]
   }
 }
