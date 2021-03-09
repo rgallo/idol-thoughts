@@ -53,7 +53,7 @@ def handle_args():
 def main():
     print(datetime.datetime.now())
     cmd_args = handle_args()
-    bounds = [(0, 10), (0, 3), (-3, 3)] * len(MOFO_STLAT_LIST)
+    bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST)
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
@@ -61,7 +61,7 @@ def main():
     args = (get_mofo_results, MOFO_STLAT_LIST, None, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.0001,
-                                    mutation=(0.3, 1.5), workers=1, maxiter=1000)
+                                    mutation=(0.05, 1.99), recombination=0.5, workers=1, maxiter=500)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, None, stat_file_map,
