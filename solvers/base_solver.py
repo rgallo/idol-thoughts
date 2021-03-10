@@ -347,7 +347,7 @@ def minimize_func(parameters, *data):
                             if homeMods > 1:
                                 multi_mod_fails += game_fail_counter
                                 multi_mod_games += game_game_counter
-                        if awayMods == 1 and homeMods == 1:
+                        if awayMods > 0 and homeMods > 0:
                             mvm_fails += game_fail_counter
                             mvm_games += game_game_counter
                 elif game_game_counter == 2:                    
@@ -453,7 +453,11 @@ def minimize_func(parameters, *data):
             debug_print("{:.4f}% Base Instincts fail rate, Best {:.4f}%".format(instinct_rate, BEST_INSTINCT), debug, run_id)
             debug_print("{:.4f}% O No fail rate, Best {:.4f}%".format(ono_rate, BEST_ONO), debug, run_id)
             #debug_print("{:.4f}% Walk in the Park fail rate, Best {:.4f}%".format(wip_rate, BEST_WIP), debug, run_id)
-            debug_print("{:.4f}% Extra Strike fail rate%, Best {:.4f}%".format(exk_rate, BEST_EXK), debug, run_id)            
+            debug_print("{:.4f}% Extra Strike fail rate, Best {:.4f}%".format(exk_rate, BEST_EXK), debug, run_id)            
+            if multi_mod_games > 0:
+                debug_print("{:.4f}% multimod fail rate, {} games".format((multi_mod_fails / multi_mod_games) * 100.0, multi_mod_games), debug, run_id)            
+            if mvm_games > 0:
+                debug_print("{:.4f}% mod vs mod fail rate, {} games".format((mvm_fails / mvm_games) * 100.0, mvm_games), debug, run_id)
             #debug_print("{:.4f}% Extra Base fail rate, Best {:.4f}%".format(exb_rate, BEST_EXB), debug, run_id)                        
             debug_print("Best so far - fail rate {:.4f}%, linear error {:.4f}".format(fail_rate * 100.0, linear_error), debug, run_id)
             debug_print("Max linear error {:.4f}% ({:.4f} actual, {:.4f} calculated), Min linear error {:.4f}%".format(max_linear_error, max_error_ratio, max_error_value, min_linear_error), debug, run_id)
