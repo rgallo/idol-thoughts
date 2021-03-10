@@ -623,6 +623,7 @@ def handle_args():
     parser.add_argument('--testfile', help="path to file with test data in jsonl format, pass optional line number as "
                                            "filename:n, otherwise random line is used")
     parser.add_argument('--env', help="path to .env file, defaults to .env in same directory")
+    parser.add_argument('--justlooking', help="don't update lastday file", action='store_true')
     args = parser.parse_args()
     if not args.print and not args.discord and not args.airtable and not args.discordprint and not args.lineupfile:
         print("No output specified")
@@ -737,7 +738,8 @@ def main():
             print_results(day, results, score_adjustments)
     else:
         print("No results")
-    write_day(args.dayfile, season_number, day)
+    if not args.justlooking:
+        write_day(args.dayfile, season_number, day)
 
 
 if __name__ == "__main__":
