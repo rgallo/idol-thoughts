@@ -3,6 +3,8 @@ import json
 import collections
 import requests
 from dotenv import load_dotenv
+import sys
+sys.path.append("..")
 
 import mofo
 from idolthoughts import load_stat_data
@@ -79,8 +81,8 @@ def get_mofo_list(game_list, team_attrs, stat_file_map, season):
             away_game, home_game = game["away"], game["home"]
             awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
             homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
-            # if len(season_team_attrs.get(awayTeam, []) + season_team_attrs.get(homeTeam, [])) > 0:
-            #     continue
+            #if len(season_team_attrs.get(awayTeam, []) + season_team_attrs.get(homeTeam, [])) > 0:
+                #continue
             away_odds, home_odds = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data,
                                                   pitcher_stat_data, season_team_attrs.get(awayTeam, []),
                                                   season_team_attrs.get(homeTeam, []), day, away_game["weather"])
