@@ -181,7 +181,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         if ev >= 1.0:
             picks_to_click.append(result)
         loser_ev = get_ev(awayMatchupData, homeMatchupData, loser=True)
-        if loser_ev >= 1.0:
+        if loser_ev >= 1.0 and loser_ev >= ev:
             not_your_dad.append(result)
         if notify_tim_rank and notify_role:
             if awayMatchupData.timrank >= int(notify_tim_rank):
