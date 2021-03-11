@@ -151,6 +151,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     Webhook, Embed = (PrintWebhook, PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     notify_tim_rank, notify_role = os.getenv("NOTIFY_TIM_RANK"), os.getenv("NOTIFY_ROLE")
+    siesta_notify_role = os.getenv("SIESTA_NOTIFY_ROLE")
     sortkey = lambda matchup_pair: (max(matchup_pair.awayMatchupData.timrank, matchup_pair.homeMatchupData.timrank),
                                     max(matchup_pair.awayMatchupData.k9, matchup_pair.homeMatchupData.k9),
                                     max(matchup_pair.awayMatchupData.mofoodds, matchup_pair.homeMatchupData.mofoodds))
@@ -228,6 +229,10 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         notify_message += "\n".join(["{}, {} - **{}**".format(matchup_data.pitchername, matchup_data.pitcherteamnickname,
                                                             matchup_data.tim.name) for matchup_data in notify])
         results.append(Webhook(url=discord_webhook_url, content=notify_message).execute())
+    if siesta_notify_role and day in (27, 72):
+        siesta_notify_message = "<@&{}> Siesta coming up!".format(notify_role)
+        siesta_notify_message += "\nRemember to get your bets in before all the current games end!"
+        results.append(Webhook(url=discord_webhook_url, content=siesta_notify_message).execute())
     return results
 
 
