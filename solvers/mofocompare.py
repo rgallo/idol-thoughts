@@ -21,7 +21,8 @@ def compare(season, mofo_list):
             mofogames[gameid] = [teamname, 100-float(othermofoodds), float(othermofoodds)]
     mismatches = 0
     missing = 0
-    moforight, webright, moforight_mismatch, webright_mismatch, totalgames = 0, 0, 0, 0, 0
+    moforight, webright, moforight_mismatch, webright_mismatch, totalgames, dadbets = 0, 0, 0, 0, 0, 0
+    mofomismatchpayouts, webmismatchpayouts, dadcash = 0.0, 0.0, 0.0
     games = requests.get("https://api.sibr.dev/chronicler/v1/games?order=desc&season={}".format(season-1)).json()["data"]
     for game in games:
         gameid = game["gameId"]
@@ -41,22 +42,35 @@ def compare(season, mofo_list):
         awayScore, homeScore = gamedata["awayScore"], gamedata["homeScore"]
         mofoCorrect = (mofoodds > 50 and ((mofoIsAway and awayScore > homeScore) or (not mofoIsAway and homeScore > awayScore))) or (mofoodds < 50 and ((mofoIsAway and awayScore < homeScore) or (not mofoIsAway and homeScore < awayScore)))
         webCorrect = (awayOdds > homeOdds and awayScore > homeScore) or (awayOdds < homeOdds and awayScore < homeScore)
+        isdadbet = (min(mofoodds, othermofoodds) * webodds_payout((min(awayOdds, homeOdds)) / 100.0, 1)) > 1.0 and (min(mofoodds, othermofoodds) * webodds_payout((min(awayOdds, homeOdds)) / 100.0, 1)) > (max(mofoodds, othermofoodds) * webodds_payout((max(awayOdds, homeOdds)) / 100.0, 1))
+        if isdadbet: 
+            dadbets += 1
+            if not mofoCorrect:
+                dadcash += round(webodds_payout((min(awayOdds, homeOdds)) / 100.0, 1000))                
+            else:
+                dadcash -= 1000
         if mofoCorrect:
-            moforight += 1
+            moforight += 1            
         if webCorrect:
-            webright += 1
+            webright += 1            
         if (mofoIsAway and ((awayOdds > 50 and mofoodds < 50) or (awayOdds < 50 and mofoodds > 50))) or (not mofoIsAway and ((homeOdds > 50 and mofoodds < 50) or (homeOdds < 50 and mofoodds > 50))):
             print("season {} day {}\nmofoteam: {}, awayteam: {}, hometeam: {}, mofo is away: {}\nmofoodds: {}, awayodds: {}, homeodds: {}\nawayscore: {}, homescore: {}".format(int(gamedata["season"])+1, int(gamedata["day"]+1), mofoteamname, awayTeamName, homeTeamName, mofoIsAway, mofoodds, awayOdds, homeOdds, awayScore, homeScore))
             mismatches += 1
             if mofoCorrect:
                 moforight_mismatch += 1
+                mofomismatchpayouts += round(webodds_payout((min(awayOdds, homeOdds)) / 100.0, 1000))
                 print("Mofo correct\n----")
             else:
                 webright_mismatch += 1
+                webmismatchpayouts += round(webodds_payout((max(awayOdds, homeOdds)) / 100.0, 1000))
                 print("web correct\n----")
     print("missing games: {}, total counted games: {}".format(missing, len(mofogames)))
+    print("MOFO payout multiplier mismatches: {}".format(mofomismatchpayouts))
+    print("Web payout multiplier mismatches: {}".format(webmismatchpayouts))    
+    print("MOFO mismatch profit margin: {:.4f} times maxbet".format(((mofomismatchpayouts - webmismatchpayouts)/(mismatches)) / 1000.0))
+    print("Dad cash: {:.4f} times maxbet".format((dadcash / 1000.0) / dadbets))
     print("MOFO right: {}/{}, {:.2f}%".format(moforight, totalgames, (moforight/totalgames) * 100.0))
-    print("Web right: {}/{}, {:.2f}%".format(webright, totalgames, (webright / totalgames) * 100.0))
+    print("Web right: {}/{}, {:.2f}%".format(webright, totalgames, (webright / totalgames) * 100.0))    
     print ("Total mismatches: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(mismatches, moforight_mismatch, (moforight_mismatch/mismatches) * 100.0, webright_mismatch, (webright_mismatch/mismatches)*100.0))
 
 
@@ -89,6 +103,13 @@ def get_mofo_list(game_list, team_attrs, stat_file_map, season):
             mofo_list.append([homeTeam, game["away"]["game_id"], away_odds*100.0])
     return mofo_list
 
+def webodds_payout(odds, amt):
+    if odds == .5:
+        return 2 * amt
+    if odds < .5:
+        return amt * (2 + (.0015 * ((100 * (.5 - odds)) ** 2.2)))
+    else:
+        return amt * (3.206 / (1 + ((.443 * (odds - .5)) ** .95)) - 1.206) 
 
 def handle_args():
     parser = argparse.ArgumentParser()
