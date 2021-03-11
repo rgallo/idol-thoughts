@@ -31,7 +31,14 @@ BEST_ONO = 10000000000.0
 BEST_WIP = 10000000000.0
 BEST_EXK = 10000000000.0
 BEST_EXB = 10000000000.0
+BASE_LOVE = 10000000000.0
+BASE_INSTINCT = 10000000000.0
+BASE_ONO = 10000000000.0
+BASE_WIP = 10000000000.0
+BASE_EXK = 10000000000.0
+BASE_EXB = 10000000000.0
 WORST_ERROR = 1000000000
+MOD_BASELINE = False
 HAS_GAMES = {}
 
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
@@ -194,8 +201,15 @@ def minimize_func(parameters, *data):
     global BEST_WIP
     global BEST_EXK
     global BEST_EXB
+    global BASE_LOVE
+    global BASE_INSTINCT
+    global BASE_ONO
+    global BASE_WIP
+    global BASE_EXK
+    global BASE_EXB
     global HAS_GAMES
     global WORST_ERROR
+    global MOD_BASELINE
     calc_func, stlat_list, special_case_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []
@@ -204,8 +218,12 @@ def minimize_func(parameters, *data):
         terms = stlat_list
         mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
         mod_mode = True
-        for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)):
-            mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)
+        if MOD_BASELINE:
+            for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)):
+                mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)
+        else:
+            for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)):
+                mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(0, 0, 1)            
     else:  # base mode
         terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}
         mods = {}
@@ -412,10 +430,18 @@ def minimize_func(parameters, *data):
                 #wip_rate = (mod_fails[3] / mod_games[3]) * 100.0
                 exk_rate = (mod_fails[4] / mod_games[4]) * 100.0
                 #exb_rate = (mod_fails[5] / mod_games[5]) * 100.0              
-                #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB)) / 2.0
+                #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB)) / 2.0                
                 tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK)) / 2.0
                 #if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (wip_rate <= BEST_WIP) or (exk_rate <= BEST_EXK) or (exb_rate <= BEST_EXB):
-                if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (exk_rate <= BEST_EXK):
+                if not MOD_BASELINE:
+                    BASE_LOVE = love_rate
+                    BASE_INSTINCT = instinct_rate
+                    BASE_ONO = ono_rate
+                    BASE_WIP = wip_rate
+                    BASE_EXK = exk_rate
+                    BASE_EXB = exb_rate                    
+                    MOD_BASELINE = True
+                if (love_rate <= BASE_LOVE) and (instinct_rate <= BASE_INSTINCT) and (ono_rate <= BASE_ONO) and (exk_rate <= BASE_EXK):
                     #if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (wip_rate <= BEST_WIP + tolerance) and (exk_rate <= BEST_EXK + tolerance) and (exb_rate <= BEST_EXB + tolerance):
                     if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (exk_rate <= BEST_EXK + tolerance):
                         #linear_fail = (love_rate + instinct_rate + ono_rate + wip_rate + exk_rate + exb_rate) / 6.0
@@ -436,7 +462,7 @@ def minimize_func(parameters, *data):
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
             BEST_LINEAR_ERROR = linear_error
-            if mod_mode:
+            if mod_mode:                
                 debug_print("last best Love fail rate {:.4f}%".format(BEST_LOVE), debug, run_id)
                 BEST_LOVE = love_rate if (love_rate < BEST_LOVE) else BEST_LOVE
                 BEST_INSTINCT = instinct_rate if (instinct_rate < BEST_INSTINCT) else BEST_INSTINCT
