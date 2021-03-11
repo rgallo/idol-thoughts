@@ -230,7 +230,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
                                                             matchup_data.tim.name) for matchup_data in notify])
         results.append(Webhook(url=discord_webhook_url, content=notify_message).execute())
     if siesta_notify_role and day in (28, 73):
-        siesta_notify_message = "<@&{}> Siesta coming up!".format(notify_role)
+        siesta_notify_message = "<@&{}> Siesta coming up!".format(siesta_notify_role)
         siesta_notify_message += "\nRemember to get your bets in before all the current games end!"
         results.append(Webhook(url=discord_webhook_url, content=siesta_notify_message).execute())
     return results
