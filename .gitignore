@@ -2,7 +2,7 @@
 .idea/
 bot_thanks.py
 explanations/
-lastday.txt
+lastday*.txt
 lineup.json
 output*.csv
 olddata/
@@ -115,6 +115,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+*.env
 env/
 venv/
 ENV/
