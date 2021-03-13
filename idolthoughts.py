@@ -214,13 +214,14 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         results.append(send_discord_message("__Look, I'm Not Your Dad__", linyd_description, screen=screen))
         time.sleep(.5)
     if odds_mismatch:
-        odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, MOFO: **{}** {:.2f}%".format(
+        odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, MOFO: **{}** {:.2f}% {}".format(
             "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
             "**{}**".format(result.homeMatchupData.pitcherteamnickname) if result.homeMatchupData.mofoodds > result.awayMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.websiteodds > result.homeMatchupData.websiteodds else result.homeMatchupData.pitcherteamnickname,
             (max(result.awayMatchupData.websiteodds, result.homeMatchupData.websiteodds)) * 100.0,
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
-            (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0)
+            (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0,
+            ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else "")
                                       for result in odds_mismatch])
         results.append(send_discord_message("__Odds Mismatches__", odds_description, screen=screen))
         time.sleep(.5)
