@@ -20,7 +20,8 @@ BATTER_CACHE = {}
 BEST_RESULT = 10000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
-BEST_EXACT = 10000000000.0
+BEST_UNEXVAR_ERROR = -100.0
+BEST_EXACT = 0.0
 CURRENT_ITERATION = 1
 LAST_CHECKTIME = 0.0
 BEST_QUARTER_FAIL = 1.0
@@ -38,7 +39,7 @@ BASE_ONO = 10000000000.0
 BASE_WIP = 10000000000.0
 BASE_EXK = 10000000000.0
 BASE_EXB = 10000000000.0
-WORST_ERROR = 1000000000
+WORST_ERROR = 1000000000.0
 MOD_BASELINE = False
 HAS_GAMES = {}
 
@@ -559,6 +560,7 @@ def minimize_batman_func(parameters, *data):
     global BEST_RESULT
     global CURRENT_ITERATION
     global BEST_FAIL_RATE    
+    global BEST_UNEXVAR_ERROR
     global BEST_EXACT
     global LAST_CHECKTIME
     global BEST_QUARTER_FAIL    
@@ -571,7 +573,7 @@ def minimize_batman_func(parameters, *data):
     mods = {}
     special_cases = parameters[-len(special_case_list):] if special_case_list else []
     bat_counter, fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0    
-    batman_max_err, batman_min_err = 0, 0        
+    batman_max_err, batman_min_err = 0.0, 100000000.0        
     batman_unexvar = 0.0
     reject_solution, viability_unchecked = False, True        
     for season in range(11, 14):
@@ -606,7 +608,7 @@ def minimize_batman_func(parameters, *data):
             day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
             cached_stats = STAT_CACHE.get((season, day))
             if cached_stats:
-                team_stat_data, pitcher_stat_data, pitchers, batter_stat_data, batters = cached_stats
+                team_stat_data, pitcher_stat_data, players = cached_stats
             else:
                 stat_filename = stat_file_map.get((season, day))
                 if stat_filename:
@@ -639,20 +641,25 @@ def minimize_batman_func(parameters, *data):
                 good_batter_perf_data = []                                
                 last_lineup_id = ""   
                 lineup_size = 0
-                for batter_perf in batter_perf_data:                                        
+                for batter_perf in batter_perf_data:              
+                    battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
+                    pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)
+                    batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
+                    if not batter_list_dict:
+                        continue
                     if batter_perf["batter_team_id"] != last_lineup_id:
                         lineup_size = 0
                         for countbatter in batter_perf_data:
                             if batter_perf["batter_team_id"] == countbatter["batter_team_id"]:
                                 lineup_size += 1
                     last_lineup_id = batter_perf["batter_team_id"]
-                    battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
-                    pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)
-                    bat_bat_counter, bat_fail_counter, batman_fail_by = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, batter_perf["pitcher_id"], 
+                    
+                    pitchername = players[batter_perf["pitcher_id"]][0]                                        
+                    bat_bat_counter, bat_fail_counter, batman_fail_by = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
                                                                                     batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                    
                     bat_counter += bat_bat_counter
-                    fail_counter += bat_fail_counter
-                    batman_unexvar += batman_fail_by ** 2.0
+                    fail_counter += bat_fail_counter                    
+                    batman_unexvar += (batman_fail_by ** 2.0)                    
                     if bat_bat_counter:                    
                         batman_max_err = batman_fail_by if (batman_fail_by > batman_max_err) else batman_max_err                        
                         batman_min_err = batman_fail_by if (batman_fail_by < batman_min_err) else batman_min_err                        
@@ -682,23 +689,26 @@ def minimize_batman_func(parameters, *data):
     else:
         fail_rate = 1.0    
     # need to sort win_loss to match up with what will be the sorted set of vals
-    # also need to only do this when solving MOFO            
+    # also need to only do this when solving MOFO
+    linear_fail = 90000000000.0
     if not reject_solution:        
         pass_exact = (pass_exact / bat_counter) * 100.0
         pass_within_one = (pass_within_one / bat_counter) * 100.0
         pass_within_two = (pass_within_two / bat_counter) * 100.0
         pass_within_three = (pass_within_three / bat_counter) * 100.0
         pass_within_four = (pass_within_four / bat_counter) * 100.0
-        if fail_rate < BEST_EXACT:
-            BEST_EXACT = fail_rate
-            debug_print("Fail rate = {:.4f}".format(fail_rate), debug, "::::::::")
-        linear_fail = (batman_max_err - batman_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
+        if pass_exact > BEST_EXACT:
+            BEST_EXACT = pass_exact
+            debug_print("Fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
+        if (batman_max_err >= batman_min_err):
+            linear_fail = (batman_max_err - batman_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
     if linear_fail < BEST_RESULT:
-        BEST_RESULT = linear_fail                        
-        BEST_LINEAR_ERROR = batman_unexvar if (batman_unexvar < BEST_LINEAR_ERROR) else BEST_LINEAR_ERROR
+        BEST_RESULT = linear_fail
+        BEST_FAIL_RATE = fail_rate if (fail_rate < BEST_FAIL_RATE) else BEST_FAIL_RATE
+        BEST_UNEXVAR_ERROR = batman_unexvar if ((batman_unexvar < BEST_UNEXVAR_ERROR) or (BEST_UNEXVAR_ERROR <= 0)) else BEST_UNEXVAR_ERROR
         terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
         special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""        
-        debug_print("::: Pass Rates over {} games, fail counter {} :::".format(game_counter, fail_counter), debug, run_id)
+        debug_print("::: Pass Rates over {} batters, fail counter {} :::".format(bat_counter, fail_counter), debug, run_id)
         debug_print("Exact = {:.4f}".format(pass_exact), debug, run_id)
         debug_print("+/- 1 = {:.4f}".format(pass_within_one), debug, run_id)
         debug_print("+/- 2 = {:.4f}".format(pass_within_two), debug, run_id)
@@ -707,12 +717,10 @@ def minimize_batman_func(parameters, *data):
         debug_print("min error {:.4f}, max error {:.4f}, unexvar {:.4f}".format(batman_min_err, batman_max_err, batman_unexvar), debug, run_id)
         debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)      
         WORST_ERROR = (batman_max_err - batman_min_err) if ((batman_max_err - batman_min_err) < WORST_ERROR) else WORST_ERROR
-    debug_print("-" * 20 + "\n", debug, run_id)
+        debug_print("Optimizing: {}".format(eventofinterest), debug, run_id)      
+        debug_print("-" * 20 + "\n", debug, run_id)
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0)):
-        if len(win_loss) > 0:
-            debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, linear error {:.4f}".format(BEST_RESULT, CURRENT_ITERATION, (BEST_FAIL_RATE * 100.0), BEST_LINEAR_ERROR), debug, datetime.datetime.now())
-        else:
-            debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
+        debug_print("Best so far - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}".format(BEST_RESULT, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1   
     #if (CURRENT_ITERATION % 25000 == 0):
      #   time.sleep(120)

@@ -400,7 +400,8 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
                     teamstatdata[team][player_id][key] = float(new_row[key])
             if "ELSEWHERE" not in player_attrs:
                 for key in (DEFENSE_STLATS + ["defenseStars"]):
-                    teamstatdata[team][player_id][key] = float(new_row[key])
+                    teamstatdata[team][player_id][key] = float(new_row[key])                
+                teamstatdata[team][player_id]["shelled"] = ("SHELLED" in player_attrs)                
     return teamstatdata, pitcherstatdata
 
 def get_player_slug(playername):

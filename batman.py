@@ -7,8 +7,9 @@ from helpers import geomean, load_terms
 
 
 def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_stat_data, batter, battingteam):
-    pitcher_data = pitcher_stat_data[pitcher]
-    batter_data = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter]
+    pitcher_data = pitcher_stat_data[pitcher]    
+    batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter]
+    batter_data = batter_list_dict[0]    
     return sum([term.calc(val) for term, val in (
         (terms["unthwackability"], pitcher_data["unthwackability"]),
         (terms["ruthlessness"], pitcher_data["ruthlessness"]),
@@ -24,7 +25,7 @@ def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_stat_data, batte
         (terms["martyrdom"], batter_data["martyrdom"])
     )])
 
-def calc_pitcher(terms, pitcher, pitcher_stat_data):
+def calc_pitcher(terms, pitcher, pitcher_stat_data):    
     pitcher_data = pitcher_stat_data[pitcher]    
     return sum([term.calc(val) for term, val in (
         (terms["unthwackability"], pitcher_data["unthwackability"]),
@@ -35,41 +36,41 @@ def calc_pitcher(terms, pitcher, pitcher_stat_data):
     )])
 
 def calc_everythingelse(terms, pitchingteam, battingteam, team_stat_data, batter):
-    pitching_team_data = [stlats for player_id, stlats in team_stat_data[pitchingteam].items()]
-    batting_team_data = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id != batter]
+    pitching_team_data = [stlats for player_id, stlats in team_stat_data[pitchingteam].items()]    
+    batting_team_data = [stlats for player_id, stlats in team_stat_data[battingteam].items() if (player_id != batter and not stlats.get("shelled", False))]
     return sum([term.calc(val) for term, val in (
-        (terms["meanomniscience"], geomean(pitching_team_data["omniscience"])),
-        (terms["meantenaciousness"], geomean(pitching_team_data["tenaciousness"])),
-        (terms["meanwatchfulness"], geomean(pitching_team_data["watchfulness"])),
-        (terms["meananticapitalism"], geomean(pitching_team_data["anticapitalism"])),
-        (terms["meanchasiness"], geomean(pitching_team_data["chasiness"])),
-        (terms["meantragicness"], geomean(batting_team_data["tragicness"])),
-        (terms["meanpatheticism"], geomean(batting_team_data["patheticism"])),
-        (terms["meanthwackability"], geomean(batting_team_data["thwackability"])),
-        (terms["meandivinity"], geomean(batting_team_data["divinity"])),
-        (terms["meanmoxie"], geomean(batting_team_data["moxie"])),
-        (terms["meanmusclitude"], geomean(batting_team_data["musclitude"])),
-        (terms["meanmartyrdom"], geomean(batting_team_data["martyrdom"])),
-        (terms["meanlaserlikeness"], geomean(batting_team_data["laserlikeness"])),
-        (terms["meanbasethirst"], geomean(batting_team_data["baseThirst"])),
-        (terms["meancontinuation"], geomean(batting_team_data["continuation"])),
-        (terms["meangroundfriction"], geomean(batting_team_data["groundFriction"])),
-        (terms["meanindulgence"], geomean(batting_team_data["indulgence"])),
-        (terms["maxomniscience"], max(pitching_team_data["omniscience"])),
-        (terms["maxtenaciousness"], max(pitching_team_data["tenaciousness"])),
-        (terms["maxwatchfulness"], max(pitching_team_data["watchfulness"])),
-        (terms["maxanticapitalism"], max(pitching_team_data["anticapitalism"])),
-        (terms["maxchasiness"], max(pitching_team_data["chasiness"])),
-        (terms["maxthwackability"], max(batting_team_data["thwackability"])),
-        (terms["maxdivinity"], max(batting_team_data["divinity"])),
-        (terms["maxmoxie"], max(batting_team_data["moxie"])),
-        (terms["maxmusclitude"], max(batting_team_data["musclitude"])),
-        (terms["maxmartyrdom"], max(batting_team_data["martyrdom"])),
-        (terms["maxlaserlikeness"], max(batting_team_data["laserlikeness"])),
-        (terms["maxbasethirst"], max(batting_team_data["baseThirst"])),
-        (terms["maxcontinuation"], max(batting_team_data["continuation"])),
-        (terms["maxgroundfriction"], max(batting_team_data["groundFriction"])),
-        (terms["maxindulgence"], max(batting_team_data["indulgence"])),
+        (terms["meanomniscience"], geomean([row["omniscience"] for row in pitching_team_data])),
+        (terms["meantenaciousness"], geomean([row["tenaciousness"] for row in pitching_team_data])),
+        (terms["meanwatchfulness"], geomean([row["watchfulness"] for row in pitching_team_data])),
+        (terms["meananticapitalism"], geomean([row["anticapitalism"] for row in pitching_team_data])),
+        (terms["meanchasiness"], geomean([row["chasiness"] for row in pitching_team_data])),
+        (terms["meantragicness"], geomean([row["tragicness"] for row in batting_team_data])),
+        (terms["meanpatheticism"], geomean([row["patheticism"] for row in batting_team_data])),
+        (terms["meanthwackability"], geomean([row["thwackability"] for row in batting_team_data])),
+        (terms["meandivinity"], geomean([row["divinity"] for row in batting_team_data])),
+        (terms["meanmoxie"], geomean([row["moxie"] for row in batting_team_data])),
+        (terms["meanmusclitude"], geomean([row["musclitude"] for row in batting_team_data])),
+        (terms["meanmartyrdom"], geomean([row["martyrdom"] for row in batting_team_data])),
+        (terms["meanlaserlikeness"], geomean([row["laserlikeness"] for row in batting_team_data])),
+        (terms["meanbasethirst"], geomean([row["baseThirst"] for row in batting_team_data])),
+        (terms["meancontinuation"], geomean([row["continuation"] for row in batting_team_data])),
+        (terms["meangroundfriction"], geomean([row["groundFriction"] for row in batting_team_data])),
+        (terms["meanindulgence"], geomean([row["indulgence"] for row in batting_team_data])),
+        (terms["maxomniscience"], max([row["omniscience"] for row in pitching_team_data])),
+        (terms["maxtenaciousness"], max([row["tenaciousness"] for row in pitching_team_data])),
+        (terms["maxwatchfulness"], max([row["watchfulness"] for row in pitching_team_data])),
+        (terms["maxanticapitalism"], max([row["anticapitalism"] for row in pitching_team_data])),
+        (terms["maxchasiness"], max([row["chasiness"] for row in pitching_team_data])),        
+        (terms["maxthwackability"], max([row["thwackability"] for row in batting_team_data])),
+        (terms["maxdivinity"], max([row["divinity"] for row in batting_team_data])),
+        (terms["maxmoxie"], max([row["moxie"] for row in batting_team_data])),
+        (terms["maxmusclitude"], max([row["musclitude"] for row in batting_team_data])),
+        (terms["maxmartyrdom"], max([row["martyrdom"] for row in batting_team_data])),
+        (terms["maxlaserlikeness"], max([row["laserlikeness"] for row in batting_team_data])),
+        (terms["maxbasethirst"], max([row["baseThirst"] for row in batting_team_data])),
+        (terms["maxcontinuation"], max([row["continuation"] for row in batting_team_data])),
+        (terms["maxgroundfriction"], max([row["groundFriction"] for row in batting_team_data])),
+        (terms["maxindulgence"], max([row["indulgence"] for row in batting_team_data])),
     )])
 
 
