@@ -16,14 +16,15 @@ from solvers.base_solver import pair_games, get_attrs_from_paired_games, get_sch
 def compare(season, mofo_list):
     mofogames = {}
     for game in mofo_list:
-        teamname, gameid, othermofoodds = game
+        teamname, gameid, othermofoodds, weather, homerbi, awayrbi = game
         if gameid not in mofogames:
-            mofogames[gameid] = [teamname, 100-float(othermofoodds), float(othermofoodds)]
+            mofogames[gameid] = [teamname, 100-float(othermofoodds), float(othermofoodds), weather, homerbi, awayrbi]        
     mismatches = 0
     missing = 0
-    moforight, webright, moforight_mismatch, webright_mismatch, totalgames, dadbets = 0, 0, 0, 0, 0, 0
+    moforight, webright, moforight_mismatch, webright_mismatch, totalgames, dadbets, webrightBHS, moforightBHS, bhsmismatches, mofoBHSmismatch, webBHSmismatch = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     mofomismatchpayouts, webmismatchpayouts, dadcash = 0.0, 0.0, 0.0
     games = requests.get("https://api.sibr.dev/chronicler/v1/games?order=desc&season={}".format(season-1)).json()["data"]
+    bhsuns, flippedgames = 0, 0
     for game in games:
         gameid = game["gameId"]
         gamedata = game["data"]
@@ -34,8 +35,9 @@ def compare(season, mofo_list):
             missing += 1
             continue
         else:
-            totalgames += 1
-        mofoteamname, mofoodds, othermofoodds = mofogames[gameid]
+            totalgames += 1                
+        changedAwayScore, changedHomeScore = 0.0, 0.0
+        mofoteamname, mofoodds, othermofoodds, weather, homerbi, awayrbi = mofogames[gameid]        
         awayTeamName, homeTeamName = gamedata["awayTeamName"], gamedata["homeTeamName"]
         mofoIsAway = awayTeamName == mofoteamname
         awayOdds, homeOdds = gamedata["awayOdds"]*100.0, gamedata["homeOdds"]*100.0
@@ -64,9 +66,30 @@ def compare(season, mofo_list):
                 webright_mismatch += 1
                 webmismatchpayouts += round(webodds_payout((max(awayOdds, homeOdds)) / 100.0, 1000))
                 print("web correct\n----")
+        #checking Sun2 and BH
+        if weather == 1 or weather == 14:
+            print("Sun2/BH game unmodified score: {} - {}".format(awayScore, homeScore))
+            if awayrbi >= 10 or homerbi >= 10:
+                print("!!!!!! WEATHER TRIGGERED !!!!!!")
+            bhsuns += 1            
+            if (awayScore > homeScore and awayrbi < homerbi) or (homeScore > awayScore and homerbi < awayrbi):
+                flippedgames += 1
+                if (mofoIsAway and ((awayOdds > 50 and mofoodds < 50) or (awayOdds < 50 and mofoodds > 50))) or (not mofoIsAway and ((homeOdds > 50 and mofoodds < 50) or (homeOdds < 50 and mofoodds > 50))):
+                    bhsmismatches += 1
+                    if mofoCorrect:
+                        mofoBHSmismatch += 1                                
+                    else:
+                        webBHSmismatch += 1
+            if mofoCorrect:
+                moforightBHS += 1
+            if webCorrect:
+                webrightBHS += 1                            
     print("missing games: {}, total counted games: {}".format(missing, len(mofogames)))
     #print("MOFO payout multiplier mismatches: {}".format(mofomismatchpayouts))
-    #print("Web payout multiplier mismatches: {}".format(webmismatchpayouts))    
+    #print("Web payout multiplier mismatches: {}".format(webmismatchpayouts))  
+    print("BH/Sun2 flipped games: {}, total BH/Sun2 games: {}, {:.2f}% flipped".format(flippedgames, bhsuns, (flippedgames / bhsuns) * 100.0))
+    print("BH/Sun2 flipped games mismatches: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(bhsmismatches, mofoBHSmismatch, (mofoBHSmismatch/bhsmismatches) * 100.0, webBHSmismatch, (webBHSmismatch/bhsmismatches)*100.0))
+    print("BH/Sun2 games: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(bhsuns, moforightBHS, (moforightBHS/bhsuns) * 100.0, webrightBHS, (webrightBHS/bhsuns)*100.0))    
     print("MOFO mismatch profit margin: {:.4f} times maxbet per mismatch".format(((mofomismatchpayouts - webmismatchpayouts)/(mismatches)) / 1000.0))
     print("Dad cash: {:.4f} times maxbet per dadbet".format((dadcash / 1000.0) / dadbets))
     print("MOFO right: {}/{}, {:.2f}%".format(moforight, totalgames, (moforight/totalgames) * 100.0))
@@ -99,8 +122,8 @@ def get_mofo_list(game_list, team_attrs, stat_file_map, season):
                 #continue
             away_odds, home_odds = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data,
                                                   pitcher_stat_data, season_team_attrs.get(awayTeam, []),
-                                                  season_team_attrs.get(homeTeam, []), day, away_game["weather"])
-            mofo_list.append([homeTeam, game["away"]["game_id"], away_odds*100.0])
+                                                  season_team_attrs.get(homeTeam, []), day, away_game["weather"])            
+            mofo_list.append([homeTeam, game["away"]["game_id"], away_odds*100.0, int(game["away"]["weather"]), float(game["away"]["opposing_team_rbi"]), float(game["home"]["opposing_team_rbi"])])
     return mofo_list
 
 def webodds_payout(odds, amt):
@@ -128,7 +151,7 @@ def main():
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     season = int(cmd_args.season)
-    mofo_list = get_mofo_list(game_list, team_attrs, stat_file_map, season)
+    mofo_list = get_mofo_list(game_list, team_attrs, stat_file_map, season)    
     compare(season, mofo_list)
     # print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
 
