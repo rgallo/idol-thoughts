@@ -22,18 +22,14 @@ BATMAN_STLAT_LIST = ("tragicness", "patheticism", "thwackability", "divinity", "
 BATMAN_SPECIAL_CASES = ("exponent", "everythingelse")
 
 
-def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, team_stat_data, pitcher_stat_data, pitcher, batter, lineup_size, terms, special_cases, game, mods):
+def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, team_stat_data, pitcher_stat_data, pitcher, batter, lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods):
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
     special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
     games, fail_batman, fail_batman_by = 0, 2, 100
     if special_game_attrs:
         fail_batman, fail_batman_by = 0, 0
-    else:                
-        pitchingteam = batter_perf_data["pitcher_team_id"]
-        battingteam = batter_perf_data["batter_team_id"]
-        atbats, hits, homers, innings = int(batter_perf_data["at_bats"]), int(batter_perf_data["hits"]), int(batter_perf_data["home_runs"]), int(batter_perf_data["num_innings"])        
-        print("Batter ID = {} At bats = {}, hits = {}, homers = {}, innings = {}".format(batter, atbats, hits, homers, innings))
-        print("pitching team = {}".format(pitchingteam))
+    else:                        
+        atbats, hits, homers, innings = int(batter_perf_data["at_bats"]), int(batter_perf_data["hits"]), int(batter_perf_data["home_runs"]), int(batter_perf_data["num_innings"])                
         #how many atbats in a 9 inning game
         atbats_in9 = (atbats / innings) * 9.0
         #how many atbats in a 9 inning game per a 9 player lineup (all estimations should be multiplied by (9.0 / actual lineup size))

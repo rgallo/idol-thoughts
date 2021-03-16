@@ -373,6 +373,35 @@ def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):
                     teamstatdata[team][key].append(float(new_row[key]))
     return teamstatdata, pitcherstatdata
 
+def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
+    with open(filepath) as f:
+        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
+    games = {}
+    if schedule:
+        games.update({game["homeTeamName"]: game for game in schedule})
+        games.update({game["awayTeamName"]: game for game in schedule})
+    pitcherstatdata = collections.defaultdict(lambda: {})
+    teamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: {}))
+    for row in filedata:
+        player_attrs = row["permAttr"] + row["seasAttr"] + row["weekAttr"] + row["gameAttr"]
+        team = row["team"]
+        player_id = row["id"]
+        if games:
+            game = games.get(team)
+            new_row = adjust_stlats(row, game, day, player_attrs, team_attrs)
+        else:
+            new_row = row
+        if new_row["position"] == "rotation":
+            for key in (PITCHING_STLATS + ["pitchingStars"]):
+                pitcherstatdata[new_row["name"]][key] = float(new_row[key])
+        elif new_row["position"] == "lineup":
+            if "SHELLED" not in player_attrs and "ELSEWHERE" not in player_attrs:
+                for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
+                    teamstatdata[team][player_id][key] = float(new_row[key])
+            if "ELSEWHERE" not in player_attrs:
+                for key in (DEFENSE_STLATS + ["defenseStars"]):
+                    teamstatdata[team][player_id][key] = float(new_row[key])
+    return teamstatdata, pitcherstatdata
 
 def get_player_slug(playername):
     playerslug = playername.lower().replace(" ", "-")

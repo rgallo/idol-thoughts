@@ -10,7 +10,7 @@ import uuid
 from glob import glob
 
 from helpers import StlatTerm, get_weather_idx
-from idolthoughts import load_stat_data
+from idolthoughts import load_stat_data, load_stat_data_pid
 from mofo import get_mods
 
 STAT_CACHE = {}
@@ -612,10 +612,10 @@ def minimize_batman_func(parameters, *data):
                 if stat_filename:
                     last_stat_filename = stat_filename
                     players = get_player_id_lookup(stat_filename)
-                    team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)                                                            
+                    team_stat_data, pitcher_stat_data = load_stat_data_pid(stat_filename, schedule, day, season_team_attrs)                                                            
                 elif should_regen(day_mods):
                     players = get_player_id_lookup(stat_filename)
-                    team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)
+                    team_stat_data, pitcher_stat_data = load_stat_data_pid(stat_filename, schedule, day, season_team_attrs)
                 STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, players)
             if not players:
                 raise Exception("No stat file found")
@@ -639,16 +639,17 @@ def minimize_batman_func(parameters, *data):
                 good_batter_perf_data = []                                
                 last_lineup_id = ""   
                 lineup_size = 0
-                for batter_perf in batter_perf_data:                    
-                    print("Batter up, {}".format(batter_perf["batter_id"]))                                        
+                for batter_perf in batter_perf_data:                                        
                     if batter_perf["batter_team_id"] != last_lineup_id:
                         lineup_size = 0
                         for countbatter in batter_perf_data:
                             if batter_perf["batter_team_id"] == countbatter["batter_team_id"]:
                                 lineup_size += 1
                     last_lineup_id = batter_perf["batter_team_id"]
+                    battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
+                    pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)
                     bat_bat_counter, bat_fail_counter, batman_fail_by = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, batter_perf["pitcher_id"], 
-                                                                                    batter_perf["batter_id"], lineup_size, terms, special_cases, game, mods)                    
+                                                                                    batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                    
                     bat_counter += bat_bat_counter
                     fail_counter += bat_fail_counter
                     batman_unexvar += batman_fail_by ** 2.0

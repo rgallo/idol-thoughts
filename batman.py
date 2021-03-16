@@ -8,7 +8,7 @@ from helpers import geomean, load_terms
 
 def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_stat_data, batter, battingteam):
     pitcher_data = pitcher_stat_data[pitcher]
-    batter_data = [row for row in team_stat_data[battingteam] if row["batter_id"] == batter]
+    batter_data = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter]
     return sum([term.calc(val) for term, val in (
         (terms["unthwackability"], pitcher_data["unthwackability"]),
         (terms["ruthlessness"], pitcher_data["ruthlessness"]),
@@ -35,8 +35,8 @@ def calc_pitcher(terms, pitcher, pitcher_stat_data):
     )])
 
 def calc_everythingelse(terms, pitchingteam, battingteam, team_stat_data, batter):
-    pitching_team_data = team_stat_data[pitchingteam]
-    batting_team_data = [row for row in team_stat_data[battingteam] if row["batter_id"] != batter]
+    pitching_team_data = [stlats for player_id, stlats in team_stat_data[pitchingteam].items()]
+    batting_team_data = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id != batter]
     return sum([term.calc(val) for term, val in (
         (terms["meanomniscience"], geomean(pitching_team_data["omniscience"])),
         (terms["meantenaciousness"], geomean(pitching_team_data["tenaciousness"])),
