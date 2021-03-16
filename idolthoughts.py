@@ -160,7 +160,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     sun2weather, bhweather = get_weather_idx("Sun 2"), get_weather_idx("Black Hole")
     webhooks = [Webhook(url=discord_webhook_url,
                         content="__**Day {}**__".format(day) if not batch else discord_hr(10, char='-')) for batch in range(batches)]
-    odds_mismatch, notify, picks_to_click, not_your_dad = [], [], [], []
+    odds_mismatch, notify, picks_to_click, not_your_dad, bad_bets = [], [], [], [], []
     for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
         awayOdds, homeOdds = get_formatted_odds(awayMatchupData.websiteodds, homeMatchupData.websiteodds)
@@ -178,11 +178,13 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         if (awayMatchupData.mofoodds < .5 < awayMatchupData.websiteodds) or (awayMatchupData.mofoodds > .5 > awayMatchupData.websiteodds) or (.495 <= awayMatchupData.websiteodds < .505):
             odds_mismatch.append(result)
         ev = get_ev(awayMatchupData, homeMatchupData)
+        loser_ev = get_ev(awayMatchupData, homeMatchupData, loser=True)
         if ev >= 1.0:
             picks_to_click.append(result)
-        loser_ev = get_ev(awayMatchupData, homeMatchupData, loser=True)
         if loser_ev >= 1.0 and loser_ev >= ev:
             not_your_dad.append(result)
+        if ev <= 1.0 and loser_ev <= 1.0:
+            bad_bets.append(result)
         if notify_tim_rank and notify_role:
             if awayMatchupData.timrank >= int(notify_tim_rank):
                 notify.append(awayMatchupData)
@@ -224,6 +226,13 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
             ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else "")
                                       for result in odds_mismatch])
         results.append(send_discord_message("__Odds Mismatches__", odds_description, screen=screen))
+        time.sleep(.5)
+    if bad_bets:
+        bb_description = "\n".join(["{} @ {} - EV: {} {}".format(
+            result.awayMatchupData.pitcherteamnickname, result.homeMatchupData.pitcherteamnickname, "{:.2f}".format(get_ev(result.awayMatchupData, result.homeMatchupData)),
+            ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else ""
+        ) for result in sorted(bad_bets, key=lambda result: get_ev(result.awayMatchupData, result.homeMatchupData), reverse=True)])
+        results.append(send_discord_message("__Bad Bets__", bb_description, screen=screen))
         time.sleep(.5)
     if notify:
         notify_message = "<@&{}> __**FIRE PICKS**__\n".format(notify_role)
