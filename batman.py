@@ -6,9 +6,9 @@ import os
 from helpers import geomean, load_terms
 
 
-def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_stat_data, batter, battingteam):
+def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam):
     pitcher_data = pitcher_stat_data[pitcher]    
-    batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter]
+    batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]
     batter_data = batter_list_dict[0]    
     return sum([term.calc(val) for term, val in (
         (terms["unthwackability"], pitcher_data["unthwackability"]),
@@ -35,9 +35,9 @@ def calc_pitcher(terms, pitcher, pitcher_stat_data):
         (terms["coldness"], pitcher_data["coldness"])
     )])
 
-def calc_everythingelse(terms, pitchingteam, battingteam, team_stat_data, batter):
-    pitching_team_data = [stlats for player_id, stlats in team_stat_data[pitchingteam].items()]    
-    batting_team_data = [stlats for player_id, stlats in team_stat_data[battingteam].items() if (player_id != batter and not stlats.get("shelled", False))]
+def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter):
+    pitching_team_data = [stlats for player_id, stlats in team_pid_stat_data[pitchingteam].items()]
+    batting_team_data = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if (player_id != batter and not stlats.get("shelled", False))]
     return sum([term.calc(val) for term, val in (
         (terms["meanomniscience"], geomean([row["omniscience"] for row in pitching_team_data])),
         (terms["meantenaciousness"], geomean([row["tenaciousness"] for row in pitching_team_data])),
@@ -77,26 +77,45 @@ def calc_everythingelse(terms, pitchingteam, battingteam, team_stat_data, batter
 def setup(eventofinterest):
     if eventofinterest == "hits":
         terms_url = os.getenv("BATMAN_HIT_TERMS")
-    if eventofinterest == "hrs":
+    elif eventofinterest == "hrs":
         terms_url = os.getenv("BATMAN_HR_TERMS")
-    if eventofinterest == "abs":
+    elif eventofinterest == "abs":
         terms_url = os.getenv("BATMAN_AB_TERMS")
+    else:
+        raise ValueError("Unsupported event of interest type")
     terms, special_cases = load_terms(terms_url, ["factors"])
     return terms, special_cases
 
 
-def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, terms, special_cases):    
-    everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_stat_data, batter)    
+def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases):
+    everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter)
     factor_exp, factor_const = special_cases["factors"][:2]
     if eventofinterest == "abs":
         pitcher = calc_pitcher(terms, pitcher, pitcher_stat_data)    
         batman = (pitcher ** float(factor_exp)) + everythingelse - float(factor_const)
     else:
-        pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_stat_data, batter, battingteam)    
+        pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam)
         batman = (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)    
     return batman
 
 
-def calculate(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data):
+def calculatePitcherVsBatter(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data):
     terms, special_cases = setup(eventofinterest)
-    return get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, terms, special_cases)
+    return get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases)
+
+
+def calculate(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data):
+    batters = team_pid_stat_data.get(battingteam)
+    batting_lineup_size = len(batters)
+    results = []
+    for batter_id, batter in batters.items():
+        if batter["shelled"]:
+            continue
+        name = batter["name"]
+        batman_atbats = calculatePitcherVsBatter("abs", pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data)
+        batman_hits = calculatePitcherVsBatter("hits", pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data)
+        batman_homers = calculatePitcherVsBatter("hrs", pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data)
+        hits = batman_hits * (batman_atbats * (9.0 / batting_lineup_size))
+        homers = batman_homers * (batman_atbats * (9.0 / batting_lineup_size))
+        results.append({"name": name, "team": battingteam, "hits": hits, "homers": homers})
+    return results

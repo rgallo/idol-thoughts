@@ -2,12 +2,14 @@
 .idea/
 bot_thanks.py
 explanations/
-lastday.txt
+lastday*.txt
 lineup.json
 output*.csv
 olddata/
 testdata/
 
+# Visual Studio stuff
+.vs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -115,6 +117,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+*.env
 env/
 venv/
 ENV/
