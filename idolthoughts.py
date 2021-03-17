@@ -328,7 +328,8 @@ def adjust_stlats(row, game, day, player_attrs, team_attrs=None):
         new_row = adjust_by_pct(new_row, -0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
         new_row = adjust_by_pct(new_row, -0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
         new_row = adjust_by_pct(new_row, -0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
-    if "OVERPERFORMING" in player_attrs:
+    coffee_weathers = [get_weather_idx("Coffee"), get_weather_idx("Coffee 2"), get_weather_idx("Coffee 3s")]
+    if "OVERPERFORMING" in player_attrs or ("PERK" in player_attrs and game["weather"] in coffee_weathers):
         new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
         new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
         new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
