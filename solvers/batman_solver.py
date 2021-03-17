@@ -19,7 +19,8 @@ BATMAN_STLAT_LIST = ("tragicness", "patheticism", "thwackability", "divinity", "
                  "maxthwackability", "maxdivinity", "maxmoxie", "maxmusclitude", "maxmartyrdom", "maxlaserlikeness",
                  "maxbasethirst", "maxcontinuation", "maxgroundfriction", "maxindulgence")
 
-BATMAN_ABS_STLAT_LIST = ("unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness", "meanomniscience",
+BATMAN_ABS_STLAT_LIST = ("tragicness", "patheticism", "thwackability", "divinity", "moxie", "musclitude", "martyrdom", 
+                     "unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness", "meanomniscience",
                  "meantenaciousness", "meanwatchfulness", "meananticapitalism", "meanchasiness", "meantragicness",
                  "meanpatheticism", "meanthwackability", "meandivinity", "meanmoxie", "meanmusclitude", "meanmartyrdom",
                  "meanlaserlikeness", "meanbasethirst", "meancontinuation", "meangroundfriction", "meanindulgence",
@@ -98,7 +99,7 @@ def main():
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
-        bounds = [[-6, 6], [-1, 2], [0, 3]] * len(stlatlist) + [[1, 3], [-4, 4]]
+        bounds = [[-4, 4], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [-1, 1]]
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, BATMAN_SPECIAL_CASES, [], stat_file_map, game_list, team_attrs, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=15, tol=0.0001, 

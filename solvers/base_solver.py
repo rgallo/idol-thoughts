@@ -714,7 +714,7 @@ def minimize_batman_func(parameters, *data):
         debug_print("+/- 2.5 = {:.4f}".format(pass_within_two), debug, run_id)
         debug_print("+/- 3.5 = {:.4f}".format(pass_within_three), debug, run_id)
         debug_print("+/- 4.5 = {:.4f}".format(pass_within_four), debug, run_id)
-        debug_print("min error {:.4f}, max error {:.4f}, unexvar {:.4f}".format(batman_min_err, batman_max_err, batman_unexvar), debug, run_id)
+        debug_print("max underestimate {:.4f}, max overestimate {:.4f}, unexvar {:.4f}".format(batman_min_err, batman_max_err, batman_unexvar), debug, run_id)
         debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)      
         WORST_ERROR = (batman_max_err - batman_min_err) if ((batman_max_err - batman_min_err) < WORST_ERROR) else WORST_ERROR
         debug_print("Optimizing: {}".format(eventofinterest), debug, run_id)      

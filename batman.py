@@ -90,12 +90,15 @@ def setup(eventofinterest):
 def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases):
     everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter)
     factor_exp, factor_const = special_cases["factors"][:2]
-    if eventofinterest == "abs":
-        pitcher = calc_pitcher(terms, pitcher, pitcher_stat_data)    
-        batman = (pitcher ** float(factor_exp)) + everythingelse - float(factor_const)
-    else:
-        pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam)
-        batman = (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)    
+    #if eventofinterest == "abs":
+        #pitcher = calc_pitcher(terms, pitcher, pitcher_stat_data)    
+        #batman = (pitcher ** float(factor_exp)) + everythingelse - float(factor_const)
+    #else:        
+        #pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam)
+        #batman = (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)    
+    #maybe just the same calc?
+    pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam)
+    batman = (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)    
     return batman
 
 
