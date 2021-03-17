@@ -51,7 +51,7 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
             batman = -10000
         fail_batman, fail_batman_by = 1, 0        
         if eventofinterest == "abs":            
-            if max(atbats_lineup - 2.0, 0.0) <= batman <= (atbats_lineup + 2.0):
+            if (atbats_lineup - 2.0) <= batman <= (atbats_lineup + 2.0):
                 fail_batman -= 1
             fail_batman_by = batman - atbats_lineup            
         elif eventofinterest == "hits":            
