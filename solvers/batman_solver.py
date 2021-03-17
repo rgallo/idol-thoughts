@@ -55,11 +55,11 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
                 fail_batman -= 1
             fail_batman_by = batman - atbats_lineup            
         elif eventofinterest == "hits":            
-            if max(hits_per_atbat - 1.0, 0.0) <= batman <= (hits_per_atbat + 1.0):
+            if (hits_per_atbat - 1.0) <= batman <= (hits_per_atbat + 1.0):
                 fail_batman -= 1
             fail_batman_by = batman - hits_per_atbat
         elif eventofinterest == "hrs":
-            if max(homers_per_atbat - 1.0, 0.0) <= batman <= (homers_per_atbat + 1.0):
+            if (homers_per_atbat - 1.0) <= batman <= (homers_per_atbat + 1.0):
                 fail_batman -= 1
             fail_batman_by = batman - homers_per_atbat                
         games = 1
