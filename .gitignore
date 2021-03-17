@@ -8,6 +8,8 @@ output*.csv
 olddata/
 testdata/
 
+# Visual Studio stuff
+.vs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
