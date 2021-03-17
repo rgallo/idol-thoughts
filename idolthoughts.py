@@ -145,13 +145,14 @@ def get_ev(awayMatchupData, homeMatchupData, loser=False):
     op = operator.gt if not loser else operator.le
     mofoodds, webodds = (awayMatchupData.mofoodds, awayMatchupData.websiteodds) if op(awayMatchupData.mofoodds, homeMatchupData.mofoodds) else (homeMatchupData.mofoodds, homeMatchupData.websiteodds)
     payout = webodds_payout(webodds, 1.0)
-    return payout * mofoodds
+    return payout * min(mofoodds, 0.8)
 
 
 def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pitchers, score_adjustments, screen=False):
     Webhook, Embed = (PrintWebhook, PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     notify_tim_rank, notify_role = os.getenv("NOTIFY_TIM_RANK"), os.getenv("NOTIFY_ROLE")
+    siesta_notify_role = os.getenv("SIESTA_NOTIFY_ROLE")
     sortkey = lambda matchup_pair: (max(matchup_pair.awayMatchupData.timrank, matchup_pair.homeMatchupData.timrank),
                                     max(matchup_pair.awayMatchupData.k9, matchup_pair.homeMatchupData.k9),
                                     max(matchup_pair.awayMatchupData.mofoodds, matchup_pair.homeMatchupData.mofoodds))
@@ -160,7 +161,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     sun2weather, bhweather = get_weather_idx("Sun 2"), get_weather_idx("Black Hole")
     webhooks = [Webhook(url=discord_webhook_url,
                         content="__**Day {}**__".format(day) if not batch else discord_hr(10, char='-')) for batch in range(batches)]
-    odds_mismatch, notify, picks_to_click, not_your_dad = [], [], [], []
+    odds_mismatch, notify, picks_to_click, not_your_dad, bad_bets = [], [], [], [], []
     for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
         awayOdds, homeOdds = get_formatted_odds(awayMatchupData.websiteodds, homeMatchupData.websiteodds)
@@ -178,11 +179,13 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         if (awayMatchupData.mofoodds < .5 < awayMatchupData.websiteodds) or (awayMatchupData.mofoodds > .5 > awayMatchupData.websiteodds) or (.495 <= awayMatchupData.websiteodds < .505):
             odds_mismatch.append(result)
         ev = get_ev(awayMatchupData, homeMatchupData)
+        loser_ev = get_ev(awayMatchupData, homeMatchupData, loser=True)
         if ev >= 1.0:
             picks_to_click.append(result)
-        loser_ev = get_ev(awayMatchupData, homeMatchupData, loser=True)
-        if loser_ev >= 1.0:
+        if loser_ev >= 1.0 and loser_ev >= ev:
             not_your_dad.append(result)
+        if ev <= 1.0 and loser_ev <= 1.0:
+            bad_bets.append(result)
         if notify_tim_rank and notify_role:
             if awayMatchupData.timrank >= int(notify_tim_rank):
                 notify.append(awayMatchupData)
@@ -214,21 +217,33 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
         results.append(send_discord_message("__Look, I'm Not Your Dad__", linyd_description, screen=screen))
         time.sleep(.5)
     if odds_mismatch:
-        odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, MOFO: **{}** {:.2f}%".format(
+        odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, MOFO: **{}** {:.2f}% {}".format(
             "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
             "**{}**".format(result.homeMatchupData.pitcherteamnickname) if result.homeMatchupData.mofoodds > result.awayMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.websiteodds > result.homeMatchupData.websiteodds else result.homeMatchupData.pitcherteamnickname,
             (max(result.awayMatchupData.websiteodds, result.homeMatchupData.websiteodds)) * 100.0,
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
-            (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0)
+            (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0,
+            ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else "")
                                       for result in odds_mismatch])
         results.append(send_discord_message("__Odds Mismatches__", odds_description, screen=screen))
+        time.sleep(.5)
+    if bad_bets:
+        bb_description = "\n".join(["{} @ {} - EV: {} {}".format(
+            result.awayMatchupData.pitcherteamnickname, result.homeMatchupData.pitcherteamnickname, "{:.2f}".format(get_ev(result.awayMatchupData, result.homeMatchupData)),
+            ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else ""
+        ) for result in sorted(bad_bets, key=lambda result: get_ev(result.awayMatchupData, result.homeMatchupData), reverse=True)])
+        results.append(send_discord_message("__Bad Bets__", bb_description, screen=screen))
         time.sleep(.5)
     if notify:
         notify_message = "<@&{}> __**FIRE PICKS**__\n".format(notify_role)
         notify_message += "\n".join(["{}, {} - **{}**".format(matchup_data.pitchername, matchup_data.pitcherteamnickname,
                                                             matchup_data.tim.name) for matchup_data in notify])
         results.append(Webhook(url=discord_webhook_url, content=notify_message).execute())
+    if siesta_notify_role and day in (28, 73):
+        siesta_notify_message = "<@&{}> Siesta coming up!".format(siesta_notify_role)
+        siesta_notify_message += "\nRemember to get your bets in before all the current games end!"
+        results.append(Webhook(url=discord_webhook_url, content=siesta_notify_message).execute())
     return results
 
 
@@ -314,7 +329,8 @@ def adjust_stlats(row, game, day, player_attrs, team_attrs=None):
         new_row = adjust_by_pct(new_row, -0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
         new_row = adjust_by_pct(new_row, -0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
         new_row = adjust_by_pct(new_row, -0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
-    if "OVERPERFORMING" in player_attrs:
+    coffee_weathers = [get_weather_idx("Coffee"), get_weather_idx("Coffee 2"), get_weather_idx("Coffee 3s")]
+    if "OVERPERFORMING" in player_attrs or ("PERK" in player_attrs and game["weather"] in coffee_weathers):
         new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
         new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
         new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
@@ -606,7 +622,7 @@ def print_results(day, results, score_adjustments, batman_data):
         if (result.mofoodds > .5 and result.websiteodds < .5) or (.495 <= result.websiteodds < .505 and result.mofoodds >= .5):
             odds_mismatch.append(result)
         payout = webodds_payout(result.websiteodds, 1.0)
-        if payout * result.mofoodds >= 1.0:
+        if payout * min(result.mofoodds, 0.8) >= 1.0:
             if result.mofoodds >= .5:
                 picks_to_click.append(result)
             else:
@@ -614,15 +630,15 @@ def print_results(day, results, score_adjustments, batman_data):
     if picks_to_click:
         print("Picks To Click")
         print("\n".join(["{} - EV: {:.2f} {}".format(
-            result.pitcherteamnickname, webodds_payout(result.websiteodds, 1.0) * result.mofoodds,
+            result.pitcherteamnickname, webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8),
             "(Sun 2)" if result.weather == sun2weather else "(Black Hole)" if result.weather == bhweather else ""
-        ) for result in sorted(picks_to_click, key=lambda result: webodds_payout(result.websiteodds, 1.0) * result.mofoodds, reverse=True)]))
+        ) for result in sorted(picks_to_click, key=lambda result: webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8), reverse=True)]))
     if not_your_dad:
         print("Look, I'm Not Your Dad")
         print("\n".join(["{} - EV: {:.2f}, MOFO {:.2f}% {}".format(
-            result.pitcherteamnickname, webodds_payout(result.websiteodds, 1.0) * result.mofoodds, result.mofoodds * 100.0,
+            result.pitcherteamnickname, webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8), result.mofoodds * 100.0,
             "(Sun 2)" if result.weather == sun2weather else "(Black Hole)" if result.weather == bhweather else ""
-        ) for result in sorted(not_your_dad, key=lambda result: webodds_payout(result.websiteodds, 1.0) * result.mofoodds, reverse=True)]))
+        ) for result in sorted(not_your_dad, key=lambda result: webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8), reverse=True)]))
     if odds_mismatch:
         print("Odds Mismatches")
         print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in odds_mismatch))
@@ -665,6 +681,7 @@ def handle_args():
     parser.add_argument('--testfile', help="path to file with test data in jsonl format, pass optional line number as "
                                            "filename:n, otherwise random line is used")
     parser.add_argument('--env', help="path to .env file, defaults to .env in same directory")
+    parser.add_argument('--justlooking', help="don't update lastday file", action='store_true')
     args = parser.parse_args()
     if not args.print and not args.discord and not args.airtable and not args.discordprint and not args.lineupfile:
         print("No output specified")
@@ -787,7 +804,8 @@ def main():
             print_results(day, results, score_adjustments, batman_data)
     else:
         print("No results")
-    write_day(args.dayfile, season_number, day)
+    if not args.justlooking:
+        write_day(args.dayfile, season_number, day)
 
 
 if __name__ == "__main__":
