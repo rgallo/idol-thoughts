@@ -93,7 +93,7 @@ def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team
         batman = (pitcher ** float(factor_exp)) + everythingelse - float(factor_const)
     else:
         pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_stat_data, batter, battingteam)    
-        batman = (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)        
+        batman = (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)    
     return batman
 
 

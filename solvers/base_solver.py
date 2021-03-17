@@ -566,7 +566,7 @@ def minimize_batman_func(parameters, *data):
     global BEST_QUARTER_FAIL    
     global MAX_OBSERVED_DIFFERENCE    
     global HAS_GAMES
-    global WORST_ERROR    
+    global WORST_ERROR        
     eventofinterest, batter_list, calc_func, stlat_list, special_case_list, atbats_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)        
     terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}  
@@ -697,14 +697,14 @@ def minimize_batman_func(parameters, *data):
         pass_within_two = (pass_within_two / bat_counter) * 100.0
         pass_within_three = (pass_within_three / bat_counter) * 100.0
         pass_within_four = (pass_within_four / bat_counter) * 100.0
-        if pass_exact > BEST_EXACT:
-            BEST_EXACT = pass_exact
+        if pass_exact > BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if (batman_max_err >= batman_min_err):
             linear_fail = (batman_max_err - batman_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
-    if linear_fail < BEST_RESULT:
+    if linear_fail < BEST_RESULT and CURRENT_ITERATION > 1:
         BEST_RESULT = linear_fail
-        BEST_FAIL_RATE = fail_rate if (fail_rate < BEST_FAIL_RATE) else BEST_FAIL_RATE
+        BEST_EXACT = pass_exact
+        BEST_FAIL_RATE = fail_rate
         BEST_UNEXVAR_ERROR = batman_unexvar if ((batman_unexvar < BEST_UNEXVAR_ERROR) or (BEST_UNEXVAR_ERROR <= 0)) else BEST_UNEXVAR_ERROR
         terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
         special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""        
