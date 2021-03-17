@@ -329,13 +329,18 @@ def adjust_stlats(row, game, day, player_attrs, team_attrs=None):
         new_row = adjust_by_pct(new_row, -0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
         new_row = adjust_by_pct(new_row, -0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
         new_row = adjust_by_pct(new_row, -0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
-    coffee_weathers = [get_weather_idx("Coffee"), get_weather_idx("Coffee 2"), get_weather_idx("Coffee 3s")]    
-    if "OVERPERFORMING" in player_attrs or ("PERK" in player_attrs and game["weather"] in coffee_weathers):
+    if "OVERPERFORMING" in player_attrs:
         new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
         new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
         new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
         new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
     if game:
+        coffee_weathers = [get_weather_idx("Coffee"), get_weather_idx("Coffee 2"), get_weather_idx("Coffee 3s")]
+        if "PERK" in player_attrs and game["weather"] in coffee_weathers:
+            new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
+            new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
+            new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
+            new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
         team = row["team"]
         current_team_attrs = (team_attrs if team_attrs is not None else get_team_attributes()).get(team, {})
         if "GROWTH" in current_team_attrs:
@@ -642,9 +647,9 @@ def print_results(day, results, score_adjustments, batman_data):
     if odds_mismatch:
         print("Odds Mismatches")
         print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in odds_mismatch))
-    batman_hits = "\n".join(("{}, {}: {:.2f} hits").format(row["name"], row["team"], row["hits"]) for row in batman_data["hits"])
-    batman_homers = "\n".join(("{}, {}: {:.2f} homers").format(row["name"], row["team"], row["homers"]) for row in batman_data["homers"])
-    batman_combined = "\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], (row["hits"] * 1500) + (row["homers"]*4000)) for row in batman_data["combined"])
+    batman_hits = "\n".join(("{}, {}: {:.2f} hits, {:.2f} at bats").format(row["name"], row["team"], row["hits"], row["abs"]) for row in batman_data["hits"])
+    batman_homers = "\n".join(("{}, {}: {:.2f} homers, {:.2f} at bats").format(row["name"], row["team"], row["homers"], row["abs"]) for row in batman_data["homers"])
+    batman_combined = "\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.2f} at bats, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], row["abs"], (row["hits"] * 1500) + (row["homers"]*4000)) for row in batman_data["combined"])
     print("BATMAN:\nHits:\n{}\nHomers:\n{}\nCombined:\n{}".format(batman_hits, batman_homers, batman_combined))
 
 

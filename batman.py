@@ -120,5 +120,5 @@ def calculate(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_st
         batman_homers = calculatePitcherVsBatter("hrs", pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data)
         hits = batman_hits * (batman_atbats * (9.0 / batting_lineup_size))
         homers = batman_homers * (batman_atbats * (9.0 / batting_lineup_size))
-        results.append({"name": name, "team": battingteam, "hits": hits, "homers": homers})
+        results.append({"name": name, "team": battingteam, "hits": hits, "homers": homers, "abs": batman_atbats})
     return results
