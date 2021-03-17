@@ -709,11 +709,11 @@ def minimize_batman_func(parameters, *data):
         terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
         special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""        
         debug_print("::: Pass Rates over {} batters, fail counter {} :::".format(bat_counter, fail_counter), debug, run_id)
-        debug_print("Exact = {:.4f}".format(pass_exact), debug, run_id)
-        debug_print("+/- 1 = {:.4f}".format(pass_within_one), debug, run_id)
-        debug_print("+/- 2 = {:.4f}".format(pass_within_two), debug, run_id)
-        debug_print("+/- 3 = {:.4f}".format(pass_within_three), debug, run_id)
-        debug_print("+/- 4 = {:.4f}".format(pass_within_four), debug, run_id)
+        debug_print("Exact (+/- 0.5) = {:.4f}".format(pass_exact), debug, run_id)
+        debug_print("+/- 1.5 = {:.4f}".format(pass_within_one), debug, run_id)
+        debug_print("+/- 2.5 = {:.4f}".format(pass_within_two), debug, run_id)
+        debug_print("+/- 3.5 = {:.4f}".format(pass_within_three), debug, run_id)
+        debug_print("+/- 4.5 = {:.4f}".format(pass_within_four), debug, run_id)
         debug_print("min error {:.4f}, max error {:.4f}, unexvar {:.4f}".format(batman_min_err, batman_max_err, batman_unexvar), debug, run_id)
         debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)      
         WORST_ERROR = (batman_max_err - batman_min_err) if ((batman_max_err - batman_min_err) < WORST_ERROR) else WORST_ERROR

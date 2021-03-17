@@ -51,7 +51,7 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
             batman = -10000
         fail_batman, fail_batman_by = 1, 0        
         if eventofinterest == "abs":            
-            if (atbats_lineup - 1.0) <= batman <= (atbats_lineup + 1.0):
+            if (atbats_lineup - 0.5) < batman < (atbats_lineup + 0.5):
                 fail_batman -= 1
             fail_batman_by = batman - atbats_lineup            
         elif eventofinterest == "hits":            
@@ -59,7 +59,7 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
                 fail_batman -= 1
             fail_batman_by = batman - hits_per_atbat
         elif eventofinterest == "hrs":
-            if (homers_per_atbat - 1.0) <= batman <= (homers_per_atbat + 1.0):
+            if (homers_per_atbat - 0.5) < batman < (homers_per_atbat + 0.5):
                 fail_batman -= 1
             fail_batman_by = batman - homers_per_atbat                
         games = 1
@@ -98,7 +98,7 @@ def main():
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
-        bounds = [[-2, 2], [0, 2], [0, 2]] * len(stlatlist) + [[1, 3], [-1, 1]]
+        bounds = [[-6, 6], [-1, 2], [0, 3]] * len(stlatlist) + [[1, 3], [-4, 4]]
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, BATMAN_SPECIAL_CASES, [], stat_file_map, game_list, team_attrs, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=15, tol=0.0001, 

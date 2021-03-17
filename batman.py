@@ -97,6 +97,6 @@ def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team
     return batman
 
 
-def calculate(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, batter_stat_data):
+def calculate(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data):
     terms, special_cases = setup(eventofinterest)
-    return get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, batter_stat_data, terms, special_cases)
+    return get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, terms, special_cases)
