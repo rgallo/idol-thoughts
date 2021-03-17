@@ -18,6 +18,7 @@ from airtable import Airtable
 from discord_webhook import DiscordWebhook, DiscordEmbed
 from dotenv import load_dotenv
 
+import batman
 import k9
 from blaseball_stat_csv import blaseball_stat_csv
 import tim
@@ -373,6 +374,7 @@ def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):
                     teamstatdata[team][key].append(float(new_row[key]))
     return teamstatdata, pitcherstatdata
 
+
 def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
     with open(filepath) as f:
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
@@ -400,9 +402,13 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
                     teamstatdata[team][player_id][key] = float(new_row[key])
             if "ELSEWHERE" not in player_attrs:
                 for key in (DEFENSE_STLATS + ["defenseStars"]):
-                    teamstatdata[team][player_id][key] = float(new_row[key])                
-                teamstatdata[team][player_id]["shelled"] = ("SHELLED" in player_attrs)                
+                    teamstatdata[team][player_id][key] = float(new_row[key])
+                teamstatdata[team][player_id]["shelled"] = ("SHELLED" in player_attrs)
+            if player_id in teamstatdata[team]:  # these are defaultdicts so we don't want to add skipped players
+                teamstatdata[team][player_id]["team"] = team
+                teamstatdata[team][player_id]["name"] = new_row["name"]
     return teamstatdata, pitcherstatdata
+
 
 def get_player_slug(playername):
     playerslug = playername.lower().replace(" ", "-")
@@ -463,7 +469,7 @@ def insert_into_airtable(results, season_number, day):
     airtable.batch_insert([get_dict_from_matchupdata(matchup, season_number, day) for matchup in results])
 
 
-def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_stats, day):
+def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_stats, day, team_pid_stat_data):
     results = []
     gameId = game["id"]
     awayPitcher, homePitcher = game["awayPitcherName"], game["homePitcherName"]
@@ -485,6 +491,8 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
     # print("Home: {}, Modded MOFO: {}, Unmodded MOFO: {}".format(homeTeam, homeMOFO, noModHomeMOFO))
     awayK9 = k9.calculate(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
     homeK9 = k9.calculate(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
+    homeBatmans = batman.calculate(awayPitcher, awayTeam, homeTeam, team_pid_stat_data, pitcher_stat_data)
+    awayBatmans = batman.calculate(homePitcher, homeTeam, awayTeam, team_pid_stat_data, pitcher_stat_data)
     results.append(MatchupData(awayPitcher, awayPitcherId, awayTeam, gameId,
                                float(awayPitcherStats.get("strikeouts_per_9", -1.0)), float(awayPitcherStats.get("earned_run_average", -1.0)),
                                awayEmoji, homeTeam, homeEmoji,
@@ -499,7 +507,7 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
                                homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, game.get("awayBalls", 4),
                                game["awayStrikes"], game["awayBases"], game["homeTeamNickname"],
                                game["awayTeamNickname"], game["homeOdds"], homeMOFO, homeK9, game["weather"]))
-    return results
+    return results, homeBatmans + awayBatmans
 
 
 def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data, stat_season_number):
@@ -580,7 +588,7 @@ def write_day(filepath, season_number, day):
         f.write("{}-{}".format(season_number, day))
 
 
-def print_results(day, results, score_adjustments):
+def print_results(day, results, score_adjustments, batman_data):
     print("Day {}".format(day))
     odds_mismatch, picks_to_click, not_your_dad = [], [], []
     sun2weather, bhweather = get_weather_idx("Sun 2"), get_weather_idx("Black Hole")
@@ -618,6 +626,10 @@ def print_results(day, results, score_adjustments):
     if odds_mismatch:
         print("Odds Mismatches")
         print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in odds_mismatch))
+    batman_hits = "\n".join(("{}, {}: {:.2f} hits").format(row["name"], row["team"], row["hits"]) for row in batman_data["hits"])
+    batman_homers = "\n".join(("{}, {}: {:.2f} homers").format(row["name"], row["team"], row["homers"]) for row in batman_data["homers"])
+    batman_combined = "\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], (row["hits"] * 1500) + (row["homers"]*4000)) for row in batman_data["combined"])
+    print("BATMAN:\nHits:\n{}\nHomers:\n{}\nCombined:\n{}".format(batman_hits, batman_homers, batman_combined))
 
 
 def load_test_data(testfile):
@@ -741,6 +753,7 @@ def main():
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile, False, args.archive, False)
     team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, game_schedule, day)
+    team_pid_stat_data, _ = load_stat_data_pid(args.statfile, game_schedule, day)
     if args.lineupfile:
         run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data, stat_season_number)
         sys.exit(0)
@@ -748,11 +761,18 @@ def main():
     score_adjustments = get_score_adjustments(args.today, streamdata['value']['games']['schedule'],
                                               streamdata['value']['games']['tomorrowSchedule'])
     pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
+    all_batmans = []
     for game in game_schedule:
-        awayMatchupData, homeMatchupData = process_game(game, team_stat_data, pitcher_stat_data,
-                                                        pitcher_performance_stats, day)
+        (awayMatchupData, homeMatchupData), batmans = process_game(game, team_stat_data, pitcher_stat_data,
+                                                        pitcher_performance_stats, day, team_pid_stat_data)
         results.extend((awayMatchupData, homeMatchupData))
         pair_results.append(MatchupPair(awayMatchupData, homeMatchupData))
+        all_batmans.extend(batmans)
+    batman_data = {
+        "hits": sorted(all_batmans, key=lambda x: x["hits"], reverse=True)[:5],
+        "homers": sorted(all_batmans, key=lambda x: x["homers"], reverse=True)[:5],
+        "combined": sorted(all_batmans, key=lambda x: (x["homers"]*4000) + (x["hits"]*1500), reverse=True)[:5]
+    }
     if pair_results:
         so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}
         k9_min = sorted(results, key=lambda res: res.k9, reverse=True)[min(len(results)-1, 4)].k9
@@ -764,7 +784,7 @@ def main():
         if args.airtable:
             insert_into_airtable(results, season_number+1, day)
         if args.print:
-            print_results(day, results, score_adjustments)
+            print_results(day, results, score_adjustments, batman_data)
     else:
         print("No results")
     write_day(args.dayfile, season_number, day)
