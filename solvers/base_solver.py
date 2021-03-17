@@ -719,8 +719,8 @@ def minimize_batman_func(parameters, *data):
         WORST_ERROR = (batman_max_err - batman_min_err) if ((batman_max_err - batman_min_err) < WORST_ERROR) else WORST_ERROR
         debug_print("Optimizing: {}".format(eventofinterest), debug, run_id)      
         debug_print("-" * 20 + "\n", debug, run_id)
-    if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0)):
-        debug_print("Best so far - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}".format(BEST_RESULT, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION), debug, datetime.datetime.now())
+    if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):
+        debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1   
     #if (CURRENT_ITERATION % 25000 == 0):
      #   time.sleep(120)

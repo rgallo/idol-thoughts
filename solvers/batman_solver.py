@@ -42,8 +42,7 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
         #how many atbats in a 9 inning game
         atbats_in9 = (atbats / innings) * 9.0
         #how many atbats in a 9 inning game per a 9 player lineup (all estimations should be multiplied by (9.0 / actual lineup size))
-        atbats_lineup = (atbats_in9 / 9.0) * lineup_size        
-        hits_per_atbat, homers_per_atbat = (hits / atbats), (homers / atbats)
+        atbats_lineup = (atbats_in9 / 9.0) * lineup_size                
         try:
             batman = get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases})            
         except ValueError:
@@ -56,13 +55,13 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
                 fail_batman -= 1
             fail_batman_by = batman - atbats_lineup            
         elif eventofinterest == "hits":            
-            if (hits_per_atbat - 1.0) <= batman <= (hits_per_atbat + 1.0):
+            if (hits - 0.5) < (batman * atbats) < (hits + 0.5):                
                 fail_batman -= 1
-            fail_batman_by = batman - hits_per_atbat
+            fail_batman_by = (batman * atbats) - hits
         elif eventofinterest == "hrs":
-            if (homers_per_atbat - 0.5) < batman < (homers_per_atbat + 0.5):
+            if (homers - 0.5) < (batman * atbats) < (homers + 0.5):
                 fail_batman -= 1
-            fail_batman_by = batman - homers_per_atbat                
+            fail_batman_by = (batman * atbats) - homers
         games = 1
     return games, fail_batman, fail_batman_by
 
@@ -92,10 +91,10 @@ def main():
         team_attrs = json.load(f)
     if cmd_args.hits:
         eventofinterest = "hits"            
-        bounds = [[-4, 4], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [-1, 1]]
+        bounds = [[-2, 2], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [-1, 1]]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        bounds = [[-4, 4], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [-1, 1]]
+        bounds = [[-2, 2], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [-1, 1]]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
