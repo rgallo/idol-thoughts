@@ -569,9 +569,14 @@ def minimize_batman_func(parameters, *data):
     global WORST_ERROR        
     eventofinterest, batter_list, calc_func, stlat_list, special_case_list, atbats_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)        
+    if CURRENT_ITERATION == 1:        
+        if eventofinterest == "abs":
+            parameters = [[0, 0, 1] * len(stlat_list) + [1, 0, 0, 0]]                    
+        else:
+            parameters = [[0, 0, 1] * len(stlat_list) + [1, 0]]                        
     terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}  
-    mods = {}
     special_cases = parameters[-len(special_case_list):] if special_case_list else []
+    mods = {}    
     bat_counter, fail_counter, bat_pos_counter, fail_pos_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0, 0, 0    
     batman_max_err, batman_min_err = 0.0, 100000000.0        
     batman_unexvar = 0.0
@@ -699,7 +704,7 @@ def minimize_batman_func(parameters, *data):
             HAS_GAMES[season] = False
         season_end = datetime.datetime.now()
         # debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)        
-    if not reject_solution:
+    if not reject_solution and CURRENT_ITERATION > 1:
         fail_rate = fail_counter / bat_counter
         pos_fail_rate = fail_pos_counter / bat_pos_counter
     else:
@@ -717,7 +722,7 @@ def minimize_batman_func(parameters, *data):
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if (batman_max_err >= batman_min_err) and ((pos_fail_rate <= BEST_FAIL_RATE) or eventofinterest == "abs"):
             linear_fail = (batman_max_err - batman_min_err) + ((fail_rate * 100.0 * (bat_pos_counter / bat_counter)) + (pos_fail_rate * 100.0) - pass_exact - (pass_within_one / 2.0) - (pass_within_two / 4.0) - (pass_within_three / 8.0) - (pass_within_four / 16.0))
-    if linear_fail < BEST_RESULT and CURRENT_ITERATION > 1:
+    if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact
         BEST_FAIL_RATE = pos_fail_rate
