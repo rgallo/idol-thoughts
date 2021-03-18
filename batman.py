@@ -2,6 +2,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import math
 
 from helpers import geomean, load_terms
 
@@ -43,14 +44,7 @@ def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, ba
         (terms["meantenaciousness"], geomean([row["tenaciousness"] for row in pitching_team_data])),
         (terms["meanwatchfulness"], geomean([row["watchfulness"] for row in pitching_team_data])),
         (terms["meananticapitalism"], geomean([row["anticapitalism"] for row in pitching_team_data])),
-        (terms["meanchasiness"], geomean([row["chasiness"] for row in pitching_team_data])),
-        (terms["meantragicness"], geomean([row["tragicness"] for row in batting_team_data])),
-        (terms["meanpatheticism"], geomean([row["patheticism"] for row in batting_team_data])),
-        (terms["meanthwackability"], geomean([row["thwackability"] for row in batting_team_data])),
-        (terms["meandivinity"], geomean([row["divinity"] for row in batting_team_data])),
-        (terms["meanmoxie"], geomean([row["moxie"] for row in batting_team_data])),
-        (terms["meanmusclitude"], geomean([row["musclitude"] for row in batting_team_data])),
-        (terms["meanmartyrdom"], geomean([row["martyrdom"] for row in batting_team_data])),
+        (terms["meanchasiness"], geomean([row["chasiness"] for row in pitching_team_data])),        
         (terms["meanlaserlikeness"], geomean([row["laserlikeness"] for row in batting_team_data])),
         (terms["meanbasethirst"], geomean([row["baseThirst"] for row in batting_team_data])),
         (terms["meancontinuation"], geomean([row["continuation"] for row in batting_team_data])),
@@ -60,12 +54,7 @@ def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, ba
         (terms["maxtenaciousness"], max([row["tenaciousness"] for row in pitching_team_data])),
         (terms["maxwatchfulness"], max([row["watchfulness"] for row in pitching_team_data])),
         (terms["maxanticapitalism"], max([row["anticapitalism"] for row in pitching_team_data])),
-        (terms["maxchasiness"], max([row["chasiness"] for row in pitching_team_data])),        
-        (terms["maxthwackability"], max([row["thwackability"] for row in batting_team_data])),
-        (terms["maxdivinity"], max([row["divinity"] for row in batting_team_data])),
-        (terms["maxmoxie"], max([row["moxie"] for row in batting_team_data])),
-        (terms["maxmusclitude"], max([row["musclitude"] for row in batting_team_data])),
-        (terms["maxmartyrdom"], max([row["martyrdom"] for row in batting_team_data])),
+        (terms["maxchasiness"], max([row["chasiness"] for row in pitching_team_data])),                
         (terms["maxlaserlikeness"], max([row["laserlikeness"] for row in batting_team_data])),
         (terms["maxbasethirst"], max([row["baseThirst"] for row in batting_team_data])),
         (terms["maxcontinuation"], max([row["continuation"] for row in batting_team_data])),
@@ -87,18 +76,53 @@ def setup(eventofinterest):
     return terms, special_cases
 
 
-def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases):
-    everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter)
-    factor_exp, factor_const = special_cases["factors"][:2]
-    #if eventofinterest == "abs":
-        #pitcher = calc_pitcher(terms, pitcher, pitcher_stat_data)    
-        #batman = (pitcher ** float(factor_exp)) + everythingelse - float(factor_const)
-    #else:        
-        #pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam)
-        #batman = (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)    
-    #maybe just the same calc?
-    pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam)
-    batman = (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)    
+def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases, outs_pi=3):            
+    if eventofinterest == "abs":                
+        factor_exp, factor_const, reverberation, repeating = special_cases["factors"][:4]
+        atbats = 0.0
+        batters = team_pid_stat_data.get(battingteam)        
+        active_batters = len(batters)         
+        ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"])
+        outs_pg = 9.0 * outs_pi        
+        current_outs = 0
+        while current_outs < outs_pg:
+            batter_batted = False
+            for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):                                
+                pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam)
+                everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id)
+                if math.isnan((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)):
+                    return -10000.0
+                if ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) >= 1.0:
+                    return -1000.0                
+                if ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) >= 0.0:
+                    outs_pg += (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)  
+                if math.isnan(outs_pg):
+                    return -10000.0
+                current_outs += 1                             
+                if batter_id == batter:
+                    atbats += 1.0
+                    if team_pid_stat_data[battingteam][batter]["reverberating"]:                        
+                        atbats += reverberation
+                        if ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) >= 0.0:
+                            outs_pg += ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) * reverberation
+                    if team_pid_stat_data[battingteam][batter]["repeating"]:                        
+                        atbats += repeating
+                        if ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) >= 0.0:
+                            outs_pg += ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) * repeating
+                    batter_batted = True
+                if current_outs >= outs_pg:
+                    if batter_batted:
+                        atbats += (outs_pg - (current_outs - 1)) / (lineup_order + 1)
+                    else:
+                        atbats -= (outs_pg - (current_outs - 1)) / (lineup_order + 1)
+                    break
+        batman = atbats
+    else:        
+        factor_exp, factor_const = special_cases["factors"][:2]
+        everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter)
+        pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam)
+        batman = (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)     
+        batman = max(batman, 0.0)
     return batman
 
 
