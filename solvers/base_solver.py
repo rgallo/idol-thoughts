@@ -674,6 +674,9 @@ def minimize_batman_func(parameters, *data):
                     if ((batman_max_err - batman_min_err) > WORST_ERROR) and (BEST_FAIL_RATE < 1.0):
                         reject_solution = True
                         break
+                    if (batman_unexvar) > BEST_UNEXVAR_ERROR and (BEST_FAIL_RATE < 1.0):
+                        reject_solution = True
+                        break
                     if eventofinterest == "abs":
                         stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
                     else:
