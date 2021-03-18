@@ -431,6 +431,7 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
             if player_id in teamstatdata[team]:  # these are defaultdicts so we don't want to add skipped players
                 teamstatdata[team][player_id]["team"] = team
                 teamstatdata[team][player_id]["name"] = new_row["name"]
+                teamstatdata[team][player_id]["attrs"] = player_attrs
     return teamstatdata, pitcherstatdata
 
 
@@ -612,6 +613,10 @@ def write_day(filepath, season_number, day):
         f.write("{}-{}".format(season_number, day))
 
 
+def get_payout_mult(player):
+    return 5.0 if "CREDIT_TO_THE_TEAM" in player["attrs"] else 2.0 if "DOUBLE_PAYOUTS" in player["attrs"] else 1.0
+
+
 def print_results(day, results, score_adjustments, batman_data):
     print("Day {}".format(day))
     odds_mismatch, picks_to_click, not_your_dad = [], [], []
@@ -652,8 +657,9 @@ def print_results(day, results, score_adjustments, batman_data):
         print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in odds_mismatch))
     batman_hits = "\n".join(("{}, {}: {:.2f} hits, {:.2f} at bats").format(row["name"], row["team"], row["hits"], row["abs"]) for row in batman_data["hits"])
     batman_homers = "\n".join(("{}, {}: {:.2f} homers, {:.2f} at bats").format(row["name"], row["team"], row["homers"], row["abs"]) for row in batman_data["homers"])
-    batman_combined = "\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.2f} at bats, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], row["abs"], (row["hits"] * 1500) + (row["homers"]*4000)) for row in batman_data["combined"])
+    batman_combined = "\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.2f} at bats, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], row["abs"], ((row["hits"] * 1500) + (row["homers"]*4000)) * get_payout_mult(row)) for row in batman_data["combined"])
     print("BATMAN:\nHits:\n{}\nHomers:\n{}\nCombined:\n{}".format(batman_hits, batman_homers, batman_combined))
+    print("\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.2f} at bats, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], row["abs"], ((row["hits"] * 1500) + (row["homers"]*4000)) * get_payout_mult(row)) for row in batman_data["york"]))
 
 
 def load_test_data(testfile):
@@ -796,7 +802,8 @@ def main():
     batman_data = {
         "hits": sorted(all_batmans, key=lambda x: x["hits"], reverse=True)[:5],
         "homers": sorted(all_batmans, key=lambda x: x["homers"], reverse=True)[:5],
-        "combined": sorted(all_batmans, key=lambda x: (x["homers"]*4000) + (x["hits"]*1500), reverse=True)[:5]
+        "combined": sorted(all_batmans, key=lambda x: ((x["homers"]*4000) + (x["hits"]*1500) * get_payout_mult(x)), reverse=True)[:5],
+        "york": [x for x in all_batmans if x["name"] == "York Silk"]
     }
     if pair_results:
         so9_pitchers = {res.pitchername for res in sorted(results, key=lambda res: res.so9, reverse=True)[:5]}

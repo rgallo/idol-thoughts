@@ -133,16 +133,18 @@ def calculatePitcherVsBatter(eventofinterest, pitcher, pitchingteam, batter, bat
 
 def calculate(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data):
     batters = team_pid_stat_data.get(battingteam)
-    batting_lineup_size = len(batters)
+    batting_lineup_size = len([bid for bid, batter in batters.items() if not batter.get("shelled", False)])
     results = []
     for batter_id, batter in batters.items():
-        if batter["shelled"]:
+        if batter.get("shelled", False):
             continue
         name = batter["name"]
         batman_atbats = calculatePitcherVsBatter("abs", pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data)
         batman_hits = calculatePitcherVsBatter("hits", pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data)
         batman_homers = calculatePitcherVsBatter("hrs", pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data)
-        hits = batman_hits * (batman_atbats * (9.0 / batting_lineup_size))
-        homers = batman_homers * (batman_atbats * (9.0 / batting_lineup_size))
-        results.append({"name": name, "team": battingteam, "hits": hits, "homers": homers, "abs": batman_atbats})
+        at_bats = max(batman_atbats, 9 * 3 / batting_lineup_size)
+        hits = max(batman_hits * (at_bats * (9.0 / batting_lineup_size)), 0)
+        homers = max(batman_homers * (at_bats * (9.0 / batting_lineup_size)), 0)
+        results.append({"name": name, "team": battingteam, "hits": hits, "homers": homers, "abs": at_bats,
+                        "attrs": batter["attrs"]})
     return results
