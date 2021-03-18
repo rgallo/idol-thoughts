@@ -89,8 +89,7 @@ def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team
             batter_batted = False
             for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):                                
                 pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam)
-                everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id)
-                print(pitcher_batter, everythingelse)
+                everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id)                
                 if math.isnan((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)):
                     return -10000.0
                 if ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) >= 1.0:
