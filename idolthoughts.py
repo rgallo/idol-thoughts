@@ -374,7 +374,10 @@ def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):
         team = row["team"]
         if games:
             game = games.get(team)
-            new_row = adjust_stlats(row, game, day, player_attrs, team_attrs)
+            if game:
+                new_row = adjust_stlats(row, game, day, player_attrs, team_attrs)
+            else:
+                new_row = row
         else:
             new_row = row
         if new_row["position"] == "rotation":
