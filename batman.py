@@ -76,14 +76,14 @@ def setup(eventofinterest):
     terms, special_cases = load_terms(terms_url, ["factors"])
     return terms, special_cases
 
-def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, innings, terms, special_cases, outs_pi=3):
+def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3):
     factor_exp, factor_const, reverberation, repeating = special_cases["factors"][:4]
     team_atbat_data = copy.deepcopy(team_pid_stat_data)
     atbats, temp_factor = 0.0, 1.0
     batters = team_pid_stat_data.get(battingteam)        
     active_batters = len(batters)
-    hits_hrs_walks = 0.0
-    ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"])
+    hits_hrs_walks = 0.0    
+    ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"], reverse=flip_lineup)    
     outs_pg = innings * outs_pi        
     current_outs = 0
     while current_outs < outs_pg:        
@@ -127,7 +127,7 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
 
 def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases, outs_pi=3):            
     if eventofinterest == "abs":                
-        get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, 9.0, terms, special_cases, outs_pi)
+        get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, 9.0, False, terms, special_cases, outs_pi)
         batman = team_pid_stat_data[battingteam][batter]["atbats"]
     else:        
         factor_exp, factor_const = special_cases["factors"][:2]

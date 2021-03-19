@@ -587,7 +587,7 @@ def minimize_batman_func(parameters, *data):
     batman_unexvar = 0.0
     fail_rate, pos_fail_rate = 1.0, 1.0
     max_err_actual, min_err_actual = "", ""
-    reject_solution, viability_unchecked = False, True        
+    reject_solution, viability_unchecked = False, True            
     for season in range(11, 14):
         if reject_solution:
             break
@@ -653,36 +653,44 @@ def minimize_batman_func(parameters, *data):
                             continue
                     good_batter_perf_data, abs_batter_perf_data = [], []                                
                     last_lineup_id, previous_batting_team = "", ""
-                    lineup_size, minimum_atbats = 0, 0                    
+                    previous_innings, minimum_atbats, lineup_size = 0, 0, 0
                     omit_from_good_abs = False
                     atbats_team_stat_data = copy.deepcopy(team_stat_data)                                        
                     for batter_perf in batter_perf_data:                                 
                         battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
-                        pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)   
-                        if not iscached_batters:                            
+                        pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)                                               
+                        if not iscached_batters:            
+                            if (minimum_atbats < previous_innings * 3) and not (previous_batting_team == battingteam) and not omit_from_good_abs:
+                                print("team did not achieve the requisite number of atbats for their minimum number of outs: {} at bats, {} outs".format(minimum_atbats, previous_innings * 3))
+                                omit_from_good_abs = True
                             if not (previous_batting_team == battingteam) and not (previous_batting_team == ""):                                
-                                if not omit_from_good_abs:                            
+                                if not omit_from_good_abs:                                      
                                     for bperf in abs_batter_perf_data:
                                         good_batter_perf_data.extend([bperf])                                
-                                    abs_batter_perf_data = []
+                                    abs_batter_perf_data = []                                    
                                 omit_from_good_abs = False
                             elif omit_from_good_abs:                           
-                                continue                            
+                                continue       
+                        if previous_batting_team != battingteam:
+                            minimum_atbats = 0
                         batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
                         if not batter_list_dict:
                             continue
                         pitchername = players[batter_perf["pitcher_id"]][0]                                                 
-                        previous_batting_team = battingteam
-                        if (eventofinterest == "abs"): 
-                            if ("atbats" not in atbats_team_stat_data[battingteam][batter_perf["batter_id"]]):                                                               
-                                atbats_team_stat_data = copy.deepcopy(get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), terms, {"factors": special_cases}))                                                                
+                        previous_batting_team = battingteam                        
+                        if (eventofinterest == "abs"):                            
+                            if ("atbats" not in atbats_team_stat_data[battingteam][batter_perf["batter_id"]]):                                  
+                                flip_lineup = (battingteam == "San Francisco Lovers") and (season == 13) and (day > 27)                                
+                                atbats_team_stat_data = copy.deepcopy(get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, {"factors": special_cases}))                                                                                                
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)
+                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                            
+                            minimum_atbats += int(batter_perf["at_bats"]) + batman_fail_by
+                            previous_innings = int(batter_perf["num_innings"])
                             if (CURRENT_ITERATION == 1) and (batman_fail_by >= 1):
                                 omit_from_good_abs = True
-                                print("Omitting {}, season {}, day {}, opponent {}, batter {}".format(battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))
+                                #print("Omitting {}, season {}, day {}, opponent {}, batter {}".format(battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))
                                 continue
-                            elif not iscached_batters:
+                            if not iscached_batters:
                                 abs_batter_perf_data.extend([batter_perf])                            
                         else:
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
@@ -730,7 +738,7 @@ def minimize_batman_func(parameters, *data):
         if season not in HAS_GAMES:
             HAS_GAMES[season] = False
         season_end = datetime.datetime.now()
-        # debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)        
+        # debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)         
     if not reject_solution:
         fail_rate = fail_counter / bat_counter
         pos_fail_rate = fail_pos_counter / bat_pos_counter
@@ -771,8 +779,10 @@ def minimize_batman_func(parameters, *data):
         debug_print("max underestimate {:.4f}, max overestimate {:.4f}, unexvar {:.4f}".format(batman_min_err, batman_max_err, batman_unexvar), debug, run_id)
         debug_print("actual val underest {}".format(min_err_actual), debug, run_id)
         debug_print("actual val overest {}".format(max_err_actual), debug, run_id)
-        debug_print("Best so far - fail rate {:.4f}%, pos fail rate {:.4f}%\n".format(fail_rate * 100.0, pos_fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)      
+        debug_print("Best so far - fail rate {:.4f}%, pos fail rate {:.4f}%\n".format(fail_rate * 100.0, pos_fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)   
         WORST_ERROR = (batman_max_err - batman_min_err)
+        if eventofinterest == "abs" and CURRENT_ITERATION == 1:
+            WORST_ERROR = WORST_ERROR * 1.2
         debug_print("Optimizing: {}".format(eventofinterest), debug, run_id)               
         debug_print("-" * 20 + "\n", debug, run_id)
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):
