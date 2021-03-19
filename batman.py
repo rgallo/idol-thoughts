@@ -95,9 +95,13 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
             temp_factor = factor_exp if (pitcher_batter > 0) else 1.0
             hits_hrs_walks = ((pitcher_batter ** float(temp_factor)) + everythingelse) * (float(factor_const) / 100.0)
             if math.isnan(hits_hrs_walks):
-                return -10000.0
+                for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
+                    team_atbat_data[battingteam][bat_id]["atbats"] = -10000.0
+                return team_atbat_data
             if hits_hrs_walks >= 1.0:
-                return -1000.0                
+                for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
+                    team_atbat_data[battingteam][bat_id]["atbats"] = -10000.0
+                return team_atbat_data
             if hits_hrs_walks >= 0.0:
                 outs_pg += hits_hrs_walks                      
             team_atbat_data[battingteam][batter_id]["atbats"] += 1.0          
@@ -112,11 +116,11 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
             current_outs += 1      
             if current_outs >= outs_pg:                                
                 break        
-    #I guess distribute the remaining error equally among all batters?
+    # I guess distribute the remaining error equally among all batters?
     for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
         if "atbats" not in team_atbat_data[battingteam][batter_id]:
             team_atbat_data[battingteam][batter_id]["atbats"] = 0.0
-        if outs_pg > (current_outs - 1):
+        if (outs_pg > (current_outs - 1)) and (outs_pg > 9.0 * outs_pi):
             team_atbat_data[battingteam][batter_id]["atbats"] += (outs_pg - (current_outs - 1)) / active_batters
     return team_atbat_data
 

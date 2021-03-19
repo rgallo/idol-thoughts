@@ -643,7 +643,8 @@ def minimize_batman_func(parameters, *data):
                 if not special_game_attrs:
                     cached_batters = BATTER_CACHE.get((season, day, game["away"]["game_id"]))
                     iscached_batters = False
-                    if cached_batters:                    
+                    if cached_batters:
+                        print("And now we have cached batters!")
                         batter_perf_data = cached_batters
                         iscached_batters = True
                     else:                                        
@@ -651,22 +652,41 @@ def minimize_batman_func(parameters, *data):
                         if not batter_perf_data:                        
                             BATTER_CACHE[(season, day, game["away"]["game_id"])] = []
                             continue
-                    good_batter_perf_data = []                                
-                    last_lineup_id = ""   
-                    lineup_size = 0                    
+                    good_batter_perf_data, abs_batter_perf_data = [], []                                
+                    last_lineup_id, previous_batting_team = "", ""
+                    lineup_size, minimum_atbats = 0, 0                    
+                    omit_from_good_abs = False
                     atbats_team_stat_data = copy.deepcopy(team_stat_data)                                        
-                    for batter_perf in batter_perf_data:                                      
+                    for batter_perf in batter_perf_data:         
+                        if CURRENT_ITERATION > 1:
+                            print(batter_perf)
                         battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
-                        pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)                        
+                        pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)   
+                        if not iscached_batters:                            
+                            if not (previous_batting_team == battingteam) and not (previous_batting_team == ""):                                
+                                if not omit_from_good_abs:                            
+                                    for bperf in abs_batter_perf_data:
+                                        good_batter_perf_data.extend(bperf)                                
+                                    abs_batter_perf_data = []
+                                omit_from_good_abs = False
+                            elif omit_from_good_abs:                           
+                                continue                            
                         batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
                         if not batter_list_dict:
-                            continue                                                                    
+                            continue
                         pitchername = players[batter_perf["pitcher_id"]][0]                                                 
+                        previous_batting_team = battingteam
                         if (eventofinterest == "abs"): 
                             if ("atbats" not in atbats_team_stat_data[battingteam][batter_perf["batter_id"]]):                                                               
                                 atbats_team_stat_data = copy.deepcopy(get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases}))                                                                
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
                                                                                         batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)
+                            if (CURRENT_ITERATION == 1) and (batman_fail_by >= 1):
+                                omit_from_good_abs = True
+                                print("Omitting {}, season {}, day {}, opponent {}, batter {}".format(battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))
+                                continue
+                            elif not iscached_batters:
+                                abs_batter_perf_data.extend(batter_perf)                            
                         else:
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
                                                                                         batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                                            
@@ -704,7 +724,10 @@ def minimize_batman_func(parameters, *data):
                                         if abs(batman_fail_by) < stageexact:
                                             pass_exact += 1          
                     if not iscached_batters:
-                        BATTER_CACHE[(season, day, game["away"]["game_id"])] = batter_perf_data
+                        if eventofinterest == "abs":
+                            BATTER_CACHE[(season, day, game["away"]["game_id"])] = good_batter_perf_data
+                        else:
+                            BATTER_CACHE[(season, day, game["away"]["game_id"])] = batter_perf_data
             if not is_cached:
                 GAME_CACHE[(season, day)] = good_game_list
         if season not in HAS_GAMES:
@@ -749,7 +772,8 @@ def minimize_batman_func(parameters, *data):
         debug_print("+/- {:.2f} = {:.4f}".format(stagethree, pass_within_three), debug, run_id)
         debug_print("+/- {:.2f} = {:.4f}".format(stagefour, pass_within_four), debug, run_id)
         debug_print("max underestimate {:.4f}, max overestimate {:.4f}, unexvar {:.4f}".format(batman_min_err, batman_max_err, batman_unexvar), debug, run_id)
-        debug_print("actual val underest {}, actual val overest {}".format(min_err_actual, max_err_actual), debug, run_id)
+        debug_print("actual val underest {}".format(min_err_actual), debug, run_id)
+        debug_print("actual val overest {}".format(max_err_actual), debug, run_id)
         debug_print("Best so far - fail rate {:.4f}%, pos fail rate {:.4f}%\n".format(fail_rate * 100.0, pos_fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)      
         WORST_ERROR = (batman_max_err - batman_min_err)
         debug_print("Optimizing: {}".format(eventofinterest), debug, run_id)               
