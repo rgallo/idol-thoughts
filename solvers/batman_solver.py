@@ -38,17 +38,17 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
     else:                        
         atbats, hits, homers, innings = int(batter_perf_data["at_bats"]), int(batter_perf_data["hits"]), int(batter_perf_data["home_runs"]), int(batter_perf_data["num_innings"])                
         #how many atbats in a 9 inning game
-        atbats_in9 = math.ceil((atbats / innings) * 9.0)
+        atbats_in9 = (atbats / innings) * 9.0
         #how many atbats in a 9 inning game per a 9 player lineup (all estimations should be multiplied by (9.0 / actual lineup size))
         #atbats_lineup = (atbats_in9 / 9.0) * lineup_size               
         games, fail_batman, fail_batman_by = 1, 1, 0                
         if eventofinterest == "abs":                 
             batman = team_stat_data[battingteam][batter]["atbats"]
-            if (atbats_in9 - 0.5) < batman < (atbats_in9 + 0.5):
+            if atbats - 0.5 < batman < atbats + 0.5:
                 fail_batman -= 1
-            fail_batman_by = batman - atbats_in9            
-            real_val = atbats_in9
-            actual = "Real vals {} in {} innings, {:.2f} in 9 innings, batman {:.2f} in 9 innings".format(atbats, innings, atbats_in9, batman)            
+            fail_batman_by = batman - atbats            
+            real_val = atbats
+            actual = "Real vals {} in {} innings, batman {:.2f} in {} innings".format(atbats, innings, batman, innings)            
         else:
             try:
                 batman = get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases})            

@@ -675,7 +675,7 @@ def minimize_batman_func(parameters, *data):
                         previous_batting_team = battingteam
                         if (eventofinterest == "abs"): 
                             if ("atbats" not in atbats_team_stat_data[battingteam][batter_perf["batter_id"]]):                                                               
-                                atbats_team_stat_data = copy.deepcopy(get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases}))                                                                
+                                atbats_team_stat_data = copy.deepcopy(get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), terms, {"factors": special_cases}))                                                                
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
                                                                                         batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)
                             if (CURRENT_ITERATION == 1) and (batman_fail_by >= 1):
