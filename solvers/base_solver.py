@@ -653,7 +653,7 @@ def minimize_batman_func(parameters, *data):
                             continue
                     good_batter_perf_data, abs_batter_perf_data = [], []                                
                     last_lineup_id, previous_batting_team = "", ""
-                    previous_innings, minimum_atbats, lineup_size = 0, 0, 0
+                    previous_innings, minimum_atbats, lineup_size, interbat_counter, interbat_fail_counter = 0, 0, 0, 0, 0
                     omit_from_good_abs = False
                     atbats_team_stat_data = copy.deepcopy(team_stat_data)                                        
                     for batter_perf in batter_perf_data:                                 
@@ -666,8 +666,11 @@ def minimize_batman_func(parameters, *data):
                             if not (previous_batting_team == battingteam) and not (previous_batting_team == ""):                                
                                 if not omit_from_good_abs:                                      
                                     for bperf in abs_batter_perf_data:
-                                        good_batter_perf_data.extend([bperf])                                
-                                    abs_batter_perf_data = []                                    
+                                        good_batter_perf_data.extend([bperf])  
+                                else:                                    
+                                    for bperf in abs_batter_perf_data:
+                                        good_batter_perf_data.extend([])
+                                abs_batter_perf_data = []                                    
                                 omit_from_good_abs = False
                             elif omit_from_good_abs:                           
                                 continue       
@@ -685,18 +688,19 @@ def minimize_batman_func(parameters, *data):
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
                                                                                         batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                            
                             minimum_atbats += int(batter_perf["at_bats"]) + batman_fail_by
-                            previous_innings = int(batter_perf["num_innings"])
-                            if (CURRENT_ITERATION == 1) and (batman_fail_by >= 1):
-                                omit_from_good_abs = True
-                                #print("Omitting {}, season {}, day {}, opponent {}, batter {}".format(battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))
-                                continue
+                            previous_innings = int(batter_perf["num_innings"])                            
+                            if real_val == 1:
+                                print("{} atbat {} season {}, day {}, opponent {}, batter {}".format(real_val, battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))
+                            if (CURRENT_ITERATION == 1) and (batman_fail_by > 0):                                
+                                omit_from_good_abs = True                                      
+                                print("Omitting {}, season {}, day {}, opponent {}, batter {}".format(battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))                                    
                             if not iscached_batters:
                                 abs_batter_perf_data.extend([batter_perf])                            
                         else:
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                                            
+                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                                                                                            
                         bat_counter += bat_bat_counter
-                        fail_counter += bat_fail_counter                    
+                        fail_counter += bat_fail_counter                                          
                         if real_val > 0:
                             bat_pos_counter += bat_bat_counter
                             fail_pos_counter += bat_fail_counter
@@ -728,6 +732,19 @@ def minimize_batman_func(parameters, *data):
                                         pass_within_one += 1
                                         if abs(batman_fail_by) < stageexact:
                                             pass_exact += 1          
+                    if not iscached_batters:            
+                        if (minimum_atbats < previous_innings * 3) and not omit_from_good_abs:
+                            print("team did not achieve the requisite number of atbats for their minimum number of outs: {} at bats, {} outs".format(minimum_atbats, previous_innings * 3))
+                            omit_from_good_abs = True                                                       
+                        if not omit_from_good_abs:                                      
+                            for bperf in abs_batter_perf_data:
+                                good_batter_perf_data.extend([bperf])  
+                        else:
+                            print("Catching omission out of the loop; Omitting {}, season {}, day {}, opponent {}".format(battingteam, season, day, pitchingteam))
+                            for bperf in abs_batter_perf_data:
+                                good_batter_perf_data.extend([])
+                        abs_batter_perf_data = []                                    
+                        omit_from_good_abs = False                        
                     if not iscached_batters:
                         if eventofinterest == "abs":
                             BATTER_CACHE[(season, day, game["away"]["game_id"])] = good_batter_perf_data
