@@ -12,6 +12,7 @@ from glob import glob
 from helpers import StlatTerm, get_weather_idx
 from idolthoughts import load_stat_data, load_stat_data_pid
 from mofo import get_mods
+from batman import get_team_atbats
 
 STAT_CACHE = {}
 GAME_CACHE = {}
@@ -638,69 +639,72 @@ def minimize_batman_func(parameters, *data):
                 if not is_cached and not special_game_attrs:
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
-                cached_batters = BATTER_CACHE.get((season, day, game["away"]["game_id"]))
-                iscached_batters = False
-                if cached_batters:                    
-                    batter_perf_data = cached_batters
-                    iscached_batters = True
-                else:                                        
-                    batter_perf_data = [row for row in batter_list if row["season"] == str(season) and row["day"] == str(day) and row["game_id"] == game["away"]["game_id"]]                    
-                    if not batter_perf_data:                        
-                        BATTER_CACHE[(season, day, game["away"]["game_id"])] = []
-                        continue
-                good_batter_perf_data = []                                
-                last_lineup_id = ""   
-                lineup_size = 0
-                for batter_perf in batter_perf_data:              
-                    battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
-                    pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)
-                    batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
-                    if not batter_list_dict:
-                        continue                    
-                    if batter_perf["batter_team_id"] != last_lineup_id:
-                        lineup_size = 0
-                        for countbatter in batter_perf_data:
-                            if batter_perf["batter_team_id"] == countbatter["batter_team_id"]:
-                                lineup_size += 1
-                    last_lineup_id = batter_perf["batter_team_id"]                    
-                    pitchername = players[batter_perf["pitcher_id"]][0]                                        
-                    bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                    batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                    
-                    bat_counter += bat_bat_counter
-                    fail_counter += bat_fail_counter                    
-                    if real_val > 0:
-                        bat_pos_counter += bat_bat_counter
-                        fail_pos_counter += bat_fail_counter
-                        batman_unexvar += batman_fail_by ** 2.0
-                    if bat_bat_counter:                    
-                        if batman_fail_by > batman_max_err:
-                            batman_max_err = batman_fail_by
-                            max_err_actual = actual_result
-                        if batman_fail_by < batman_min_err:
-                            batman_min_err = batman_fail_by
-                            min_err_actual = actual_result                        
-                    if ((batman_max_err - batman_min_err) > WORST_ERROR) and (BEST_FAIL_RATE < 1.0):
-                        reject_solution = True
-                        break
-                    if (batman_unexvar) > BEST_UNEXVAR_ERROR and (BEST_FAIL_RATE < 1.0):
-                        reject_solution = True
-                        break
-                    if eventofinterest == "abs":
-                        stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
-                    else:
-                        stagefour, stagethree, stagetwo, stageone, stageexact = 2.5, 2.0, 1.5, 1.0, 0.5
-                    if (abs(batman_fail_by) < stagefour) and (real_val > 0):             
-                        pass_within_four += 1
-                        if abs(batman_fail_by) < stagethree:                                                
-                            pass_within_three += 1
-                            if abs(batman_fail_by) < stagetwo:                                                
-                                pass_within_two += 1
-                                if abs(batman_fail_by) < stageone:
-                                    pass_within_one += 1
-                                    if abs(batman_fail_by) < stageexact:
-                                        pass_exact += 1          
-                if not iscached_batters:
-                    BATTER_CACHE[(season, day, game["away"]["game_id"])] = batter_perf_data
+                if not special_game_attrs:
+                    cached_batters = BATTER_CACHE.get((season, day, game["away"]["game_id"]))
+                    iscached_batters = False
+                    if cached_batters:                    
+                        batter_perf_data = cached_batters
+                        iscached_batters = True
+                    else:                                        
+                        batter_perf_data = [row for row in batter_list if row["season"] == str(season) and row["day"] == str(day) and row["game_id"] == game["away"]["game_id"]]                    
+                        if not batter_perf_data:                        
+                            BATTER_CACHE[(season, day, game["away"]["game_id"])] = []
+                            continue
+                    good_batter_perf_data = []                                
+                    last_lineup_id = ""   
+                    lineup_size = 0
+                    for batter_perf in batter_perf_data:              
+                        battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
+                        pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)
+                        batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
+                        if not batter_list_dict:
+                            continue                    
+                        if batter_perf["batter_team_id"] != last_lineup_id:
+                            lineup_size = 0
+                            for countbatter in batter_perf_data:
+                                if batter_perf["batter_team_id"] == countbatter["batter_team_id"]:
+                                    lineup_size += 1
+                        last_lineup_id = batter_perf["batter_team_id"]                    
+                        pitchername = players[batter_perf["pitcher_id"]][0]
+                        if (eventofinterest == "abs") and ("atbats" not in team_stat_data[battingteam][batter_perf["batter_id"]]):                        
+                            get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases})
+                        bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
+                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                    
+                        bat_counter += bat_bat_counter
+                        fail_counter += bat_fail_counter                    
+                        if real_val > 0:
+                            bat_pos_counter += bat_bat_counter
+                            fail_pos_counter += bat_fail_counter
+                            batman_unexvar += batman_fail_by ** 2.0
+                        if bat_bat_counter:                    
+                            if batman_fail_by > batman_max_err:
+                                batman_max_err = batman_fail_by
+                                max_err_actual = actual_result
+                            if batman_fail_by < batman_min_err:
+                                batman_min_err = batman_fail_by
+                                min_err_actual = actual_result                        
+                        if ((batman_max_err - batman_min_err) > WORST_ERROR) and (BEST_FAIL_RATE < 1.0):
+                            reject_solution = True
+                            break
+                        if (batman_unexvar) > BEST_UNEXVAR_ERROR and (BEST_FAIL_RATE < 1.0):
+                            reject_solution = True
+                            break
+                        if eventofinterest == "abs":
+                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
+                        else:
+                            stagefour, stagethree, stagetwo, stageone, stageexact = 2.5, 2.0, 1.5, 1.0, 0.5
+                        if (abs(batman_fail_by) < stagefour) and (real_val > 0):             
+                            pass_within_four += 1
+                            if abs(batman_fail_by) < stagethree:                                                
+                                pass_within_three += 1
+                                if abs(batman_fail_by) < stagetwo:                                                
+                                    pass_within_two += 1
+                                    if abs(batman_fail_by) < stageone:
+                                        pass_within_one += 1
+                                        if abs(batman_fail_by) < stageexact:
+                                            pass_exact += 1          
+                    if not iscached_batters:
+                        BATTER_CACHE[(season, day, game["away"]["game_id"])] = batter_perf_data
             if not is_cached:
                 GAME_CACHE[(season, day)] = good_game_list
         if season not in HAS_GAMES:

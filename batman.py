@@ -75,53 +75,59 @@ def setup(eventofinterest):
     terms, special_cases = load_terms(terms_url, ["factors"])
     return terms, special_cases
 
+def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases, outs_pi=3):
+    factor_exp, factor_const, reverberation, repeating = special_cases["factors"][:4]
+    atbats, temp_factor = 0.0, 1.0
+    batters = team_pid_stat_data.get(battingteam)        
+    active_batters = len(batters)
+    hits_hrs_walks = 0.0
+    ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"])
+    outs_pg = 9.0 * outs_pi        
+    current_outs = 0
+    while current_outs < outs_pg:        
+        for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):                                
+            if "atbats" not in team_pid_stat_data[battingteam][batter_id]:
+                team_pid_stat_data[battingteam][batter_id]["atbats"] = 0.0
+            pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam)
+            everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id)
+            temp_factor = factor_exp if (pitcher_batter > 0) else 1.0
+            hits_hrs_walks = ((pitcher_batter ** float(temp_factor)) + everythingelse) * (float(factor_const) / 100.0)
+            if math.isnan(hits_hrs_walks):
+                return -10000.0
+            if hits_hrs_walks >= 1.0:
+                return -1000.0                
+            if hits_hrs_walks >= 0.0:
+                outs_pg += hits_hrs_walks                      
+            team_pid_stat_data[battingteam][batter_id]["atbats"] += 1.0          
+            if team_pid_stat_data[battingteam][batter_id]["reverberating"]:                        
+                team_pid_stat_data[battingteam][batter_id]["atbats"] += reverberation
+                if hits_hrs_walks >= 0.0:
+                    outs_pg += hits_hrs_walks * reverberation
+            if team_pid_stat_data[battingteam][batter_id]["repeating"]:                        
+                team_pid_stat_data[battingteam][batter_id]["atbats"] += repeating
+                if hits_hrs_walks >= 0.0:
+                    outs_pg += hits_hrs_walks * repeating
+            current_outs += 1      
+            if current_outs >= outs_pg:                                
+                break        
+    #I guess distribute the remaining error equally among all batters?
+    for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
+        if "atbats" not in team_pid_stat_data[battingteam][batter_id]:
+            team_pid_stat_data[battingteam][batter_id]["atbats"] = 0.0
+        team_pid_stat_data[battingteam][batter_id]["atbats"] += (outs_pg - (current_outs - 1)) / active_batters
+    return team_pid_stat_data
+
 
 def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases, outs_pi=3):            
     if eventofinterest == "abs":                
-        factor_exp, factor_const, reverberation, repeating = special_cases["factors"][:4]
-        atbats = 0.0
-        batters = team_pid_stat_data.get(battingteam)        
-        active_batters = len(batters)         
-        ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"])
-        outs_pg = 9.0 * outs_pi        
-        current_outs = 0
-        while current_outs < outs_pg:
-            batter_batted = False
-            for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):                                
-                pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam)
-                everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id)                
-                if math.isnan((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)):
-                    return -10000.0
-                if ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) >= 1.0:
-                    return -1000.0                
-                if ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) >= 0.0:
-                    outs_pg += (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)  
-                if math.isnan(outs_pg):
-                    return -10000.0
-                current_outs += 1                             
-                if batter_id == batter:
-                    atbats += 1.0
-                    if team_pid_stat_data[battingteam][batter]["reverberating"]:                        
-                        atbats += reverberation
-                        if ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) >= 0.0:
-                            outs_pg += ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) * reverberation
-                    if team_pid_stat_data[battingteam][batter]["repeating"]:                        
-                        atbats += repeating
-                        if ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) >= 0.0:
-                            outs_pg += ((pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)) * repeating
-                    batter_batted = True
-                if current_outs >= outs_pg:
-                    if batter_batted:
-                        atbats += (outs_pg - (current_outs - 1)) / (lineup_order + 1)
-                    else:
-                        atbats -= (outs_pg - (current_outs - 1)) / (lineup_order + 1)
-                    break
-        batman = atbats
+        get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases, outs_pi)
+        batman = team_pid_stat_data[battingteam][batter]["atbats"]
     else:        
         factor_exp, factor_const = special_cases["factors"][:2]
         everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter)
         pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam)
-        batman = (pitcher_batter ** float(factor_exp)) + everythingelse - float(factor_const)     
+        factor_exp = factor_exp if (pitcher_batter > 0) else 1.0
+        batman = ((pitcher_batter ** float(factor_exp)) + everythingelse) * float(factor_const)
         batman = max(batman, 0.0)
     return batman
 

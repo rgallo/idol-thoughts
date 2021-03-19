@@ -40,35 +40,36 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
         #how many atbats in a 9 inning game
         atbats_in9 = (atbats / innings) * 9.0
         #how many atbats in a 9 inning game per a 9 player lineup (all estimations should be multiplied by (9.0 / actual lineup size))
-        #atbats_lineup = (atbats_in9 / 9.0) * lineup_size                
-        try:
-            batman = get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases})            
-        except ValueError:
-            batman = -10000      
-        if math.isnan(batman):
-            batman = -10000
-        fail_batman, fail_batman_by = 1, 0        
-        if eventofinterest == "abs":            
+        #atbats_lineup = (atbats_in9 / 9.0) * lineup_size               
+        games, fail_batman, fail_batman_by = 1, 1, 0                
+        if eventofinterest == "abs":     
+            batman = team_stat_data[battingteam][batter]["atbats"]
             if (atbats_in9 - 0.25) < batman < (atbats_in9 + 0.25):
                 fail_batman -= 1
             fail_batman_by = batman - atbats_in9     
             real_val = atbats_in9
-            actual = "{} in {} innings, batman {:.4f}".format(atbats, innings, batman)
-        elif eventofinterest == "hits":            
-            if (hits - 0.5) < (batman * atbats) < (hits + 0.5):                
-                fail_batman -= 1
-            fail_batman_by = (batman * atbats) - hits
-            batman_val = (batman * atbats)
-            real_val = hits
-            actual = "{} hits, batman {:.4f}".format(hits, (batman * atbats))
-        elif eventofinterest == "hrs":
-            if (homers - 0.5) < (batman * atbats) < (homers + 0.5):
-                fail_batman -= 1
-            fail_batman_by = (batman * atbats) - homers
-            batman_val = (batman * atbats)
-            real_val = homers
-            actual = "{} hrs, batman {:.4f}".format(homers, (batman * atbats))
-        games = 1
+            actual = "{} in {} innings, batman {:.2f} in 9 innings".format(atbats, innings, batman)
+        else:
+            try:
+                batman = get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases})            
+            except ValueError:
+                batman = -10000      
+            if math.isnan(batman):
+                batman = -10000
+            if eventofinterest == "hits":            
+                if (hits - 0.5) < (batman * atbats) < (hits + 0.5):                
+                    fail_batman -= 1
+                fail_batman_by = (batman * atbats) - hits
+                batman_val = (batman * atbats)
+                real_val = hits
+                actual = "{} hits, batman {:.4f}".format(hits, (batman * atbats))
+            elif eventofinterest == "hrs":
+                if (homers - 0.5) < (batman * atbats) < (homers + 0.5):
+                    fail_batman -= 1
+                fail_batman_by = (batman * atbats) - homers
+                batman_val = (batman * atbats)
+                real_val = homers
+                actual = "{} hrs, batman {:.4f}".format(homers, (batman * atbats))        
     return games, fail_batman, fail_batman_by, actual, real_val
 
 
@@ -98,15 +99,15 @@ def main():
         team_attrs = json.load(f)
     if cmd_args.hits:
         eventofinterest = "hits"            
-        bounds = [[-2, 2], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [-1, 1]]
+        bounds = [[-6, 6], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [0, 2]]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        bounds = [[-2, 2], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [-1, 1]]
+        bounds = [[-6, 6], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [0, 2]]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        bounds = [[-2, 2], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [-1, 1], [0, 0.02], [0, 0.02]]
+        bounds = [[-8, 8], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [0, 2], [0, 0.02], [0, 0.02]]
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, [], stat_file_map, game_list, team_attrs, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=15, tol=0.0001, 
