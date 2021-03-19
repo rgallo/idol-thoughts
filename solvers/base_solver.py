@@ -7,6 +7,7 @@ import json
 import os
 import re
 import uuid
+import copy
 from glob import glob
 
 from helpers import StlatTerm, get_weather_idx
@@ -652,24 +653,23 @@ def minimize_batman_func(parameters, *data):
                             continue
                     good_batter_perf_data = []                                
                     last_lineup_id = ""   
-                    lineup_size = 0
-                    for batter_perf in batter_perf_data:              
+                    lineup_size = 0                    
+                    atbats_team_stat_data = copy.deepcopy(team_stat_data)                                        
+                    for batter_perf in batter_perf_data:                                      
                         battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
-                        pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)
+                        pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)                        
                         batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
                         if not batter_list_dict:
-                            continue                    
-                        if batter_perf["batter_team_id"] != last_lineup_id:
-                            lineup_size = 0
-                            for countbatter in batter_perf_data:
-                                if batter_perf["batter_team_id"] == countbatter["batter_team_id"]:
-                                    lineup_size += 1
-                        last_lineup_id = batter_perf["batter_team_id"]                    
-                        pitchername = players[batter_perf["pitcher_id"]][0]
-                        if (eventofinterest == "abs") and ("atbats" not in team_stat_data[battingteam][batter_perf["batter_id"]]):                        
-                            get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases})
-                        bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                    
+                            continue                                                                    
+                        pitchername = players[batter_perf["pitcher_id"]][0]                                                 
+                        if (eventofinterest == "abs"): 
+                            if ("atbats" not in atbats_team_stat_data[battingteam][batter_perf["batter_id"]]):                                                               
+                                atbats_team_stat_data = copy.deepcopy(get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases}))                                                                
+                            bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
+                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)
+                        else:
+                            bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
+                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                                            
                         bat_counter += bat_bat_counter
                         fail_counter += bat_fail_counter                    
                         if real_val > 0:
@@ -719,6 +719,7 @@ def minimize_batman_func(parameters, *data):
     # need to sort win_loss to match up with what will be the sorted set of vals
     # also need to only do this when solving MOFO
     linear_fail = 90000000000.0
+    fail_points = 90000000000.0
     if not reject_solution:        
         pass_exact = (pass_exact / bat_pos_counter) * 100.0
         pass_within_one = (pass_within_one / bat_pos_counter) * 100.0
@@ -727,11 +728,13 @@ def minimize_batman_func(parameters, *data):
         pass_within_four = (pass_within_four / bat_pos_counter) * 100.0
         if pass_exact > BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
-        if (batman_max_err >= batman_min_err) and ((pos_fail_rate <= BEST_FAIL_RATE) or eventofinterest == "abs"):
+        if (batman_max_err >= batman_min_err) and ((pos_fail_rate <= BEST_FAIL_RATE) or eventofinterest == "abs"):            
+            fail_points = ((fail_rate * 100.0 * (bat_pos_counter / bat_counter)) + (pos_fail_rate * 100.0) - pass_exact - (pass_within_one / 2.0) - (pass_within_two / 4.0) - (pass_within_three / 8.0) - (pass_within_four / 16.0))
+            print("Candidate for success! {:.4f} error span, fail points = {:.2f}".format((batman_max_err - batman_min_err), fail_points))
             if (not (eventofinterest == "abs")) and (CURRENT_ITERATION == 1):
-                linear_fail = 10000.0 + ((fail_rate * 100.0 * (bat_pos_counter / bat_counter)) + (pos_fail_rate * 100.0) - pass_exact - (pass_within_one / 2.0) - (pass_within_two / 4.0) - (pass_within_three / 8.0) - (pass_within_four / 16.0))
+                linear_fail = 10000.0 + fail_points
             else:
-                linear_fail = (batman_max_err - batman_min_err) + ((fail_rate * 100.0 * (bat_pos_counter / bat_counter)) + (pos_fail_rate * 100.0) - pass_exact - (pass_within_one / 2.0) - (pass_within_two / 4.0) - (pass_within_three / 8.0) - (pass_within_four / 16.0))
+                linear_fail = (batman_max_err - batman_min_err) + fail_points
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact

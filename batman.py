@@ -3,6 +3,7 @@ from __future__ import print_function
 
 import os
 import math
+import copy
 
 from helpers import geomean, load_terms
 
@@ -77,6 +78,7 @@ def setup(eventofinterest):
 
 def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases, outs_pi=3):
     factor_exp, factor_const, reverberation, repeating = special_cases["factors"][:4]
+    team_atbat_data = copy.deepcopy(team_pid_stat_data)
     atbats, temp_factor = 0.0, 1.0
     batters = team_pid_stat_data.get(battingteam)        
     active_batters = len(batters)
@@ -86,8 +88,8 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
     current_outs = 0
     while current_outs < outs_pg:        
         for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):                                
-            if "atbats" not in team_pid_stat_data[battingteam][batter_id]:
-                team_pid_stat_data[battingteam][batter_id]["atbats"] = 0.0
+            if "atbats" not in team_atbat_data[battingteam][batter_id]:
+                team_atbat_data[battingteam][batter_id]["atbats"] = 0.0
             pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam)
             everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id)
             temp_factor = factor_exp if (pitcher_batter > 0) else 1.0
@@ -98,13 +100,13 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
                 return -1000.0                
             if hits_hrs_walks >= 0.0:
                 outs_pg += hits_hrs_walks                      
-            team_pid_stat_data[battingteam][batter_id]["atbats"] += 1.0          
+            team_atbat_data[battingteam][batter_id]["atbats"] += 1.0          
             if team_pid_stat_data[battingteam][batter_id]["reverberating"]:                        
-                team_pid_stat_data[battingteam][batter_id]["atbats"] += reverberation
+                team_atbat_data[battingteam][batter_id]["atbats"] += reverberation
                 if hits_hrs_walks >= 0.0:
                     outs_pg += hits_hrs_walks * reverberation
             if team_pid_stat_data[battingteam][batter_id]["repeating"]:                        
-                team_pid_stat_data[battingteam][batter_id]["atbats"] += repeating
+                team_atbat_data[battingteam][batter_id]["atbats"] += repeating
                 if hits_hrs_walks >= 0.0:
                     outs_pg += hits_hrs_walks * repeating
             current_outs += 1      
@@ -112,10 +114,11 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
                 break        
     #I guess distribute the remaining error equally among all batters?
     for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
-        if "atbats" not in team_pid_stat_data[battingteam][batter_id]:
-            team_pid_stat_data[battingteam][batter_id]["atbats"] = 0.0
-        team_pid_stat_data[battingteam][batter_id]["atbats"] += (outs_pg - (current_outs - 1)) / active_batters
-    return team_pid_stat_data
+        if "atbats" not in team_atbat_data[battingteam][batter_id]:
+            team_atbat_data[battingteam][batter_id]["atbats"] = 0.0
+        if outs_pg > (current_outs - 1):
+            team_atbat_data[battingteam][batter_id]["atbats"] += (outs_pg - (current_outs - 1)) / active_batters
+    return team_atbat_data
 
 
 def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases, outs_pi=3):            
