@@ -725,7 +725,7 @@ def minimize_batman_func(parameters, *data):
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if (batman_max_err >= batman_min_err) and ((pos_fail_rate <= BEST_FAIL_RATE) or eventofinterest == "abs"):
             if (not (eventofinterest == "abs")) and (CURRENT_ITERATION == 1):
-                linear_fail = 100.0 + ((fail_rate * 100.0 * (bat_pos_counter / bat_counter)) + (pos_fail_rate * 100.0) - pass_exact - (pass_within_one / 2.0) - (pass_within_two / 4.0) - (pass_within_three / 8.0) - (pass_within_four / 16.0))
+                linear_fail = 10000.0 + ((fail_rate * 100.0 * (bat_pos_counter / bat_counter)) + (pos_fail_rate * 100.0) - pass_exact - (pass_within_one / 2.0) - (pass_within_two / 4.0) - (pass_within_three / 8.0) - (pass_within_four / 16.0))
             else:
                 linear_fail = (batman_max_err - batman_min_err) + ((fail_rate * 100.0 * (bat_pos_counter / bat_counter)) + (pos_fail_rate * 100.0) - pass_exact - (pass_within_one / 2.0) - (pass_within_two / 4.0) - (pass_within_three / 8.0) - (pass_within_four / 16.0))
     if linear_fail < BEST_RESULT:
