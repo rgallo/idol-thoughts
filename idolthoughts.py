@@ -224,7 +224,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
             (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0,
             ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else "")
-                                      for result in odds_mismatch])
+                                      for result in sorted(odds_mismatch, key=lambda result: max(result.awayMatchupData.websiteodds, result.homeMatchupData.websiteodds), reverse=True)])
         results.append(send_discord_message("__Odds Mismatches__", odds_description, screen=screen))
         time.sleep(.5)
     if bad_bets:
@@ -603,7 +603,7 @@ def print_results(day, results, score_adjustments):
         ) for result in sorted(not_your_dad, key=lambda result: webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8), reverse=True)]))
     if odds_mismatch:
         print("Odds Mismatches")
-        print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in odds_mismatch))
+        print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in sorted(odds_mismatch, key=lambda result: result.websiteodds)))
 
 
 def load_test_data(testfile):
