@@ -646,7 +646,11 @@ def minimize_batman_func(parameters, *data):
                     if cached_batters:                        
                         batter_perf_data = cached_batters
                         iscached_batters = True
-                    else:                                        
+                    else:              
+                        if type(cached_batters) == list:
+                            continue
+                        if CURRENT_ITERATION > 1:
+                            print("Somehow not cached, not list season {}, day {}".format(season, day))
                         batter_perf_data = [row for row in batter_list if row["season"] == str(season) and row["day"] == str(day) and row["game_id"] == game["away"]["game_id"]]                    
                         if not batter_perf_data:                        
                             BATTER_CACHE[(season, day, game["away"]["game_id"])] = []
