@@ -659,7 +659,7 @@ def minimize_batman_func(parameters, *data):
                     last_lineup_id, previous_batting_team = "", ""
                     previous_innings, minimum_atbats, lineup_size, interbat_counter, interbat_fail_counter = 0, 0, 0, 0, 0
                     omit_from_good_abs = False
-                    atbats_team_stat_data = copy.deepcopy(team_stat_data)                                        
+                    atbats_team_stat_data = {}                                        
                     for batter_perf in batter_perf_data:                                 
                         battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
                         pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)                                               
@@ -672,8 +672,7 @@ def minimize_batman_func(parameters, *data):
                                     for bperf in abs_batter_perf_data:
                                         good_batter_perf_data.extend([bperf])  
                                 else:                                    
-                                    for bperf in abs_batter_perf_data:
-                                        good_batter_perf_data.extend([])
+                                    print("Catching omission IN the loop; Omitting {}, season {}, day {}, opponent {}".format(previous_batting_team, season, day, battingteam))                            
                                 abs_batter_perf_data = []                                    
                                 omit_from_good_abs = False
                             elif omit_from_good_abs:                           
@@ -686,9 +685,9 @@ def minimize_batman_func(parameters, *data):
                         pitchername = players[batter_perf["pitcher_id"]][0]                                                 
                         previous_batting_team = battingteam                        
                         if (eventofinterest == "abs"):                            
-                            if ("atbats" not in atbats_team_stat_data[battingteam][batter_perf["batter_id"]]):                                  
+                            if (batter_perf["batter_id"] not in atbats_team_stat_data):                                  
                                 flip_lineup = (battingteam == "San Francisco Lovers") and (season == 13) and (day > 27)                                
-                                atbats_team_stat_data = copy.deepcopy(get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, {"factors": special_cases}))                                                                                                
+                                atbats_team_stat_data = get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, {"factors": special_cases})
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
                                                                                         batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                            
                             minimum_atbats += int(batter_perf["at_bats"]) + batman_fail_by
@@ -744,9 +743,7 @@ def minimize_batman_func(parameters, *data):
                             for bperf in abs_batter_perf_data:
                                 good_batter_perf_data.extend([bperf])  
                         else:
-                            print("Catching omission out of the loop; Omitting {}, season {}, day {}, opponent {}".format(battingteam, season, day, pitchingteam))
-                            for bperf in abs_batter_perf_data:
-                                good_batter_perf_data.extend([])
+                            print("Catching omission out of the loop; Omitting {}, season {}, day {}, opponent {}".format(battingteam, season, day, pitchingteam))                            
                         abs_batter_perf_data = []                                    
                         omit_from_good_abs = False                        
                     if not iscached_batters:
@@ -761,6 +758,7 @@ def minimize_batman_func(parameters, *data):
         season_end = datetime.datetime.now()
         # debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)         
     if not reject_solution:
+        print("Possible solution! {:.4f} error span".format(batman_max_err - batman_min_err))
         fail_rate = fail_counter / bat_counter
         pos_fail_rate = fail_pos_counter / bat_pos_counter
     else:
@@ -801,10 +799,8 @@ def minimize_batman_func(parameters, *data):
         debug_print("actual val underest {}".format(min_err_actual), debug, run_id)
         debug_print("actual val overest {}".format(max_err_actual), debug, run_id)
         debug_print("Best so far - fail rate {:.4f}%, pos fail rate {:.4f}%\n".format(fail_rate * 100.0, pos_fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)   
-        WORST_ERROR = (batman_max_err - batman_min_err)
-        if eventofinterest == "abs" and CURRENT_ITERATION == 1:
-            WORST_ERROR = WORST_ERROR * 1.2
-        debug_print("Optimizing: {}".format(eventofinterest), debug, run_id)               
+        WORST_ERROR = (batman_max_err - batman_min_err)        
+        debug_print("Optimizing: {}, iteration #{}".format(eventofinterest, CURRENT_ITERATION), debug, run_id)               
         debug_print("-" * 20 + "\n", debug, run_id)
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):
         debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION), debug, datetime.datetime.now())

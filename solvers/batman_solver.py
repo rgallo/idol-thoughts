@@ -39,7 +39,7 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
         atbats, hits, homers, innings = int(batter_perf_data["at_bats"]), int(batter_perf_data["hits"]), int(batter_perf_data["home_runs"]), int(batter_perf_data["num_innings"])                        
         games, fail_batman, fail_batman_by = 1, 1, 0                
         if eventofinterest == "abs":                 
-            batman = team_stat_data[battingteam][batter]["atbats"]
+            batman = team_stat_data[batter]
             if atbats - 0.5 < batman < atbats + 0.5:
                 fail_batman -= 1
             fail_batman_by = batman - atbats            
