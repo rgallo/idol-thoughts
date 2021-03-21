@@ -63,6 +63,21 @@ def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, ba
         (terms["maxindulgence"], max([row["indulgence"] for row in batting_team_data])),
     )])
 
+def calc_defense(terms, pitchingteam, team_pid_stat_data, batter):
+    pitching_team_data = [stlats for player_id, stlats in team_pid_stat_data[pitchingteam].items()]    
+    return sum([term.calc(val) for term, val in (
+        (terms["meanomniscience"], geomean([row["omniscience"] for row in pitching_team_data])),
+        (terms["meantenaciousness"], geomean([row["tenaciousness"] for row in pitching_team_data])),
+        (terms["meanwatchfulness"], geomean([row["watchfulness"] for row in pitching_team_data])),
+        (terms["meananticapitalism"], geomean([row["anticapitalism"] for row in pitching_team_data])),
+        (terms["meanchasiness"], geomean([row["chasiness"] for row in pitching_team_data])),                
+        (terms["maxomniscience"], max([row["omniscience"] for row in pitching_team_data])),
+        (terms["maxtenaciousness"], max([row["tenaciousness"] for row in pitching_team_data])),
+        (terms["maxwatchfulness"], max([row["watchfulness"] for row in pitching_team_data])),
+        (terms["maxanticapitalism"], max([row["anticapitalism"] for row in pitching_team_data])),
+        (terms["maxchasiness"], max([row["chasiness"] for row in pitching_team_data])),                        
+    )])
+
 
 def setup(eventofinterest):
     if eventofinterest == "hits":
@@ -84,24 +99,27 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
     active_batters = len(batters)
     hits_hrs_walks = 0.0    
     ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"], reverse=flip_lineup)    
-    outs_pg = innings * outs_pi        
+    outs_pg = innings * outs_pi         
+    previous_outs_pg = outs_pg
     current_outs = 0
     while current_outs < outs_pg:        
+        #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup
+        if (outs_pg - previous_outs_pg) >= active_batters:
+            current_outs += 1
+        previous_outs_pg = outs_pg
         for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):            
             if batter_id not in team_atbat_data:
                 team_atbat_data[batter_id] = 0.0            
             pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam)
             everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id)
             temp_factor = factor_exp if (pitcher_batter > 0) else 1.0
-            hits_hrs_walks = ((pitcher_batter ** float(temp_factor)) + everythingelse) * (float(factor_const) / 100.0)
+            hits_hrs_walks = ((pitcher_batter ** float(temp_factor)) + everythingelse) * (float(factor_const) / 1000.0)
             if math.isnan(hits_hrs_walks):
                 for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
                     team_atbat_data[bat_id] = -10000.0
                 return team_atbat_data
-            if hits_hrs_walks >= 1.0:
-                for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
-                    team_atbat_data[bat_id] = -10000.0
-                return team_atbat_data
+            if hits_hrs_walks > 1.0:                
+                hits_hrs_walks = 1.0                
             if hits_hrs_walks >= 0.0:
                 outs_pg += hits_hrs_walks                      
             team_atbat_data[batter_id] += 1.0          
@@ -115,7 +133,7 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
                     outs_pg += hits_hrs_walks * repeating
             current_outs += 1      
             if current_outs >= outs_pg:                                
-                break        
+                break                
     # I guess distribute the remaining error equally among all batters?
     for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
         if batter_id not in team_atbat_data:
@@ -131,10 +149,10 @@ def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team
         batman = atbats_data[batter]
     else:        
         factor_exp, factor_const = special_cases["factors"][:2]
-        everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter)
+        everythingelse = calc_defense(terms, pitchingteam, team_pid_stat_data, batter)
         pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam)
         factor_exp = factor_exp if (pitcher_batter > 0) else 1.0
-        batman = ((pitcher_batter ** float(factor_exp)) + everythingelse) * float(factor_const)
+        batman = ((pitcher_batter ** float(factor_exp)) + everythingelse) * (float(factor_const) / 1000.0)
         batman = max(batman, 0.0)
     return batman
 

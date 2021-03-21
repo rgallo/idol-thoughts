@@ -12,10 +12,8 @@ from batman import get_batman
 
 BATMAN_STLAT_LIST = ("tragicness", "patheticism", "thwackability", "divinity", "moxie", "musclitude", "martyrdom", 
                      "unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness", "meanomniscience",
-                 "meantenaciousness", "meanwatchfulness", "meananticapitalism", "meanchasiness", 
-                 "meanlaserlikeness", "meanbasethirst", "meancontinuation", "meangroundfriction", "meanindulgence",
-                 "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness",
-                 "maxlaserlikeness", "maxbasethirst", "maxcontinuation", "maxgroundfriction", "maxindulgence")
+                 "meantenaciousness", "meanwatchfulness", "meananticapitalism", "meanchasiness",                  
+                 "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 BATMAN_ABS_STLAT_LIST = ("tragicness", "patheticism", "thwackability", "divinity", "moxie", "musclitude", "martyrdom", 
                      "unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness", "meanomniscience",
@@ -53,14 +51,14 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
             if math.isnan(batman):
                 batman = -10000
             if eventofinterest == "hits":            
-                if (hits - 0.5) < (batman * atbats) < (hits + 0.5):                
+                if (hits - 0.25) < (batman * atbats) < (hits + 0.25):                
                     fail_batman -= 1
                 fail_batman_by = (batman * atbats) - hits
                 batman_val = (batman * atbats)
                 real_val = hits
                 actual = "{} hits, batman {:.4f}".format(hits, (batman * atbats))
             elif eventofinterest == "hrs":
-                if (homers - 0.5) < (batman * atbats) < (homers + 0.5):
+                if (homers - 0.25) < (batman * atbats) < (homers + 0.25):
                     fail_batman -= 1
                 fail_batman_by = (batman * atbats) - homers
                 batman_val = (batman * atbats)
@@ -95,15 +93,15 @@ def main():
         team_attrs = json.load(f)
     if cmd_args.hits:
         eventofinterest = "hits"            
-        bounds = [[-6, 6], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [0, 2]]
+        bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2]]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        bounds = [[-6, 6], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [0, 2]]
+        bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2]]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        bounds = [[-8, 8], [-1, 2], [0, 2]] * len(stlatlist) + [[1, 3], [0, 2], [0, 0.02], [0, 0.02]]
+        bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2], [0, 0.02], [0, 0.02]]
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, [], stat_file_map, game_list, team_attrs, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=15, tol=0.0001, 
