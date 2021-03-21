@@ -97,15 +97,15 @@ def get_stat_file_map(stat_folder):
 def get_team_name(team_id, season, day, team_lookup={}):
     if not team_lookup:
         with open('team_lookup.json') as f:
-            team_lookup.update(json.load(f))
+            team_lookup.update(json.load(f))    
     results = team_lookup[team_id]
-    if len(results) == 1:
+    if len(results) == 1:        
         return results[0][2]
-    last_result = results[0]
+    last_result = results[0]    
     for result_season, result_day, team_name in results:
-        if result_season > season or (result_season == season and result_day > day):
+        if result_season > season or (result_season == season and result_day > day):            
             return last_result[2]
-        last_result = [result_season, result_day, team_name]
+        last_result = [result_season, result_day, team_name]        
     return last_result[2]
 
 
@@ -789,7 +789,7 @@ def minimize_batman_func(parameters, *data):
         if pass_exact > BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if (batman_max_err >= batman_min_err) and ((pos_fail_rate <= BEST_FAIL_RATE) or eventofinterest == "abs"):            
-            fail_points = ((fail_rate * 100.0 * zero_avg_error) + (pos_fail_rate * 100.0 * pos_avg_error) - pass_exact - (pass_within_one / 2.0) - (pass_within_two / 4.0) - (pass_within_three / 8.0) - (pass_within_four / 16.0))
+            fail_points = (fail_rate * 100.0 * zero_avg_error) + (pos_fail_rate * 100.0 * pos_avg_error) - pass_exact
             if eventofinterest == "abs":
                 print("Candidate for success! {:.4f} error span, fail points = {:.2f}".format((batman_max_err - batman_min_err), fail_points))
             if ((not (eventofinterest == "abs")) and (CURRENT_ITERATION == 1)) or not (pos_fail_rate < 1.0):

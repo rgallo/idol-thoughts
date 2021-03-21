@@ -12,12 +12,19 @@ from solvers import base_solver_new as base_solver
 import mofonew as mofo
 from solvers.mofo_mod_terms_new import MOFO_MOD_TERMS
 
+MOFO_STLAT_LIST = ("meantragicness", "meanpatheticism", "meanthwackability", "meandivinity", "meanmoxie",
+                   "meanmusclitude", "meanmartyrdom", "maxthwackability", "maxdivinity", "maxmoxie", "maxmusclitude",
+                   "maxmartyrdom", "meanlaserlikeness", "meanbasethirst", "meancontinuation", "meangroundfriction",
+                   "meanindulgence", "maxlaserlikeness", "maxbasethirst", "maxcontinuation", "maxgroundfriction",
+                   "maxindulgence", "unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness",
+                   "meanomniscience", "meantenaciousness", "meanwatchfulness", "meananticapitalism", "meanchasiness",
+                   "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 def get_mofo_mod_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods):
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
     special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
-    if not special_game_attrs:
-        return 0, 0, 0, 0
+    #if not special_game_attrs:
+     #   return 0, 0, 0, 0
     away_game, home_game = game["away"], game["home"]
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])
     if away_rbi == home_rbi:
@@ -49,7 +56,8 @@ def main():
     print(datetime.datetime.now())
     cmd_args = handle_args()
     bounds_lol = [modterm.bounds for modterm in MOFO_MOD_TERMS]
-    bounds = [item for sublist in bounds_lol for item in sublist]
+    bounds_mods = [item for sublist in bounds_lol for item in sublist]    
+    bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST) + bounds_mods
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f_attrs:
@@ -59,7 +67,7 @@ def main():
     args = (get_mofo_mod_results, mofo_base_terms, None, MOFO_MOD_TERMS, stat_file_map, game_list, team_attrs,
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=500)
+                                    mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=1000)
     print("\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat,
                                                a, b, c) for stat, (a, b, c) in zip(MOFO_MOD_TERMS, zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_mod_results, mofo_base_terms, None, MOFO_MOD_TERMS,

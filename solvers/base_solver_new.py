@@ -38,7 +38,6 @@ BASE_WIP = 10000000000.0
 BASE_EXK = 10000000000.0
 BASE_EXB = 10000000000.0
 WORST_ERROR = 1000000000
-MOD_BASELINE = False
 HAS_GAMES = {}
 
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
@@ -208,25 +207,15 @@ def minimize_func(parameters, *data):
     global BASE_EXK
     global BASE_EXB
     global HAS_GAMES
-    global WORST_ERROR
-    global MOD_BASELINE
+    global WORST_ERROR    
     calc_func, stlat_list, special_case_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []
-    mod_mode = False
-    if type(stlat_list) == dict:  # mod mode
-        terms = stlat_list
-        mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
-        mod_mode = True
-        if MOD_BASELINE:
-            for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)):
-                mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)
-        else:
-            for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)):
-                mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(1, 1, 1)            
-    else:  # base mode
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}
-        mods = {}
+    mod_mode = False   
+    terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-(len(special_case_list) + len(mod_list)) or None)])] * 3))}    
+    mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
+    for mod, a in zip(mod_list, zip(*[iter(parameters[-len(mod_list):])])):
+        mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = a            
     special_cases = parameters[-len(special_case_list):] if special_case_list else []
     game_counter, fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0
     quarter_fail = 100.0

@@ -15,16 +15,23 @@ from solvers.base_solver import pair_games, get_attrs_from_paired_games, get_sch
 
 def compare(byteam, season, mofo_list):
     mofogames = {}
-    success_by_team = {}
-    for game in mofo_list:
-        teamname, gameid, othermofoodds, weather, homerbi, awayrbi = game
-        if gameid not in mofogames:
-            mofogames[gameid] = [teamname, 100-float(othermofoodds), float(othermofoodds), weather, homerbi, awayrbi]        
+    success_by_team = {}          
     mismatches = 0
     missing = 0
     moforight, webright, moforight_mismatch, webright_mismatch, totalgames, dadbets, webrightBHS, moforightBHS, bhsmismatches, mofoBHSmismatch, webBHSmismatch = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     mofomismatchpayouts, webmismatchpayouts, dadcash = 0.0, 0.0, 0.0
     games = requests.get("https://api.sibr.dev/chronicler/v1/games?order=desc&season={}".format(season-1)).json()["data"]
+    for game in mofo_list:
+        teamname, gameid, othermofoodds, weather, homerbi, awayrbi = game
+        if gameid not in mofogames:
+            mofogames[gameid] = [teamname, 100-float(othermofoodds), float(othermofoodds), weather, homerbi, awayrbi]  
+    for game in mofogames:     
+        gamefound = False
+        for chrongame in games:
+            if game == chrongame["gameId"]:
+                gamefound = True
+        if not gamefound:
+            print("Game ID not in chronicler games: {}".format(game))        
     bhsuns, flippedgames = 0, 0
     for game in games:
         gameid = game["gameId"]
@@ -40,9 +47,9 @@ def compare(byteam, season, mofo_list):
         changedAwayScore, changedHomeScore = 0.0, 0.0
         mofoteamname, mofoodds, othermofoodds, weather, homerbi, awayrbi = mofogames[gameid]        
         awayTeamName, homeTeamName = gamedata["awayTeamName"], gamedata["homeTeamName"]
-        if awayTeamName == "Baltimore Crabs" or homeTeamName == "Baltimore Crabs":
-            totalgames -= 1                
-            continue
+        #if awayTeamName == "Baltimore Crabs" or homeTeamName == "Baltimore Crabs":
+         #   totalgames -= 1                
+          #  continue
         mofoIsAway = awayTeamName == mofoteamname
         awayOdds, homeOdds = gamedata["awayOdds"]*100.0, gamedata["homeOdds"]*100.0
         awayScore, homeScore = gamedata["awayScore"], gamedata["homeScore"]
@@ -104,6 +111,10 @@ def compare(byteam, season, mofo_list):
                 moforightBHS += 1
             if webCorrect:
                 webrightBHS += 1                            
+    countgames = 0    
+    for game in mofogames:     
+        print("Mofo game id = {}, game = {}".format(game, mofogames[game]))            
+        countgames += 1    
     print("missing games: {}, total counted games: {}".format(missing, len(mofogames)))
     #print("MOFO payout multiplier mismatches: {}".format(mofomismatchpayouts))
     #print("Web payout multiplier mismatches: {}".format(webmismatchpayouts))
@@ -119,21 +130,28 @@ def compare(byteam, season, mofo_list):
         print("BH/Sun2 flipped games mismatches: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(bhsmismatches, mofoBHSmismatch, (mofoBHSmismatch/bhsmismatches) * 100.0, webBHSmismatch, (webBHSmismatch/bhsmismatches)*100.0))
     print("BH/Sun2 games: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(bhsuns, moforightBHS, (moforightBHS/bhsuns) * 100.0, webrightBHS, (webrightBHS/bhsuns)*100.0))    
     print("MOFO mismatch profit margin: {:.4f} times maxbet per mismatch".format(((mofomismatchpayouts - webmismatchpayouts)/(mismatches)) / 1000.0))
-    print("Dad cash: {:.4f} times maxbet per dadbet".format((dadcash / 1000.0) / dadbets))
+    if dadbets > 0:
+        print("Dad cash: {:.4f} times maxbet per dadbet".format((dadcash / 1000.0) / dadbets))
+    else:
+        print("No dadbets")
     print("MOFO right: {}/{}, {:.2f}%".format(moforight, totalgames, (moforight/totalgames) * 100.0))
     print("Web right: {}/{}, {:.2f}%".format(webright, totalgames, (webright / totalgames) * 100.0))    
     print ("Total mismatches: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(mismatches, moforight_mismatch, (moforight_mismatch/mismatches) * 100.0, webright_mismatch, (webright_mismatch/mismatches)*100.0))
 
 
-def get_mofo_list(game_list, team_attrs, stat_file_map, season, omitplayoffs):
+def get_mofo_list(game_list, team_attrs, stat_file_map, season, startday=1, endday=125):
     mofo_list = []
     season_team_attrs = team_attrs.get(str(season), {})
-    pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
-    end_day = 125
-    if omitplayoffs:
-        end_day = 99    
-    for day in range(1, end_day):
+    pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None    
+    for day in range(startday, endday):
         games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
+        if not len(games) > 0:
+            print("No games on day {}".format(day))
+            continue       
+        if len(games) > 24:
+            print("{} games on day {}".format(len(games), day))
+        if len(games) < 24 and day < 100:
+            print("Missing {} games from {}".format((24 - len(games)) / 2, day))
         paired_games = pair_games(games)
         schedule = get_schedule_from_paired_games(paired_games, season, day)
         day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
@@ -146,9 +164,10 @@ def get_mofo_list(game_list, team_attrs, stat_file_map, season, omitplayoffs):
             pitchers = get_pitcher_id_lookup(last_stat_filename)
             team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
         for game in paired_games:
-            away_game, home_game = game["away"], game["home"]
+            away_game, home_game = game["away"], game["home"]            
             awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
             homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
+            print("{} at {}".format(awayTeam, homeTeam))
             #if len(season_team_attrs.get(awayTeam, []) + season_team_attrs.get(homeTeam, [])) > 0:
                 #continue
             away_odds, home_odds = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data,
@@ -171,7 +190,8 @@ def handle_args():
     parser.add_argument('--gamefile', help="path to game file")
     parser.add_argument('--season', help="print output")
     parser.add_argument('--byteam', help="show success rates by team", action='store_true')
-    parser.add_argument('--omitplayoffs', help="only show regular season", action='store_true')
+    parser.add_argument('--start', help="start day")  
+    parser.add_argument('--end', help="end day")  
     args = parser.parse_args()
     return args
 
@@ -182,11 +202,15 @@ def main():
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     byteam = cmd_args.byteam
-    omitplayoffs = cmd_args.omitplayoffs
+    startday, endday = 1, 125
+    if cmd_args.start:
+        startday = int(cmd_args.start)
+    if cmd_args.end:
+        endday = int(cmd_args.end)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     season = int(cmd_args.season)
-    mofo_list = get_mofo_list(game_list, team_attrs, stat_file_map, season, omitplayoffs)    
+    mofo_list = get_mofo_list(game_list, team_attrs, stat_file_map, season, startday, endday)    
     compare(byteam, season, mofo_list)
     # print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
 

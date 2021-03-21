@@ -13,12 +13,17 @@ WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic"
 def calc_team(terms, termset, mods, skip_mods=False):
     total = 0.0    
     for termname, val in termset:
-        term = terms[termname]
-        modterms = mods.get(termname, [])
-        moddedterm = term
-        for modterm in modterms:                
-            moddedterm = StlatTerm(term.a * modterm.a, term.b * modterm.b, term.c * modterm.c)       
-        total += moddedterm.calc(val)
+        term = terms[termname]        
+        total += term.calc(val)        
+        modterms = (mods or {}).get(termname, [])
+        if modterms:
+            sum_mod_terms = 0.0            
+        else:
+            sum_mod_terms = 1.0
+        for modterm in modterms:                  
+            this_mod_term = modterm[0]
+            sum_mod_terms += this_mod_term            
+        total *= sum_mod_terms        
     return total
 
 
