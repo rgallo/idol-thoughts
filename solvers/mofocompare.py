@@ -13,8 +13,9 @@ from solvers import base_solver
 from solvers.base_solver import pair_games, get_attrs_from_paired_games, get_schedule_from_paired_games, \
     get_pitcher_id_lookup, should_regen
 
-def compare(season, mofo_list):
+def compare(byteam, season, mofo_list):
     mofogames = {}
+    success_by_team = {}
     for game in mofo_list:
         teamname, gameid, othermofoodds, weather, homerbi, awayrbi = game
         if gameid not in mofogames:
@@ -39,6 +40,9 @@ def compare(season, mofo_list):
         changedAwayScore, changedHomeScore = 0.0, 0.0
         mofoteamname, mofoodds, othermofoodds, weather, homerbi, awayrbi = mofogames[gameid]        
         awayTeamName, homeTeamName = gamedata["awayTeamName"], gamedata["homeTeamName"]
+        if awayTeamName == "Baltimore Crabs" or homeTeamName == "Baltimore Crabs":
+            totalgames -= 1                
+            continue
         mofoIsAway = awayTeamName == mofoteamname
         awayOdds, homeOdds = gamedata["awayOdds"]*100.0, gamedata["homeOdds"]*100.0
         awayScore, homeScore = gamedata["awayScore"], gamedata["homeScore"]
@@ -51,10 +55,26 @@ def compare(season, mofo_list):
                 dadcash += round(webodds_payout((min(awayOdds, homeOdds)) / 100.0, 1000))                
             else:
                 dadcash -= 1000
+        if awayTeamName not in success_by_team:
+            success_by_team[awayTeamName] = {}
+            success_by_team[awayTeamName]["games"] = 0
+            success_by_team[awayTeamName]["webright"] = 0
+            success_by_team[awayTeamName]["moforight"] = 0
+        if homeTeamName not in success_by_team:
+            success_by_team[homeTeamName] = {}
+            success_by_team[homeTeamName]["games"] = 0
+            success_by_team[homeTeamName]["webright"] = 0
+            success_by_team[homeTeamName]["moforight"] = 0
+        success_by_team[awayTeamName]["games"] += 1
+        success_by_team[homeTeamName]["games"] += 1
         if mofoCorrect:
-            moforight += 1            
+            moforight += 1                        
+            success_by_team[awayTeamName]["moforight"] += 1
+            success_by_team[homeTeamName]["moforight"] += 1
         if webCorrect:
             webright += 1            
+            success_by_team[awayTeamName]["webright"] += 1
+            success_by_team[homeTeamName]["webright"] += 1
         if (mofoIsAway and ((awayOdds > 50 and mofoodds < 50) or (awayOdds < 50 and mofoodds > 50))) or (not mofoIsAway and ((homeOdds > 50 and mofoodds < 50) or (homeOdds < 50 and mofoodds > 50))):
             print("season {} day {}\nmofoteam: {}, awayteam: {}, hometeam: {}, mofo is away: {}\nmofoodds: {}, awayodds: {}, homeodds: {}\nawayscore: {}, homescore: {}".format(int(gamedata["season"])+1, int(gamedata["day"]+1), mofoteamname, awayTeamName, homeTeamName, mofoIsAway, mofoodds, awayOdds, homeOdds, awayScore, homeScore))
             mismatches += 1
@@ -86,9 +106,17 @@ def compare(season, mofo_list):
                 webrightBHS += 1                            
     print("missing games: {}, total counted games: {}".format(missing, len(mofogames)))
     #print("MOFO payout multiplier mismatches: {}".format(mofomismatchpayouts))
-    #print("Web payout multiplier mismatches: {}".format(webmismatchpayouts))  
+    #print("Web payout multiplier mismatches: {}".format(webmismatchpayouts))
+    print("Report for season {}".format(season))    
+    ordered_success_by_team = dict(sorted(success_by_team.items(), key=lambda x: (x[1]["webright"]/x[1]["games"])-(x[1]["moforight"]/x[1]["games"])))
+    if byteam:
+        for team in ordered_success_by_team:
+            mofo_success_rate = (ordered_success_by_team[team]["moforight"] / ordered_success_by_team[team]["games"]) * 100.0
+            web_success_rate = (ordered_success_by_team[team]["webright"] / ordered_success_by_team[team]["games"]) * 100.0
+            print("{} MOFO right {:.2f}%, Web right {:.2f}%".format(team, mofo_success_rate, web_success_rate))
     print("BH/Sun2 flipped games: {}, total BH/Sun2 games: {}, {:.2f}% flipped".format(flippedgames, bhsuns, (flippedgames / bhsuns) * 100.0))
-    print("BH/Sun2 flipped games mismatches: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(bhsmismatches, mofoBHSmismatch, (mofoBHSmismatch/bhsmismatches) * 100.0, webBHSmismatch, (webBHSmismatch/bhsmismatches)*100.0))
+    if bhsmismatches > 0:
+        print("BH/Sun2 flipped games mismatches: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(bhsmismatches, mofoBHSmismatch, (mofoBHSmismatch/bhsmismatches) * 100.0, webBHSmismatch, (webBHSmismatch/bhsmismatches)*100.0))
     print("BH/Sun2 games: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(bhsuns, moforightBHS, (moforightBHS/bhsuns) * 100.0, webrightBHS, (webrightBHS/bhsuns)*100.0))    
     print("MOFO mismatch profit margin: {:.4f} times maxbet per mismatch".format(((mofomismatchpayouts - webmismatchpayouts)/(mismatches)) / 1000.0))
     print("Dad cash: {:.4f} times maxbet per dadbet".format((dadcash / 1000.0) / dadbets))
@@ -97,11 +125,14 @@ def compare(season, mofo_list):
     print ("Total mismatches: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(mismatches, moforight_mismatch, (moforight_mismatch/mismatches) * 100.0, webright_mismatch, (webright_mismatch/mismatches)*100.0))
 
 
-def get_mofo_list(game_list, team_attrs, stat_file_map, season):
+def get_mofo_list(game_list, team_attrs, stat_file_map, season, omitplayoffs):
     mofo_list = []
     season_team_attrs = team_attrs.get(str(season), {})
     pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
-    for day in range(1, 125):
+    end_day = 125
+    if omitplayoffs:
+        end_day = 99    
+    for day in range(1, end_day):
         games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
         paired_games = pair_games(games)
         schedule = get_schedule_from_paired_games(paired_games, season, day)
@@ -139,6 +170,8 @@ def handle_args():
     parser.add_argument('--statfolder', help="path to stat folder")
     parser.add_argument('--gamefile', help="path to game file")
     parser.add_argument('--season', help="print output")
+    parser.add_argument('--byteam', help="show success rates by team", action='store_true')
+    parser.add_argument('--omitplayoffs', help="only show regular season", action='store_true')
     args = parser.parse_args()
     return args
 
@@ -148,11 +181,13 @@ def main():
     load_dotenv(dotenv_path="../.env")
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
+    byteam = cmd_args.byteam
+    omitplayoffs = cmd_args.omitplayoffs
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     season = int(cmd_args.season)
-    mofo_list = get_mofo_list(game_list, team_attrs, stat_file_map, season)    
-    compare(season, mofo_list)
+    mofo_list = get_mofo_list(game_list, team_attrs, stat_file_map, season, omitplayoffs)    
+    compare(byteam, season, mofo_list)
     # print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
 
 
