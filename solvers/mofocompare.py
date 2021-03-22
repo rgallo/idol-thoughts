@@ -16,8 +16,7 @@ from solvers.base_solver import pair_games, get_attrs_from_paired_games, get_sch
 def compare(byteam, season, mofo_list):
     mofogames = {}
     success_by_team = {}          
-    mismatches = 0
-    missing = 0
+    mismatches, missing, unfinal = 0, 0, 0     
     moforight, webright, moforight_mismatch, webright_mismatch, totalgames, dadbets, webrightBHS, moforightBHS, bhsmismatches, mofoBHSmismatch, webBHSmismatch = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     mofomismatchpayouts, webmismatchpayouts, dadcash = 0.0, 0.0, 0.0
     games = requests.get("https://api.sibr.dev/chronicler/v1/games?order=desc&season={}".format(season-1)).json()["data"]
@@ -37,6 +36,8 @@ def compare(byteam, season, mofo_list):
         gameid = game["gameId"]
         gamedata = game["data"]
         if not gamedata["finalized"]:
+            print("Game not finalized! ID: {}".format(gameid))
+            unfinal += 1
             continue
         if gameid not in mofogames:
             print("Game ID not in mofo games: {}".format(gameid))
@@ -113,9 +114,9 @@ def compare(byteam, season, mofo_list):
                 webrightBHS += 1                            
     countgames = 0    
     for game in mofogames:     
-        print("Mofo game id = {}, game = {}".format(game, mofogames[game]))            
+        #print("Mofo game id = {}, game = {}".format(game, mofogames[game]))            
         countgames += 1    
-    print("missing games: {}, total counted games: {}".format(missing, len(mofogames)))
+    print("missing games: {}, unfinalized: {}, total counted games: {}".format(missing, unfinal, len(mofogames)))
     #print("MOFO payout multiplier mismatches: {}".format(mofomismatchpayouts))
     #print("Web payout multiplier mismatches: {}".format(webmismatchpayouts))
     print("Report for season {}".format(season))    
@@ -167,7 +168,7 @@ def get_mofo_list(game_list, team_attrs, stat_file_map, season, startday=1, endd
             away_game, home_game = game["away"], game["home"]            
             awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
             homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
-            print("{} at {}".format(awayTeam, homeTeam))
+            #print("{} at {}".format(awayTeam, homeTeam))
             #if len(season_team_attrs.get(awayTeam, []) + season_team_attrs.get(homeTeam, [])) > 0:
                 #continue
             away_odds, home_odds = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data,
