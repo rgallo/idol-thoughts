@@ -225,7 +225,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
             result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
             (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0,
             ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else "")
-                                      for result in odds_mismatch])
+                                      for result in sorted(odds_mismatch, key=lambda result: max(result.awayMatchupData.websiteodds, result.homeMatchupData.websiteodds), reverse=True)])
         results.append(send_discord_message("__Odds Mismatches__", odds_description, screen=screen))
         time.sleep(.5)
     if bad_bets:
@@ -380,7 +380,10 @@ def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):
         team = row["team"]
         if games:
             game = games.get(team)
-            new_row = adjust_stlats(row, game, day, player_attrs, team_attrs)
+            if game:
+                new_row = adjust_stlats(row, game, day, player_attrs, team_attrs)
+            else:
+                new_row = row
         else:
             new_row = row
         if new_row["position"] == "rotation":
@@ -654,7 +657,7 @@ def print_results(day, results, score_adjustments, batman_data):
         ) for result in sorted(not_your_dad, key=lambda result: webodds_payout(result.websiteodds, 1.0) * min(result.mofoodds, 0.8), reverse=True)]))
     if odds_mismatch:
         print("Odds Mismatches")
-        print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in odds_mismatch))
+        print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in sorted(odds_mismatch, key=lambda result: result.websiteodds)))
     batman_hits = "\n".join(("{}, {}: {:.2f} hits, {:.2f} at bats").format(row["name"], row["team"], row["hits"], row["abs"]) for row in batman_data["hits"])
     batman_homers = "\n".join(("{}, {}: {:.2f} homers, {:.2f} at bats").format(row["name"], row["team"], row["homers"], row["abs"]) for row in batman_data["homers"])
     batman_combined = "\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.2f} at bats, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], row["abs"], ((row["hits"] * 1500) + (row["homers"]*4000)) * get_payout_mult(row)) for row in batman_data["combined"])
