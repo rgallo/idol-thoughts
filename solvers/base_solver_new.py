@@ -7,23 +7,19 @@ import json
 import os
 import re
 import uuid
-import copy
 from glob import glob
 
 from helpers import StlatTerm, get_weather_idx
-from idolthoughts import load_stat_data, load_stat_data_pid
-from mofo import get_mods
-from batman import get_team_atbats
+from idolthoughts import load_stat_data
+from mofonew import get_mods
 
 STAT_CACHE = {}
 GAME_CACHE = {}
-BATTER_CACHE = {}
 
 BEST_RESULT = 10000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
-BEST_UNEXVAR_ERROR = -100.0
-BEST_EXACT = 0.0
+BEST_EXACT = 10000000000.0
 CURRENT_ITERATION = 1
 LAST_CHECKTIME = 0.0
 BEST_QUARTER_FAIL = 1.0
@@ -41,7 +37,7 @@ BASE_ONO = 10000000000.0
 BASE_WIP = 10000000000.0
 BASE_EXK = 10000000000.0
 BASE_EXB = 10000000000.0
-WORST_ERROR = 1000000000.0
+WORST_ERROR = 1000000000
 MOD_BASELINE = False
 HAS_GAMES = {}
 
@@ -56,20 +52,12 @@ def get_pitcher_id_lookup(filename):
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
     return {row["id"]: (row["name"], row["team"]) for row in filedata if row["position"] == "rotation"}
 
-def get_player_id_lookup(filename):
-    with open(filename) as f:
-        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
-    return {row["id"]: (row["name"], row["team"]) for row in filedata}
 
 def get_games(filename):
     with open(filename) as f:
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
     return filedata
 
-def get_batters(filename):
-    with open(filename) as f:
-        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
-    return filedata
 
 def pair_games(games):
     gamelist = collections.defaultdict(lambda: [])
@@ -97,15 +85,15 @@ def get_stat_file_map(stat_folder):
 def get_team_name(team_id, season, day, team_lookup={}):
     if not team_lookup:
         with open('team_lookup.json') as f:
-            team_lookup.update(json.load(f))    
+            team_lookup.update(json.load(f))
     results = team_lookup[team_id]
-    if len(results) == 1:        
+    if len(results) == 1:
         return results[0][2]
-    last_result = results[0]    
+    last_result = results[0]
     for result_season, result_day, team_name in results:
-        if result_season > season or (result_season == season and result_day > day):            
+        if result_season > season or (result_season == season and result_day > day):
             return last_result[2]
-        last_result = [result_season, result_day, team_name]        
+        last_result = [result_season, result_day, team_name]
     return last_result[2]
 
 
@@ -195,7 +183,6 @@ def calc_linear_unex_error(vals, wins_losses, games):
         idx += 1
     return error, max_error, min_error, max_error_val, max_error_ratio, major_errors, error_shape
 
-#for mofo and k9
 def minimize_func(parameters, *data):
     run_id = uuid.uuid4()
     starttime = datetime.datetime.now()
@@ -221,25 +208,16 @@ def minimize_func(parameters, *data):
     global BASE_EXK
     global BASE_EXB
     global HAS_GAMES
-    global WORST_ERROR
+    global WORST_ERROR    
     global MOD_BASELINE
     calc_func, stlat_list, special_case_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []
-    mod_mode = False
-    if type(stlat_list) == dict:  # mod mode
-        terms = stlat_list
-        mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
-        mod_mode = True
-        if MOD_BASELINE:
-            for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)):
-                mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)
-        else:
-            for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)):
-                mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(0, 0, 1)            
-    else:  # base mode
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}
-        mods = {}
+    mod_mode = True
+    terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-(len(special_case_list) + len(mod_list)) or None)])] * 3))}    
+    mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
+    for mod, a in zip(mod_list, zip(*[iter(parameters[-len(mod_list):])])):
+        mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = a            
     special_cases = parameters[-len(special_case_list):] if special_case_list else []
     game_counter, fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0
     quarter_fail = 100.0
@@ -247,6 +225,7 @@ def minimize_func(parameters, *data):
     linear_error = 0.0
     love_rate, instinct_rate, ono_rate, wip_rate, exk_rate, exb_rate = 100.0, 100.0, 100.0, 100.0, 100.0, 100.0
     k9_max_err, k9_min_err = 0, 0
+    paired_game_count = 0
     mod_fails = [0] * 6
     mod_games = [0] * 6
     multi_mod_fails, multi_mod_games, mvm_fails, mvm_games = 0, 0, 0, 0
@@ -300,6 +279,7 @@ def minimize_func(parameters, *data):
                 raise Exception("No stat file found")
             good_game_list = []
             for game in paired_games:
+                paired_game_count += 1
                 game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods)
                 if not is_cached and game_game_counter:
                     good_game_list.extend([game["home"], game["away"]])
@@ -453,13 +433,12 @@ def minimize_func(parameters, *data):
                     BASE_WIP = wip_rate
                     BASE_EXK = exk_rate
                     BASE_EXB = exb_rate                    
-                    MOD_BASELINE = True
-                if (love_rate <= BASE_LOVE) and (instinct_rate <= BASE_INSTINCT) and (ono_rate <= BASE_ONO) and (exk_rate <= BASE_EXK):
-                    if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (exk_rate <= BEST_EXK):
-                        #if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (wip_rate <= BEST_WIP + tolerance) and (exk_rate <= BEST_EXK + tolerance) and (exb_rate <= BEST_EXB + tolerance):
+                    MOD_BASELINE = True                
+                if (love_rate <= BASE_LOVE) and (instinct_rate <= BASE_INSTINCT) and (ono_rate <= BASE_ONO) and (exk_rate <= BASE_EXK):                    
+                    if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (exk_rate <= BEST_EXK):                        
                         if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (exk_rate <= BEST_EXK + tolerance):
                             #linear_fail = (love_rate + instinct_rate + ono_rate + wip_rate + exk_rate + exb_rate) / 6.0
-                            fail_points = ((love_rate + instinct_rate + ono_rate + exk_rate) * 2.5) ** 2.0                
+                            fail_points = ((fail_rate * 1000.0) ** 2) * 2.5
                             linear_fail = fail_points + linear_points
         elif game_counter == TOTAL_GAME_COUNTER and TOTAL_GAME_COUNTER > 0:        
             pass_exact = (pass_exact / game_counter) * 100.0
@@ -486,9 +465,10 @@ def minimize_func(parameters, *data):
                 BEST_EXB = exb_rate if (exb_rate < BEST_EXB) else BEST_EXB
         debug_print("-"*20, debug, run_id)
         if type(stlat_list) == dict:
-            mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)))
-            debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + mods_output, debug, run_id)
-            debug_print("{} games".format(game_counter), debug, run_id)
+            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-(len(special_cases) + len(mod_list)) or None)])] * 3)))
+            mods_output = "\n".join("{},{},{},{}".format(stat.attr, stat.team, stat.stat, a) for stat, a in zip(mod_list, parameters[-len(mod_list):]))
+            debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + "\n" + mods_output, debug, run_id)
+            debug_print("{} games, {} paired games".format(game_counter, paired_game_count), debug, run_id)
             debug_print("{:.4f}% Love fail rate, Best {:.4f}%".format(love_rate, BEST_LOVE), debug, run_id)
             debug_print("{:.4f}% Base Instincts fail rate, Best {:.4f}%".format(instinct_rate, BEST_INSTINCT), debug, run_id)
             debug_print("{:.4f}% O No fail rate, Best {:.4f}%".format(ono_rate, BEST_ONO), debug, run_id)
@@ -546,282 +526,6 @@ def minimize_func(parameters, *data):
             debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, linear error {:.4f}".format(BEST_RESULT, CURRENT_ITERATION, (BEST_FAIL_RATE * 100.0), BEST_LINEAR_ERROR), debug, datetime.datetime.now())
         else:
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
-    CURRENT_ITERATION += 1   
-    #if (CURRENT_ITERATION % 25000 == 0):
-     #   time.sleep(120)
-      #  print("2 minute power nap")
-    debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
-    endtime = datetime.datetime.now()
-    debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
-    return linear_fail
-
-#for batman
-def minimize_batman_func(parameters, *data):
-    run_id = uuid.uuid4()
-    starttime = datetime.datetime.now()
-    global BEST_RESULT
-    global CURRENT_ITERATION
-    global BEST_FAIL_RATE    
-    global BEST_UNEXVAR_ERROR
-    global BEST_EXACT
-    global LAST_CHECKTIME
-    global BEST_QUARTER_FAIL    
-    global MAX_OBSERVED_DIFFERENCE    
-    global HAS_GAMES
-    global WORST_ERROR        
-    eventofinterest, batter_list, calc_func, stlat_list, special_case_list, atbats_list, stat_file_map, game_list, team_attrs, games_swept, debug, debug2, debug3 = data
-    debug_print("func start: {}".format(starttime), debug3, run_id)         
-    if CURRENT_ITERATION == 1:        
-        if eventofinterest == "abs":
-            baseline_parameters = [0, 0, 1] * len(stlat_list) + [1, 0, 0, 0]                    
-        else:
-            baseline_parameters = [0, 0, 1] * len(stlat_list) + [1, 0]                 
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(baseline_parameters[:(-len(special_case_list) or None)])] * 3))}  
-        special_cases = baseline_parameters[-len(special_case_list):] if special_case_list else []
-    else:
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}  
-        special_cases = parameters[-len(special_case_list):] if special_case_list else []
-    mods = {}    
-    bat_counter, fail_counter, zero_counter, bat_pos_counter, fail_pos_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
-    zero_fail_counter, pos_fail_counter = 0.0, 0.0
-    batman_max_err, batman_min_err = 0.0, 100000000.0        
-    batman_unexvar = 0.0
-    fail_rate, pos_fail_rate, zero_avg_error, pos_avg_error = 1.0, 1.0, 100.0, 100.0
-    max_err_actual, min_err_actual = "", ""
-    reject_solution, viability_unchecked = False, True            
-    for season in range(12, 13):
-        if reject_solution:
-            break
-        # if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
-        if (season in HAS_GAMES and not HAS_GAMES[season]):
-            continue
-        season_start = datetime.datetime.now()
-        debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
-        pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
-        season_team_attrs = team_attrs.get(str(season), {})
-        season_days = 0        
-        for day in range(1, 125):
-            if reject_solution:
-                break
-            is_cached = False
-            cached_games = GAME_CACHE.get((season, day))
-            if cached_games:
-                games = cached_games
-                is_cached = True
-            else:
-                if type(cached_games) == list:
-                    continue
-                games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
-                if not games:
-                    GAME_CACHE[(season, day)] = []
-                    continue                
-            season_days += 1
-            paired_games = pair_games(games)
-            schedule = get_schedule_from_paired_games(paired_games, season, day)
-            day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
-            cached_stats = STAT_CACHE.get((season, day))
-            if cached_stats:
-                team_stat_data, pitcher_stat_data, players = cached_stats
-            else:
-                stat_filename = stat_file_map.get((season, day))
-                if stat_filename:
-                    last_stat_filename = stat_filename
-                    players = get_player_id_lookup(stat_filename)
-                    team_stat_data, pitcher_stat_data = load_stat_data_pid(stat_filename, schedule, day, season_team_attrs)                                                            
-                elif should_regen(day_mods):
-                    players = get_player_id_lookup(stat_filename)
-                    team_stat_data, pitcher_stat_data = load_stat_data_pid(stat_filename, schedule, day, season_team_attrs)
-                STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, players)
-            if not players:
-                raise Exception("No stat file found")
-            good_game_list = []
-            for game in paired_games:
-                game_attrs = get_attrs_from_paired_game(season_team_attrs, game)
-                special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - ALLOWED_IN_BASE
-                if (game["away"]["game_id"] in games_swept) and (eventofinterest == "abs"):
-                    print("Game id {} swept away!".format(game["away"]["game_id"]))
-                    continue
-                if not is_cached and not special_game_attrs:
-                    good_game_list.extend([game["home"], game["away"]])
-                    HAS_GAMES[season] = True
-                if not special_game_attrs:
-                    cached_batters = BATTER_CACHE.get((season, day, game["away"]["game_id"]))
-                    iscached_batters = False
-                    if cached_batters:                        
-                        batter_perf_data = cached_batters
-                        iscached_batters = True
-                    else:              
-                        if type(cached_batters) == list:
-                            continue
-                        if CURRENT_ITERATION > 1:
-                            print("Somehow not cached, not list season {}, day {}".format(season, day))
-                        batter_perf_data = [row for row in batter_list if row["season"] == str(season) and row["day"] == str(day) and row["game_id"] == game["away"]["game_id"]]                    
-                        if not batter_perf_data:                        
-                            BATTER_CACHE[(season, day, game["away"]["game_id"])] = []
-                            continue
-                    good_batter_perf_data, abs_batter_perf_data = [], []                                
-                    last_lineup_id, previous_batting_team = "", ""
-                    previous_innings, minimum_atbats, lineup_size, interbat_counter, interbat_fail_counter = 0, 0, 0, 0, 0
-                    omit_from_good_abs = False
-                    atbats_team_stat_data = {}                                        
-                    for batter_perf in batter_perf_data:                                 
-                        battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
-                        pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)                                               
-                        if not iscached_batters:            
-                            if (minimum_atbats < previous_innings * 3) and not (previous_batting_team == battingteam) and not omit_from_good_abs:
-                                print("team did not achieve the requisite number of atbats for their minimum number of outs: {} at bats, {} outs".format(minimum_atbats, previous_innings * 3))
-                                omit_from_good_abs = True
-                            if not (previous_batting_team == battingteam) and not (previous_batting_team == ""):                                
-                                if not omit_from_good_abs:                                      
-                                    for bperf in abs_batter_perf_data:
-                                        good_batter_perf_data.extend([bperf])  
-                                else:                                    
-                                    print("Catching omission IN the loop; Omitting {}, season {}, day {}, opponent {}".format(previous_batting_team, season, day, battingteam))                            
-                                abs_batter_perf_data = []                                    
-                                omit_from_good_abs = False
-                            elif omit_from_good_abs:                           
-                                continue       
-                        if previous_batting_team != battingteam:
-                            minimum_atbats = 0
-                        batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
-                        if not batter_list_dict:
-                            continue
-                        pitchername = players[batter_perf["pitcher_id"]][0]                                                 
-                        previous_batting_team = battingteam                        
-                        if (eventofinterest == "abs"):                            
-                            if (batter_perf["batter_id"] not in atbats_team_stat_data):                                  
-                                flip_lineup = (battingteam == "San Francisco Lovers") and (season == 13) and (day > 27)                                
-                                atbats_team_stat_data = get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, {"factors": special_cases})
-                            bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                            
-                            minimum_atbats += int(batter_perf["at_bats"]) + batman_fail_by
-                            previous_innings = int(batter_perf["num_innings"])                            
-                            if real_val == 1:
-                                print("{} atbat {} season {}, day {}, opponent {}, batter {}".format(real_val, battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))
-                            if (CURRENT_ITERATION == 1) and (batman_fail_by > 0):                                
-                                omit_from_good_abs = True                                      
-                                print("Omitting {}, season {}, day {}, opponent {}, batter {}".format(battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))                                    
-                            if not iscached_batters:
-                                abs_batter_perf_data.extend([batter_perf])                            
-                        else:
-                            bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                                                                                            
-                        bat_counter += bat_bat_counter
-                        fail_counter += bat_fail_counter                                          
-                        if real_val > 0:
-                            bat_pos_counter += bat_bat_counter
-                            fail_pos_counter += bat_fail_counter
-                            batman_unexvar += batman_fail_by ** 2.0
-                            pos_fail_counter += abs(batman_fail_by)
-                        else:
-                            zero_counter += 1
-                        if bat_bat_counter:                    
-                            if batman_fail_by > batman_max_err:
-                                batman_max_err = batman_fail_by
-                                max_err_actual = actual_result
-                            if batman_fail_by < batman_min_err:
-                                batman_min_err = batman_fail_by
-                                min_err_actual = actual_result                        
-                        if ((batman_max_err - batman_min_err) > WORST_ERROR) and (BEST_FAIL_RATE < 1.0):
-                            reject_solution = True
-                            break
-                        if (batman_unexvar) > BEST_UNEXVAR_ERROR and (BEST_FAIL_RATE < 1.0):
-                            reject_solution = True
-                            break
-                        if eventofinterest == "abs":
-                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
-                        elif eventofinterest == "hrs":
-                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.25, 1.0, 0.75, 0.5, 0.25
-                        else:
-                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.25, 1.0, 0.75, 0.5, 0.25
-                        if (abs(batman_fail_by) < stagefour) and (real_val > 0):             
-                            pass_within_four += 1
-                            if abs(batman_fail_by) < stagethree:                                                
-                                pass_within_three += 1
-                                if abs(batman_fail_by) < stagetwo:                                                
-                                    pass_within_two += 1
-                                    if abs(batman_fail_by) < stageone:
-                                        pass_within_one += 1
-                                        if abs(batman_fail_by) < stageexact:
-                                            pass_exact += 1      
-                        elif (abs(batman_fail_by) > stageexact) and (real_val == 0):
-                            zero_fail_counter += abs(batman_fail_by)                            
-                    if not iscached_batters:            
-                        if (minimum_atbats < previous_innings * 3) and not omit_from_good_abs:
-                            print("team did not achieve the requisite number of atbats for their minimum number of outs: {} at bats, {} outs".format(minimum_atbats, previous_innings * 3))
-                            omit_from_good_abs = True                                                       
-                        if not omit_from_good_abs:                                      
-                            for bperf in abs_batter_perf_data:
-                                good_batter_perf_data.extend([bperf])  
-                        else:
-                            print("Catching omission out of the loop; Omitting {}, season {}, day {}, opponent {}".format(battingteam, season, day, pitchingteam))                            
-                        abs_batter_perf_data = []                                    
-                        omit_from_good_abs = False                        
-                    if not iscached_batters:
-                        if eventofinterest == "abs":
-                            BATTER_CACHE[(season, day, game["away"]["game_id"])] = good_batter_perf_data
-                        else:
-                            BATTER_CACHE[(season, day, game["away"]["game_id"])] = batter_perf_data
-            if not is_cached:
-                GAME_CACHE[(season, day)] = good_game_list
-        if season not in HAS_GAMES:
-            HAS_GAMES[season] = False
-        season_end = datetime.datetime.now()
-        # debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)         
-    if not reject_solution:
-        if eventofinterest == "abs":
-            print("Possible solution! {:.4f} error span".format(batman_max_err - batman_min_err))
-            zero_avg_error = 0.0            
-        else:
-            zero_avg_error = zero_fail_counter / zero_counter
-        pos_avg_error = pos_fail_counter / bat_pos_counter
-        fail_rate = fail_counter / bat_counter
-        pos_fail_rate = fail_pos_counter / bat_pos_counter                
-    else:
-        fail_rate, pos_fail_rate = 1.0, 1.0
-    # need to sort win_loss to match up with what will be the sorted set of vals
-    # also need to only do this when solving MOFO
-    linear_fail = 90000000000.0
-    fail_points = 90000000000.0
-    if not reject_solution:        
-        pass_exact = (pass_exact / bat_pos_counter) * 100.0
-        pass_within_one = (pass_within_one / bat_pos_counter) * 100.0
-        pass_within_two = (pass_within_two / bat_pos_counter) * 100.0
-        pass_within_three = (pass_within_three / bat_pos_counter) * 100.0
-        pass_within_four = (pass_within_four / bat_pos_counter) * 100.0
-        if pass_exact > BEST_EXACT:            
-            debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
-        if (batman_max_err >= batman_min_err) and ((pos_fail_rate <= BEST_FAIL_RATE) or eventofinterest == "abs"):            
-            fail_points = (fail_rate * 100.0 * zero_avg_error) + (pos_fail_rate * 100.0 * pos_avg_error) - pass_exact
-            if eventofinterest == "abs":
-                print("Candidate for success! {:.4f} error span, fail points = {:.2f}".format((batman_max_err - batman_min_err), fail_points))
-            if ((not (eventofinterest == "abs")) and (CURRENT_ITERATION == 1)) or not (pos_fail_rate < 1.0):
-                linear_fail = 10000.0 + fail_points
-            else:
-                linear_fail = ((batman_max_err - batman_min_err) ** (pos_avg_error + zero_avg_error)) + fail_points
-    if linear_fail < BEST_RESULT:
-        BEST_RESULT = linear_fail
-        BEST_EXACT = pass_exact
-        BEST_FAIL_RATE = pos_fail_rate
-        BEST_UNEXVAR_ERROR = batman_unexvar
-        terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
-        special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
-        debug_print("::: Pass Rates over {} batters, fail counter {} :::".format(bat_counter, fail_counter), debug, run_id)
-        debug_print("Exact (+/- {:.2f}) = {:.4f}".format(stageexact, pass_exact), debug, run_id)
-        debug_print("+/- {:.2f} = {:.4f}".format(stageone, pass_within_one), debug, run_id)
-        debug_print("+/- {:.2f} = {:.4f}".format(stagetwo, pass_within_two), debug, run_id)
-        debug_print("+/- {:.2f} = {:.4f}".format(stagethree, pass_within_three), debug, run_id)
-        debug_print("+/- {:.2f} = {:.4f}".format(stagefour, pass_within_four), debug, run_id)
-        debug_print("max underestimate {:.4f}, max overestimate {:.4f}, unexvar {:.4f}".format(batman_min_err, batman_max_err, batman_unexvar), debug, run_id)
-        debug_print("actual val underest {}".format(min_err_actual), debug, run_id)
-        debug_print("actual val overest {}".format(max_err_actual), debug, run_id)
-        debug_print("zero average error {:.4f}, pos average error {:.4f}".format(zero_avg_error, pos_avg_error), debug, run_id)
-        debug_print("Best so far - fail rate {:.4f}%, pos fail rate {:.4f}%\n".format(fail_rate * 100.0, pos_fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)   
-        WORST_ERROR = (batman_max_err - batman_min_err)        
-        debug_print("Optimizing: {}, iteration #{}".format(eventofinterest, CURRENT_ITERATION), debug, run_id)               
-        debug_print("-" * 20 + "\n", debug, run_id)
-    if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):
-        debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1   
     #if (CURRENT_ITERATION % 25000 == 0):
      #   time.sleep(120)

@@ -116,6 +116,9 @@
     "Miami Dalé": [
       "WALK_IN_THE_PARK"
     ],
+    "San Francisco Lovers": [
+      "LOVE"
+    ],
     "Unlimited Tacos": [
       "WALK_IN_THE_PARK"
     ],
@@ -131,6 +134,68 @@
     ],
     "Philly Pies": [
       "AFFINITY_FOR_CROWS"
+    ]
+  },
+  "12": {
+    "Yellowstone Magic": [
+      "O_NO"
+    ],
+    "Charleston Shoe Thieves": [
+      "TRAVELING"
+    ],
+    "Hellmouth Sunbeams": [
+      "BASE_INSTINCTS"
+    ],
+    "Boston Flowers": [
+      "GROWTH"
+    ],
+    "Philly Pies": [
+      "AFFINITY_FOR_CROWS"
+    ],
+    "San Francisco Lovers": [
+      "LOVE"
+    ]
+  },
+  "13": {
+    "San Francisco Lovers": [
+      "EXTRA_STRIKE",
+      "LOVE"
+    ],
+    "Breckenridge Jazz Hands": [
+      "EXTRA_STRIKE"
+    ],
+    "Baltimore Crabs": [
+      "EXTRA_STRIKE"
+    ],
+    "Hellmouth Sunbeams": [
+      "BASE_INSTINCTS"
+    ],
+    "Yellowstone Magic": [
+      "O_NO"
+    ],
+    "Charleston Shoe Thieves": [
+      "EXTRA_STRIKE",
+      "TRAVELING"
+    ],
+    "Chicago Firefighters": [
+      "LATE_TO_PARTY"
+    ]
+  },
+  "14": {
+    "Hellmouth Sunbeams": [
+      "BASE_INSTINCTS"
+    ],
+    "Canada Moist Talkers": [
+      "HIGH_PRESSURE"
+    ],
+    "San Francisco Lovers": [
+      "LOVE"
+    ],
+    "Yellowstone Magic": [
+      "O_NO"
+    ],
+    "Charleston Shoe Thieves": [
+      "TRAVELING"
     ]
   }
 }
