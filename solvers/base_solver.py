@@ -253,7 +253,7 @@ def minimize_func(parameters, *data):
     reject_solution, viability_unchecked = False, True
     all_vals = []
     win_loss = []    
-    for season in range(11, 14):
+    for season in range(11, 15):
         if reject_solution:
             break
         # if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
@@ -569,7 +569,7 @@ def minimize_batman_func(parameters, *data):
     global MAX_OBSERVED_DIFFERENCE    
     global HAS_GAMES
     global WORST_ERROR        
-    eventofinterest, batter_list, calc_func, stlat_list, special_case_list, atbats_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
+    eventofinterest, batter_list, calc_func, stlat_list, special_case_list, atbats_list, stat_file_map, game_list, team_attrs, games_swept, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)         
     if CURRENT_ITERATION == 1:        
         if eventofinterest == "abs":
@@ -638,6 +638,9 @@ def minimize_batman_func(parameters, *data):
             for game in paired_games:
                 game_attrs = get_attrs_from_paired_game(season_team_attrs, game)
                 special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - ALLOWED_IN_BASE
+                if (game["away"]["game_id"] in games_swept) and (eventofinterest == "abs"):
+                    print("Game id {} swept away!".format(game["away"]["game_id"]))
+                    continue
                 if not is_cached and not special_game_attrs:
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True

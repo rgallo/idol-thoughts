@@ -22,8 +22,11 @@ def calc_team(terms, termset, mods, skip_mods=False):
             sum_mod_terms = 1.0
         for modterm in modterms:                  
             this_mod_term = modterm[0]
-            sum_mod_terms += this_mod_term            
-        total *= sum_mod_terms        
+            sum_mod_terms += this_mod_term 
+        if modterms:
+            #print("before mod = {}".format(total))
+            total *= sum_mod_terms        
+            #print("after mod = {}".format(total))
     return total
 
 

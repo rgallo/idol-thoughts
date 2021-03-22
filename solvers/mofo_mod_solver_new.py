@@ -27,7 +27,7 @@ def get_mofo_mod_results(game, season_team_attrs, team_stat_data, pitcher_stat_d
      #   return 0, 0, 0, 0
     away_game, home_game = game["away"], game["home"]
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])
-    if away_rbi == home_rbi:
+    if away_rbi == home_rbi:        
         return 0, 0, 0, 0
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
@@ -35,7 +35,7 @@ def get_mofo_mod_results(game, season_team_attrs, team_stat_data, pitcher_stat_d
     awayodds, _ = mofo.get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms,
                                 awayMods, homeMods)
     homeodds = 1.0 - awayodds
-    if awayodds == .5:
+    if awayodds == .5:        
         return 0, 0, awayodds, homeodds
     return 1, 1 if ((awayodds < .5 and away_rbi > home_rbi) or (awayodds > .5 and away_rbi < home_rbi)) else 0, awayodds, homeodds
 
@@ -54,9 +54,8 @@ def handle_args():
 
 def main():
     print(datetime.datetime.now())
-    cmd_args = handle_args()
-    bounds_lol = [modterm.bounds for modterm in MOFO_MOD_TERMS]
-    bounds_mods = [item for sublist in bounds_lol for item in sublist]    
+    cmd_args = handle_args()    
+    bounds_mods = [modterm.bounds for modterm in MOFO_MOD_TERMS]
     bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST) + bounds_mods
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)

@@ -66,6 +66,13 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
                 actual = "{} hrs, batman {:.4f}".format(homers, (batman * atbats))        
     return games, fail_batman, fail_batman_by, actual, real_val
 
+def parse_games(data):
+    results = []
+    splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
+    for row in splitdata:
+        name = row[0].lower()                
+        results.append(name)
+    return results
 
 def handle_args():
     parser = argparse.ArgumentParser()
@@ -91,6 +98,8 @@ def main():
     special_cases = BATMAN_SPECIAL_CASES
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
+    with open("sweptelsewheregames.csv") as f_swelsewhere:
+        games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
         bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2]]
@@ -102,7 +111,7 @@ def main():
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
         bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2], [0, 0.02], [0, 0.02]]
-    args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, [], stat_file_map, game_list, team_attrs, 
+    args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, [], stat_file_map, game_list, team_attrs, games_swept_elsewhere, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=15, tol=0.0001, 
                                     mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=10000)
