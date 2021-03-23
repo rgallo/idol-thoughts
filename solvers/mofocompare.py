@@ -35,8 +35,8 @@ def compare(byteam, season, mofo_list):
     for game in games:
         gameid = game["gameId"]
         gamedata = game["data"]
-        if not gamedata["finalized"]:
-            print("Game not finalized! ID: {}".format(gameid))
+        if not gamedata["gameComplete"]:
+            print("Game not complete! ID: {}".format(gameid))
             unfinal += 1
             continue
         if gameid not in mofogames:

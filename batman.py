@@ -97,9 +97,9 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
     atbats, temp_factor = 0.0, 1.0
     batters = team_pid_stat_data.get(battingteam)        
     active_batters = len(batters)
-    hits_hrs_walks = 0.0    
+    hits_hrs_walks = 0.0
     ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"], reverse=flip_lineup)    
-    outs_pg = innings * outs_pi         
+    outs_pg = innings * outs_pi           
     previous_outs_pg = outs_pg
     current_outs = 0
     while current_outs < outs_pg:        
@@ -108,38 +108,38 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
             current_outs += 1
         previous_outs_pg = outs_pg
         for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):            
+            #if we have any remainder, it should go to the next batter, as they either will have gotten an extra atbat or not depending
+            if current_outs >= outs_pg:      
+                if (outs_pg > (current_outs - 1)) and (outs_pg > innings * outs_pi):
+                    team_atbat_data[batter_id] += (outs_pg - (current_outs - 1))
+                break                
             if batter_id not in team_atbat_data:
                 team_atbat_data[batter_id] = 0.0            
             pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam)
             everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id)
-            temp_factor = factor_exp if (pitcher_batter > 0) else 1.0
+            temp_factor = factor_exp if (pitcher_batter > 0) else 1.0            
             hits_hrs_walks = ((pitcher_batter ** float(temp_factor)) + everythingelse) * (float(factor_const) / 1000.0)
             if math.isnan(hits_hrs_walks):
                 for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
                     team_atbat_data[bat_id] = -10000.0
-                return team_atbat_data
-            if hits_hrs_walks > 1.0:                
-                hits_hrs_walks = 1.0                
-            if hits_hrs_walks >= 0.0:
+                return team_atbat_data            
+            if hits_hrs_walks > 1.0:
+                hits_hrs_walks = 1.0
+            if hits_hrs_walks > 0:
                 outs_pg += hits_hrs_walks                      
             team_atbat_data[batter_id] += 1.0          
             if team_pid_stat_data[battingteam][batter_id]["reverberating"]:                        
                 team_atbat_data[batter_id] += reverberation
-                if hits_hrs_walks >= 0.0:
+                if hits_hrs_walks > 0.0:                    
                     outs_pg += hits_hrs_walks * reverberation
             if team_pid_stat_data[battingteam][batter_id]["repeating"]:                        
                 team_atbat_data[batter_id] += repeating
-                if hits_hrs_walks >= 0.0:
+                if hits_hrs_walks > 0.0:
                     outs_pg += hits_hrs_walks * repeating
-            current_outs += 1      
-            if current_outs >= outs_pg:                                
-                break                
-    # I guess distribute the remaining error equally among all batters?
+            current_outs += 1                      
     for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
         if batter_id not in team_atbat_data:
-            team_atbat_data[batter_id] = 0.0
-        if (outs_pg > (current_outs - 1)) and (outs_pg > innings * outs_pi):
-            team_atbat_data[batter_id] += (outs_pg - (current_outs - 1)) / active_batters
+            team_atbat_data[batter_id] = 0.0    
     return team_atbat_data
 
 

@@ -546,10 +546,13 @@ def minimize_func(parameters, *data):
             debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, linear error {:.4f}".format(BEST_RESULT, CURRENT_ITERATION, (BEST_FAIL_RATE * 100.0), BEST_LINEAR_ERROR), debug, datetime.datetime.now())
         else:
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
-    CURRENT_ITERATION += 1   
-    #if (CURRENT_ITERATION % 25000 == 0):
-     #   time.sleep(120)
-      #  print("2 minute power nap")
+    CURRENT_ITERATION += 1       
+    current_runtime = time.process_time()
+    if ((current_runtime - LAST_CHECKTIME) >= 1200):
+        debug_print("2 minute power nap, been working for {:.2f} minutes".format((current_runtime - LAST_CHECKTIME) / 60.0), debug, datetime.datetime.now())
+        time.sleep(120)                
+        debug_printprint("Waking back up", debug, datetime.datetime.now())
+        LAST_CHECKTIME = time.process_time()
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
@@ -589,7 +592,7 @@ def minimize_batman_func(parameters, *data):
     fail_rate, pos_fail_rate, zero_avg_error, pos_avg_error = 1.0, 1.0, 100.0, 100.0
     max_err_actual, min_err_actual = "", ""
     reject_solution, viability_unchecked = False, True            
-    for season in range(12, 13):
+    for season in range(12, 15):
         if reject_solution:
             break
         # if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
@@ -661,7 +664,7 @@ def minimize_batman_func(parameters, *data):
                             continue
                     good_batter_perf_data, abs_batter_perf_data = [], []                                
                     last_lineup_id, previous_batting_team = "", ""
-                    previous_innings, minimum_atbats, lineup_size, interbat_counter, interbat_fail_counter = 0, 0, 0, 0, 0
+                    previous_innings, minimum_atbats, lineup_size = 0, 0, 0
                     omit_from_good_abs = False
                     atbats_team_stat_data = {}                                        
                     for batter_perf in batter_perf_data:                                 
@@ -686,28 +689,31 @@ def minimize_batman_func(parameters, *data):
                         batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
                         if not batter_list_dict:
                             continue
-                        pitchername = players[batter_perf["pitcher_id"]][0]                                                 
-                        previous_batting_team = battingteam                        
+                        pitchername = players[batter_perf["pitcher_id"]][0]       
+                        previous_batting_team = battingteam
                         if (eventofinterest == "abs"):                            
                             if (batter_perf["batter_id"] not in atbats_team_stat_data):                                  
                                 flip_lineup = (battingteam == "San Francisco Lovers") and (season == 13) and (day > 27)                                
                                 atbats_team_stat_data = get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, {"factors": special_cases})
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                            
+                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                              
                             minimum_atbats += int(batter_perf["at_bats"]) + batman_fail_by
                             previous_innings = int(batter_perf["num_innings"])                            
                             if real_val == 1:
-                                print("{} atbat {} season {}, day {}, opponent {}, batter {}".format(real_val, battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))
+                                omit_from_good_abs = True
+                                print("{} atbat {} season {}, day {}, opponent {}, batter {}".format(real_val, battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))       
+                                continue
                             if (CURRENT_ITERATION == 1) and (batman_fail_by > 0):                                
                                 omit_from_good_abs = True                                      
                                 print("Omitting {}, season {}, day {}, opponent {}, batter {}".format(battingteam, season, day, pitchingteam, players[batter_perf["batter_id"]][0]))                                    
-                            if not iscached_batters:
+                                continue
+                            if not iscached_batters and not omit_from_good_abs:
                                 abs_batter_perf_data.extend([batter_perf])                            
                         else:
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                                                                                            
+                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)       
                         bat_counter += bat_bat_counter
-                        fail_counter += bat_fail_counter                                          
+                        fail_counter += bat_fail_counter                                                                  
                         if real_val > 0:
                             bat_pos_counter += bat_bat_counter
                             fail_pos_counter += bat_fail_counter
@@ -745,7 +751,7 @@ def minimize_batman_func(parameters, *data):
                                         if abs(batman_fail_by) < stageexact:
                                             pass_exact += 1      
                         elif (abs(batman_fail_by) > stageexact) and (real_val == 0):
-                            zero_fail_counter += abs(batman_fail_by)                            
+                            zero_fail_counter += abs(batman_fail_by)                                                
                     if not iscached_batters:            
                         if (minimum_atbats < previous_innings * 3) and not omit_from_good_abs:
                             print("team did not achieve the requisite number of atbats for their minimum number of outs: {} at bats, {} outs".format(minimum_atbats, previous_innings * 3))
@@ -822,10 +828,13 @@ def minimize_batman_func(parameters, *data):
         debug_print("-" * 20 + "\n", debug, run_id)
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):
         debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION), debug, datetime.datetime.now())
-    CURRENT_ITERATION += 1   
-    #if (CURRENT_ITERATION % 25000 == 0):
-     #   time.sleep(120)
-      #  print("2 minute power nap")
+    CURRENT_ITERATION += 1  
+    current_runtime = time.process_time()
+    if ((current_runtime - LAST_CHECKTIME) >= 1200):
+        debug_print("2 minute power nap, been working for {:.2f} minutes".format((current_runtime - LAST_CHECKTIME) / 60.0), debug, datetime.datetime.now())
+        time.sleep(120)                
+        debug_printprint("Waking back up", debug, datetime.datetime.now())
+        LAST_CHECKTIME = time.process_time()
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)

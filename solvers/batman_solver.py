@@ -30,12 +30,12 @@ BATMAN_ABS_SPECIAL_CASES = ("exponent", "everythingelse", "reverberation", "repe
 def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, team_stat_data, pitcher_stat_data, pitcher, batter, lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods):
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
     special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
-    games, fail_batman, fail_batman_by, actual, real_val = 0, 100, 100, 0, 0
+    games, fail_batman, fail_batman_by, actual, real_val = 0, 100, 100.0, 0, 0
     if special_game_attrs:
         fail_batman, fail_batman_by, actual, real_val = 0, 0, 0, 0
     else:                        
         atbats, hits, homers, innings = int(batter_perf_data["at_bats"]), int(batter_perf_data["hits"]), int(batter_perf_data["home_runs"]), int(batter_perf_data["num_innings"])                        
-        games, fail_batman, fail_batman_by = 1, 1, 0                
+        games, fail_batman, fail_batman_by = 1, 1, 0.0               
         if eventofinterest == "abs":                 
             batman = team_stat_data[batter]
             if atbats - 0.5 < batman < atbats + 0.5:
