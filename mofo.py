@@ -4,7 +4,6 @@ from __future__ import print_function
 import collections
 
 from helpers import geomean, load_terms, get_weather_idx, load_mods, growth_stlatterm
-from idolthoughts import PITCHING_STLATS
 import os
 
 WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
@@ -119,7 +118,8 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
                     multiplier = 2.0 * base_multiplier
                 elif value < 0.5:
                     multiplier = 2.0 - (2.0 * base_multiplier)                
-                else multiplier = 1.0
+                else:
+                    multiplier = 1.0
                 awayMods[playerstlat].append(multiplier)
                 homeMods[playerstlat].append(multiplier)
     return awayMods, homeMods
