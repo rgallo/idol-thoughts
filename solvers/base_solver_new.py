@@ -435,11 +435,11 @@ def minimize_func(parameters, *data):
                     BASE_EXB = exb_rate                    
                     MOD_BASELINE = True                
                 if (love_rate <= BASE_LOVE) and (instinct_rate <= BASE_INSTINCT) and (ono_rate <= BASE_ONO) and (exk_rate <= BASE_EXK):                    
-                    #if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (exk_rate <= BEST_EXK):                        
-                    if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (exk_rate <= BEST_EXK + tolerance):
-                            #linear_fail = (love_rate + instinct_rate + ono_rate + wip_rate + exk_rate + exb_rate) / 6.0
-                        fail_points = ((fail_rate * 1000.0) ** 2) * 2.5
-                        linear_fail = fail_points + linear_points
+                    if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (exk_rate <= BEST_EXK) or (fail_rate <= BEST_EXACT):                        
+                        if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (exk_rate <= BEST_EXK + tolerance) and (fail_rate <= BEST_EXACT):
+                                #linear_fail = (love_rate + instinct_rate + ono_rate + wip_rate + exk_rate + exb_rate) / 6.0
+                            fail_points = ((fail_rate * 1000.0) ** 2) * 2.5
+                            linear_fail = fail_points + linear_points
         elif game_counter == TOTAL_GAME_COUNTER and TOTAL_GAME_COUNTER > 0:        
             pass_exact = (pass_exact / game_counter) * 100.0
             pass_within_one = (pass_within_one / game_counter) * 100.0
@@ -528,10 +528,10 @@ def minimize_func(parameters, *data):
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1   
     current_runtime = time.process_time()
-    if ((current_runtime - LAST_CHECKTIME) >= 1200):
-        debug_print("2 minute power nap, been working for {:.2f} minutes".format((current_runtime - LAST_CHECKTIME) / 60.0), debug, datetime.datetime.now())
-        time.sleep(120)                
-        debug_printprint("Waking back up", debug, datetime.datetime.now())
+    if ((current_runtime - LAST_CHECKTIME) >= 600):
+        #debug_print("2 minute power nap, been working for {:.2f} minutes".format((current_runtime - LAST_CHECKTIME) / 60.0), debug, datetime.datetime.now())
+        time.sleep(60)  
+        #debug_print("Waking back up", debug, datetime.datetime.now())
         LAST_CHECKTIME = time.process_time()
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()

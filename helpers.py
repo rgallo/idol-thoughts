@@ -18,6 +18,17 @@ class StlatTerm:
         c_val = 1.0 if (b_val < 0.0 or (b_val < 1.0 and self.c < 0.0)) else self.c        
         return self.a * (b_val ** c_val)
 
+class ParkTerm:
+    def __init__(self, a, b, c):
+        self.a = a
+        self.b = b
+        self.c = c
+
+    def calc(self, val):
+        b_val = abs(val - 0.5) + self.b
+        c_val = self.c        
+        return self.a * (b_val ** c_val)
+
 
 def geomean(numbers):
     correction = .001 if 0.0 in numbers else 0.0
@@ -38,6 +49,14 @@ def parse_terms(data, special_case_list):
             results[name] = StlatTerm(float(row[1]), float(row[2]), float(row[3]))
     return results, special
 
+def parse_bp_terms(data):
+    results = {}
+    splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
+    for row in splitdata:
+        hometeam, bpstlat, stlat = row[0].lower(), row[1].lower(), row[2].lower()
+        results[hometeam][bpstlat][stlat] = ParkTerm(float(row[3]), float(row[4]), float(row[5]))
+    return results
+
 
 def load_terms(term_url, special_cases=None):
     if term_url not in TERM_RESULTS:
@@ -45,6 +64,14 @@ def load_terms(term_url, special_cases=None):
         data = requests.get(term_url, headers={"Authorization": "token {}".format(os.getenv("GITHUB_TOKEN"))}).text
         results, special = parse_terms(data, special_case_list)
         TERM_RESULTS[term_url] = (results, special)
+    return TERM_RESULTS[term_url]
+
+def load_bp_terms(term_url, special_cases=None):
+    if term_url not in TERM_RESULTS:
+        special_case_list = [case.lower() for case in special_cases] if special_cases else []
+        data = requests.get(term_url, headers={"Authorization": "token {}".format(os.getenv("GITHUB_TOKEN"))}).text
+        results = parse_bp_terms(data)
+        TERM_RESULTS[term_url] = (results)
     return TERM_RESULTS[term_url]
 
 

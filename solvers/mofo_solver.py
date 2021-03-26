@@ -1,6 +1,7 @@
 import argparse
 import json
 from scipy.optimize import differential_evolution
+from solvers.mofo_ballpark_terms import BALLPARK_TERMS
 import datetime
 import sys
 
@@ -53,12 +54,12 @@ def handle_args():
 def main():
     print(datetime.datetime.now())
     cmd_args = handle_args()
-    bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST)
+    bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST) + [(-8, 8), (0, 3), (-2, 4)] * len(BALLPARK_TERMS)
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
-    args = (get_mofo_results, MOFO_STLAT_LIST, None, None, stat_file_map, game_list, team_attrs, cmd_args.debug,
+    args = (get_mofo_results, MOFO_STLAT_LIST, None, None, BALLPARK_TERMS, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.0001,
                                     mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=500)
