@@ -13,12 +13,15 @@ WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic"
 def calc_team(terms, termset, mods, skip_mods=False):
     total = 0.0
     for termname, val in termset:
-        term = terms[termname]
-        total += term.calc(val)
+        term = terms[termname]        
         if not skip_mods:
             modterms = (mods or {}).get(termname, [])
             for modterm in modterms:
-                total += modterm.calc(val)
+                multiplier_formula = modterm.calc(val)
+                base_multiplier = (1 / (1 + (2 ** (-1 * multiplier_formula))))
+                if type(modterm) is not BallParkTerm:
+                    multiplier = 2 * base_multiplier
+        total += term.calc(val) * multiplier
     return total
 
 

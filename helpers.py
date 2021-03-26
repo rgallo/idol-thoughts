@@ -18,11 +18,9 @@ class StlatTerm:
         c_val = 1.0 if (b_val < 0.0 or (b_val < 1.0 and self.c < 0.0)) else self.c        
         return self.a * (b_val ** c_val)
 
-class ParkTerm:
+class ParkTerm(StlatTerm):
     def __init__(self, a, b, c):
-        self.a = a
-        self.b = b
-        self.c = c
+        super().__init__(a, b, c)
 
     def calc(self, val):
         b_val = abs(val - 0.5) + self.b

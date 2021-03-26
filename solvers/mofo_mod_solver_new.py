@@ -55,18 +55,18 @@ def handle_args():
 def main():
     print(datetime.datetime.now())
     cmd_args = handle_args()    
-    bounds_mods = [modterm.bounds for modterm in MOFO_MOD_TERMS]
-    bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST) + bounds_mods
+    bounds_lol = [modterm.bounds for modterm in MOFO_MOD_TERMS]
+    bounds_mods = [item for sublist in bounds_lol for item in sublist]    
+    bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST) 
+    bounds = bounds + bounds_mods
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f_attrs:
-        team_attrs = json.load(f_attrs)
-    with open("base_mofo.csv") as f_mofo:
-        mofo_base_terms, _ = parse_terms(f_mofo.read(), [])
-    args = (get_mofo_mod_results, mofo_base_terms, None, MOFO_MOD_TERMS, stat_file_map, game_list, team_attrs,
+        team_attrs = json.load(f_attrs)    
+    args = (get_mofo_mod_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, stat_file_map, game_list, team_attrs,
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=1000)
+                                    mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=10000)
     print("\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat,
                                                a, b, c) for stat, (a, b, c) in zip(MOFO_MOD_TERMS, zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_mod_results, mofo_base_terms, None, MOFO_MOD_TERMS,
