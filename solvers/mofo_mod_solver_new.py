@@ -58,7 +58,7 @@ def main():
     bounds_lol = [modterm.bounds for modterm in MOFO_MOD_TERMS]
     bounds_mods = [item for sublist in bounds_lol for item in sublist]    
     bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST) 
-    bounds = bounds + bounds_mods
+    bounds = bounds + bounds_mods    
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f_attrs:

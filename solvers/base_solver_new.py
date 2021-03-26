@@ -213,12 +213,11 @@ def minimize_func(parameters, *data):
     calc_func, stlat_list, special_case_list, mod_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []
-    mod_mode = True
-    terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-(len(special_case_list) + len(mod_list)) or None)])] * 3))}        
+    mod_mode = True    
+    terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:-(len(mod_list) * 3)])] * 3))}        
     mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
-    for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[-len(mod_list):])] * 3)):
-        mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)    
-        print("Mod = {}, Stat = {}, a = {}, b = {}, c = {}".format(mod.attr.lower(), mod.stat.lower(), a, b, c))    
+    for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[-(len(mod_list) * 3):])] * 3)):
+        mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)            
     special_cases = parameters[-len(special_case_list):] if special_case_list else []
     game_counter, fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0
     quarter_fail = 100.0
@@ -465,9 +464,9 @@ def minimize_func(parameters, *data):
                 BEST_EXK = exk_rate if (exk_rate < BEST_EXK) else BEST_EXK
                 BEST_EXB = exb_rate if (exb_rate < BEST_EXB) else BEST_EXB
         debug_print("-"*20, debug, run_id)
-        if type(stlat_list) == dict:
-            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-(len(special_cases) + len(mod_list)) or None)])] * 3)))            
-            mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[-len(mod_list):])] * 3)))
+        if mod_mode:            
+            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:-(len(mod_list) * 3)])] * 3)))            
+            mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[-(len(mod_list) * 3):])] * 3)))
             debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + "\n" + mods_output, debug, run_id)
             debug_print("{} games, {} paired games".format(game_counter, paired_game_count), debug, run_id)
             debug_print("{:.4f}% Love fail rate, Best {:.4f}%".format(love_rate, BEST_LOVE), debug, run_id)

@@ -4,6 +4,7 @@ from __future__ import print_function
 import collections
 
 from helpers import geomean, load_terms, get_weather_idx, load_mods, growth_stlatterm
+from idolthoughts import PITCHING_STLATS
 import os
 
 WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
@@ -14,13 +15,12 @@ def calc_team(terms, termset, mods, skip_mods=False):
     total = 0.0
     for termname, val in termset:
         term = terms[termname]        
+        #reset to 1 for each new termname
+        multiplier = 1.0 
         if not skip_mods:
-            modterms = (mods or {}).get(termname, [])
+            modterms = (mods or {}).get(termname, [])            
             for modterm in modterms:
-                multiplier_formula = modterm.calc(val)
-                base_multiplier = (1 / (1 + (2 ** (-1 * multiplier_formula))))
-                if type(modterm) is not BallParkTerm:
-                    multiplier = 2 * base_multiplier
+                multiplier *= modterm                
         total += term.calc(val) * multiplier
     return total
 
@@ -74,11 +74,23 @@ def team_offense(terms, teamname, mods, team_stat_data, skip_mods=False):
             ("maxindulgence", max(team_data["indulgence"])))
     return calc_team(terms, termset, mods, skip_mods=skip_mods)
 
+def calc_stlatmod(name, pitcher_data, team_data, stlatterm):
+    if name in PITCHING_STLATS:
+        value = pitcher_data[name]
+    elif "mean" in name:
+        value = geomean(team_data[name])
+    else:
+        value = max(team_data[name])
+    normalized_value = stlatterm.calc(value)
+    base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))                
+    multiplier = 2.0 * base_multiplier
+    return multiplier
 
-def get_mods(mods, awayAttrs, homeAttrs, weather):
+
+def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data):
     awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
-    lowerHomeAttrs = [attr.lower() for attr in homeAttrs]
+    lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
     bird_weather = get_weather_idx("Birds")
     for attr in mods:
         # Special case for Affinity for Crows
@@ -86,29 +98,62 @@ def get_mods(mods, awayAttrs, homeAttrs, weather):
             continue
         if attr in lowerAwayAttrs:
             for name, stlatterm in mods[attr]["same"].items():
-                awayMods[name].append(stlatterm)
+                multiplier = calc_stlatmod(name, pitcher_stat_data[awayPitcher], team_stat_data[awayTeam], stlatterm)
+                awayMods[name].append(multiplier)
             for name, stlatterm in mods[attr]["opp"].items():
-                homeMods[name].append(stlatterm)
+                multiplier = calc_stlatmod(name, pitcher_stat_data[homePitcher], team_stat_data[homeTeam], stlatterm)
+                homeMods[name].append(multiplier)
         if attr in lowerHomeAttrs and attr != "traveling":
             for name, stlatterm in mods[attr]["same"].items():
-                homeMods[name].append(stlatterm)
+                multiplier = calc_stlatmod(name, pitcher_stat_data[homePitcher], team_stat_data[homeTeam], stlatterm)
+                homeMods[name].append(multiplier)
             for name, stlatterm in mods[attr]["opp"].items():
-                awayMods[name].append(stlatterm)
+                multiplier = calc_stlatmod(name, pitcher_stat_data[awayPitcher], team_stat_data[awayTeam], stlatterm)
+                awayMods[name].append(multiplier)
+    for ballparkstlat, value in ballpark.items():
+        if ballparkstlat in ballpark_mods:
+            for playerstlat, stlatterm in ballpark_mods[ballparkstlat].items():
+                normalized_value = stlatterm.calc(value)
+                base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
+                if value > 0.5:
+                    multiplier = 2.0 * base_multiplier
+                elif value < 0.5:
+                    multiplier = 2.0 - (2.0 * base_multiplier)                
+                else multiplier = 1.0
+                awayMods[playerstlat].append(multiplier)
+                homeMods[playerstlat].append(multiplier)
     return awayMods, homeMods
 
 
-def setup(weather, awayAttrs, homeAttrs):
+def load_ballpark_mods(ballparks_url):
+    import requests
+    if ballparks_url not in BALLPARK_RESULTS:
+        data = requests.get(ballparks_url, headers={"Authorization": "token {}".format(os.getenv("GITHUB_TOKEN"))}).text
+        splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
+        result = collections.defaultdict(lambda: [])
+        for ballparkstlat, playerstlat, a, b, c in splitdata:
+            result[ballparkstlat].append((playerstlat, StlatTerm(a, b, c)))
+        DATA_RESULTS[data_url] = result
+    return DATA_RESULTS[data_url]
+
+
+def setup(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data):
     terms_url = os.getenv("MOFO_TERMS")
     terms, _ = load_terms(terms_url)
     mods_url = os.getenv("MOFO_MODS")
     mods = load_mods(mods_url)
-    awayMods, homeMods = get_mods(mods, awayAttrs, homeAttrs, weather)
+    ballparks_url = os.getenv("MOFO_BALLPARKS")
+    ballparks = process_ballparks(ballparks_url)  # Return in form of {teamName: {ballparkStlat: value}}
+    ballpark_mods_url = os.getenv("MOFO_BALLPARKS")
+    ballpark_mods = load_ballpark_mods(ballpark_mods_url)
+    ballpark = ballparks[homeTeam]
+    awayMods, homeMods = get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)
     return terms, awayMods, homeMods
 
 
 def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs,
               day, weather, skip_mods=False):
-    terms, awayMods, homeMods = setup(weather, awayAttrs, homeAttrs)
+    terms, awayMods, homeMods = setup(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data)
     return get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods,
                     homeMods, skip_mods=skip_mods)
 
