@@ -739,9 +739,9 @@ def minimize_batman_func(parameters, *data):
                         if eventofinterest == "abs":
                             stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
                         elif eventofinterest == "hrs":
-                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.25, 1.0, 0.75, 0.5, 0.25
+                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
                         else:
-                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.25, 1.0, 0.75, 0.5, 0.25
+                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
                         if (abs(batman_fail_by) < stagefour) and (real_val > 0):             
                             pass_within_four += 1
                             if abs(batman_fail_by) < stagethree:                                                
@@ -800,12 +800,12 @@ def minimize_batman_func(parameters, *data):
         if pass_exact > BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if batman_max_err >= batman_min_err:            
-            fail_points = (fail_rate * 100.0 * zero_avg_error * 0.8) + (pos_fail_rate * 100.0 * pos_avg_error * 1.2) - (pass_exact * 1.2)
+            fail_points = (fail_rate * 100.0 * zero_avg_error * 0.6) + (pos_fail_rate * 100.0 * pos_avg_error * 1.4) - (pass_exact * 1.4)            
             print("Candidate for success! {:.4f} error span, fail points = {:.2f}".format((batman_max_err - batman_min_err), fail_points))            
             if ((not (eventofinterest == "abs")) and (CURRENT_ITERATION == 1)) or not (pos_fail_rate < 1.0):
                 linear_fail = 1000000.0 + fail_points
             else:
-                linear_fail = (((batman_max_err - batman_min_err) ** (pos_avg_error + zero_avg_error)) * 100.0) + fail_points
+                linear_fail = (((batman_max_err - batman_min_err) ** ((pos_avg_error * 2.0) + zero_avg_error)) * 100.0) + fail_points
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact
