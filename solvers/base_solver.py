@@ -799,7 +799,7 @@ def minimize_batman_func(parameters, *data):
         pass_within_four = (pass_within_four / bat_pos_counter) * 100.0
         if pass_exact > BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
-        if (batman_max_err >= batman_min_err) and ((pos_fail_rate <= BEST_FAIL_RATE) or eventofinterest == "abs"):            
+        if batman_max_err >= batman_min_err:            
             fail_points = (fail_rate * 100.0 * zero_avg_error * 0.8) + (pos_fail_rate * 100.0 * pos_avg_error * 1.2) - (pass_exact * 1.2)
             print("Candidate for success! {:.4f} error span, fail points = {:.2f}".format((batman_max_err - batman_min_err), fail_points))            
             if ((not (eventofinterest == "abs")) and (CURRENT_ITERATION == 1)) or not (pos_fail_rate < 1.0):
