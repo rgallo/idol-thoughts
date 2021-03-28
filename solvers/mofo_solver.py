@@ -2,12 +2,13 @@ import argparse
 import json
 from scipy.optimize import differential_evolution
 from solvers.mofo_ballpark_terms import BALLPARK_TERMS
+from solvers.mofo_mod_terms import MOFO_MOD_TERMS
 import datetime
 import sys
 
 sys.path.append("..")
 from solvers import base_solver
-from mofo import get_mofo
+import mofo
 
 
 MOFO_STLAT_LIST = ("meantragicness", "meanpatheticism", "meanthwackability", "meandivinity", "meanmoxie",
@@ -19,7 +20,7 @@ MOFO_STLAT_LIST = ("meantragicness", "meanpatheticism", "meanthwackability", "me
                    "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 
-def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods):
+def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods):
     awayMods, homeMods = [], []
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
     special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
@@ -31,6 +32,7 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
         return 0, 0, 0, 0
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
+    awayMods, homeMods = mofo.get_mods(mods, game_attrs["away"], game_attrs["home"], awayPitcher, homePitcher, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)    
     awayodds, _ = get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms,
                            awayMods, homeMods)
     homeodds = 1.0 - awayodds
@@ -54,12 +56,16 @@ def handle_args():
 def main():
     print(datetime.datetime.now())
     cmd_args = handle_args()
-    bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST) + [(-8, 8), (0, 3), (-2, 4)] * len(BALLPARK_TERMS)
+    bounds_team_mods = [modterm.bounds for modterm in MOFO_MOD_TERMS]
+    bounds_team = [item for sublist in bounds_team_mods for item in sublist]
+    bounds_park_mods = [modterm.bounds for modterm in BALLPARK_TERMS]
+    bounds_park = [item for sublist in bounds_park_mods for item in sublist]
+    bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST) + bounds_team + bounds_park
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
-    args = (get_mofo_results, MOFO_STLAT_LIST, None, None, BALLPARK_TERMS, stat_file_map, game_list, team_attrs, cmd_args.debug,
+    args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, game_list, team_attrs, cmd_args.debug,
             cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.0001,
                                     mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=500)

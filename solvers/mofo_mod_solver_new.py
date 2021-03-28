@@ -65,7 +65,7 @@ def main():
         team_attrs = json.load(f_attrs)    
     args = (get_mofo_mod_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, stat_file_map, game_list, team_attrs,
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
-    result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.0001,
+    result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=40, tol=0.0001,
                                     mutation=(0.05, 1.99), recombination=0.4, workers=1, maxiter=10000)
     print("\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat,
                                                a, b, c) for stat, (a, b, c) in zip(MOFO_MOD_TERMS, zip(*[iter(result.x)] * 3))))

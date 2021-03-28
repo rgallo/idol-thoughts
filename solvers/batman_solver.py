@@ -113,8 +113,8 @@ def main():
         bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2], [0, 0.02], [0, 0.02]]
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, [], stat_file_map, game_list, team_attrs, games_swept_elsewhere, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
-    result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=15, tol=0.0001, 
-                                    mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=10000)
+    result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=40, tol=0.0001, 
+                                    mutation=(0.05, 1.99), recombination=0.4, workers=1, maxiter=10000)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in
                     zip(BATMAN_STLAT_LIST, zip(*[iter(result.x[:-len(BATMAN_SPECIAL_CASES)])] * 3))))
     print("factors,{},{}".format(result.x[-2], result.x[-1]))

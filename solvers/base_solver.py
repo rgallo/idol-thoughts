@@ -142,6 +142,8 @@ def get_attrs_from_paired_games(season_team_attrs, paired_games):
         attrs.update(get_attrs_from_paired_game(season_team_attrs, games))
     return attrs
 
+def get_ballpark_data(home_id, season, day):
+    return collections.defaultdict(lambda: 0.5)
 
 def debug_print(s, debug, run_id):
     if debug:
@@ -225,25 +227,20 @@ def minimize_func(parameters, *data):
     global MOD_BASELINE
     calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
-    special_case_list = special_case_list or []
-    mod_mode = False
-    if type(stlat_list) == dict:  # mod mode
-        terms = stlat_list
-        mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
-        mod_mode = True
-        if MOD_BASELINE:
-            for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)):
-                mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)
-        else:
-            for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)):
-                mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(0, 0, 1)            
-    else:  # base mode
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-(len(special_case_list)+len(ballpark_list)) or None)])] * 3))}
-        mods = {}
-    #handle ballpark terms        
-    for bpterm, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters)] * 3)):
-        bp_terms[bpterm.BallParkTerm.lower()][bpterm.stat.lower()] = ParkTerm(a, b, c)                    
-    special_cases = parameters[-len(special_case_list):] if special_case_list else []
+    special_case_list = special_case_list or []            
+    park_mod_list_size = len(ballpark_list)
+    team_mod_list_size = len(mod_list)
+    special_cases_count = len(special_case_list)
+    base_mofo_list_size = len(parameters) - special_cases_count - park_mod_list_size - team_mod_list_size
+    terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_mofo_list_size])] * 3))}
+    mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
+    ballpark_mods = {}
+    mod_mode = True        
+    for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):        
+        mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)            
+    for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):
+        ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(a, b, c)                
+    special_cases = parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)] if special_case_list else []
     game_counter, fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0
     quarter_fail = 100.0
     linear_fail = 100.0
@@ -285,7 +282,7 @@ def minimize_func(parameters, *data):
             season_days += 1
             paired_games = pair_games(games)
             schedule = get_schedule_from_paired_games(paired_games, season, day)
-            day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
+            day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)            
             cached_stats = STAT_CACHE.get((season, day))
             if cached_stats:
                 team_stat_data, pitcher_stat_data, pitchers = cached_stats
@@ -303,7 +300,9 @@ def minimize_func(parameters, *data):
                 raise Exception("No stat file found")
             good_game_list = []
             for game in paired_games:
-                game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods)
+                # need to define get_ballpark_data method
+                ballpark = get_ballpark_data(game["home"]["team_id"], season, day)
+                game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods)
                 if not is_cached and game_game_counter:
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
