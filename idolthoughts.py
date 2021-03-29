@@ -24,6 +24,8 @@ from blaseball_stat_csv import blaseball_stat_csv
 import tim
 import mofo
 from helpers import geomean, get_weather_idx
+from helpers import PITCHING_STLATS, BATTING_STLATS, DEFENSE_STLATS, BASERUNNING_STLATS, INVERSE_STLATS
+
 
 MatchupData = namedtuple("MatchupData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "so9", "era", "defemoji",
                                          "vsteam", "offemoji", "defoff", "tim", "timrank", "timcalc",
@@ -34,12 +36,6 @@ MatchupPair = namedtuple("MatchupPair", ["awayMatchupData", "homeMatchupData"])
 
 StarData = namedtuple("StarData", ["pitchingstars", "maxbatstars", "meanbatstars", "maxdefstars", "meandefstars", 
                                    "maxrunstars", "meanrunstars"])
-
-PITCHING_STLATS = ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness", "suppression"]
-BATTING_STLATS = ["divinity", "martyrdom", "moxie", "musclitude", "patheticism", "thwackability", "tragicness"]
-DEFENSE_STLATS = ["anticapitalism", "chasiness", "omniscience", "tenaciousness", "watchfulness"]
-BASERUNNING_STLATS = ["baseThirst", "continuation", "groundFriction", "indulgence", "laserlikeness"]
-INVERSE_STLATS = ["tragicness", "patheticism"]  # These stlats are better for the target the smaller they are
 
 StlatData = namedtuple("StlatData", ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness",  # Pitching
                                      "meantragicness", "meanpatheticism", "meanthwackability", "meandivinity",  # Opponent

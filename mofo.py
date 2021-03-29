@@ -3,7 +3,8 @@ from __future__ import print_function
 
 import collections
 
-from helpers import geomean, load_terms, get_weather_idx, load_mods, growth_stlatterm
+import helpers
+from helpers import geomean
 import os
 
 WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
@@ -73,8 +74,9 @@ def team_offense(terms, teamname, mods, team_stat_data, skip_mods=False):
             ("maxindulgence", max(team_data["indulgence"])))
     return calc_team(terms, termset, mods, skip_mods=skip_mods)
 
+
 def calc_stlatmod(name, pitcher_data, team_data, stlatterm):
-    if name in PITCHING_STLATS:
+    if name in helpers.PITCHING_STLATS:
         value = pitcher_data[name]
     elif "mean" in name:
         value = geomean(team_data[name])
@@ -90,7 +92,7 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
     awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
     lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
-    bird_weather = get_weather_idx("Birds")
+    bird_weather = helpers.get_weather_idx("Birds")
     for attr in mods:
         # Special case for Affinity for Crows
         if attr == "affinity_for_crows" and weather != bird_weather:
@@ -125,28 +127,17 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
     return awayMods, homeMods
 
 
-def load_ballpark_mods(ballparks_url):
-    import requests
-    if ballparks_url not in BALLPARK_RESULTS:
-        data = requests.get(ballparks_url, headers={"Authorization": "token {}".format(os.getenv("GITHUB_TOKEN"))}).text
-        splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
-        result = collections.defaultdict(lambda: [])
-        for ballparkstlat, playerstlat, a, b, c in splitdata:
-            result[ballparkstlat].append((playerstlat, StlatTerm(a, b, c)))
-        DATA_RESULTS[data_url] = result
-    return DATA_RESULTS[data_url]
-
-
 def setup(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data):
     terms_url = os.getenv("MOFO_TERMS")
-    terms, _ = load_terms(terms_url)
+    terms, _ = helpers.load_terms(terms_url)
     mods_url = os.getenv("MOFO_MODS")
-    mods = load_mods(mods_url)
-    ballparks_url = os.getenv("MOFO_BALLPARKS")
-    ballparks = process_ballparks(ballparks_url)  # Return in form of {teamName: {ballparkStlat: value}}
-    ballpark_mods_url = os.getenv("MOFO_BALLPARKS")
-    ballpark_mods = load_ballpark_mods(ballpark_mods_url)
-    ballpark = ballparks[homeTeam]
+    mods = helpers.load_mods(mods_url)
+    ballparks_url = os.getenv("BALLPARKS")
+    ballparks = helpers.load_ballparks(ballparks_url)
+    ballpark_mods_url = os.getenv("MOFO_BALLPARK_TERMS")
+    ballpark_mods = helpers.load_bp_terms(ballpark_mods_url)
+    homeTeamId = helpers.get_team_id(homeTeam)
+    ballpark = ballparks[homeTeamId]
     awayMods, homeMods = get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)
     return terms, awayMods, homeMods
 
