@@ -137,7 +137,7 @@ def setup(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
     ballpark_mods_url = os.getenv("MOFO_BALLPARK_TERMS")
     ballpark_mods = helpers.load_bp_terms(ballpark_mods_url)
     homeTeamId = helpers.get_team_id(homeTeam)
-    ballpark = ballparks[homeTeamId]
+    ballpark = ballparks.get(homeTeamId, collections.defaultdict(lambda: 0.5))
     awayMods, homeMods = get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)
     return terms, awayMods, homeMods
 

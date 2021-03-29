@@ -33,7 +33,7 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
     awayMods, homeMods = mofo.get_mods(mods, game_attrs["away"], game_attrs["home"], awayPitcher, homePitcher, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)    
-    awayodds, _ = get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms,
+    awayodds, _ = mofo.get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms,
                            awayMods, homeMods)
     homeodds = 1.0 - awayodds
     if awayodds == .5:
@@ -45,6 +45,7 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
 def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--statfolder', help="path to stat folder")
+    parser.add_argument('--ballparks', help="path to ballparks folder")
     parser.add_argument('--gamefile', help="path to game file")
     parser.add_argument('--debug', help="print output", action='store_true')
     parser.add_argument('--debug2', help="print output", action='store_true')
@@ -62,17 +63,18 @@ def main():
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
     bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST) + bounds_team + bounds_park
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
+    ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparkfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
-    args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, game_list, team_attrs, cmd_args.debug,
-            cmd_args.debug2, cmd_args.debug3)
+    args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
+            game_list, team_attrs, cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.0001,
                                     mutation=(0.05, 1.99), recombination=0.7, workers=1, maxiter=500)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, None, stat_file_map,
-                                                 game_list, team_attrs, False, False, False)
+                                                 ballpark_file_map, game_list, team_attrs, False, False, False)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())
 

@@ -16,6 +16,7 @@ from mofo import get_mods
 from batman import get_team_atbats
 
 STAT_CACHE = {}
+BALLPARK_CACHE = {}
 GAME_CACHE = {}
 BATTER_CACHE = {}
 
@@ -70,6 +71,19 @@ def get_batters(filename):
     with open(filename) as f:
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
     return filedata
+
+
+def get_ballpark_map(ballpark_folder):
+    filelist = [f for f in os.listdir(ballpark_folder) if os.path.isfile(os.path.join(ballpark_folder, f))]
+    results = {}
+    for filepath in filelist:
+        filename = filepath.split(os.sep)[-1]
+        match = re.match(r'stadiumsS([0-9]*)preD([0-9]*).json', filename)
+        if match:
+            season, day = match.groups()
+            results[(int(season), int(day))] = filepath
+    return results
+
 
 def pair_games(games):
     gamelist = collections.defaultdict(lambda: [])
@@ -142,8 +156,6 @@ def get_attrs_from_paired_games(season_team_attrs, paired_games):
         attrs.update(get_attrs_from_paired_game(season_team_attrs, games))
     return attrs
 
-def get_ballpark_data(home_id, season, day):
-    return collections.defaultdict(lambda: 0.5)
 
 def debug_print(s, debug, run_id):
     if debug:
@@ -225,7 +237,7 @@ def minimize_func(parameters, *data):
     global HAS_GAMES
     global WORST_ERROR
     global MOD_BASELINE
-    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, game_list, team_attrs, debug, debug2, debug3 = data
+    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []            
     park_mod_list_size = len(ballpark_list)
@@ -261,7 +273,7 @@ def minimize_func(parameters, *data):
             continue
         season_start = datetime.datetime.now()
         debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
-        pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
+        pitchers, team_stat_data, pitcher_stat_data, last_stat_filename, last_ballpark_filename = (None, ) * 5
         season_team_attrs = team_attrs.get(str(season), {})
         season_days = 0        
         for day in range(1, 125):
@@ -298,10 +310,19 @@ def minimize_func(parameters, *data):
                 STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)
             if not pitchers:
                 raise Exception("No stat file found")
+            cached_ballparks = BALLPARK_CACHE.get((season, day))
+            if not cached_ballparks:
+                ballpark_filename = ballpark_file_map.get((season, day))
+                if ballpark_filename:
+                    with open(ballpark_filename) as f:
+                        ballparks = json.load(f)
+                else:
+                    if not ballparks:  # this should use the previous value of ballparks by default, use default if not
+                        ballparks = collections.defaultdict(lambda: collections.defaultdict(lambda: 0.5))
+                BALLPARK_CACHE[(season, day)] = ballparks
             good_game_list = []
             for game in paired_games:
-                # need to define get_ballpark_data method
-                ballpark = get_ballpark_data(game["home"]["team_id"], season, day)
+                ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
                 game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods)
                 if not is_cached and game_game_counter:
                     good_game_list.extend([game["home"], game["away"]])
