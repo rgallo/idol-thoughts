@@ -111,19 +111,19 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
             for name, stlatterm in mods[attr]["opp"].items():
                 multiplier = calc_stlatmod(name, pitcher_stat_data[awayPitcher], team_stat_data[awayTeam], stlatterm)
                 awayMods[name].append(multiplier)
-    for ballparkstlat, value in ballpark.items():
-        if ballparkstlat in ballpark_mods:
-            for playerstlat, stlatterm in ballpark_mods[ballparkstlat].items():
-                normalized_value = stlatterm.calc(value)
-                base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
-                if value > 0.5:
-                    multiplier = 2.0 * base_multiplier
-                elif value < 0.5:
-                    multiplier = 2.0 - (2.0 * base_multiplier)                
-                else:
-                    multiplier = 1.0
-                awayMods[playerstlat].append(multiplier)
-                homeMods[playerstlat].append(multiplier)
+    for ballparkstlat, stlatterms in ballpark_mods.items():
+        for playerstlat, stlaterm in stlatterms.items():
+            value = ballpark[ballparkstlat]
+            normalized_value = stlatterm.calc(value)
+            base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
+            if value > 0.5:
+                multiplier = 2.0 * base_multiplier
+            elif value < 0.5:
+                multiplier = 2.0 - (2.0 * base_multiplier)                
+            else:
+                multiplier = 1.0
+            awayMods[playerstlat].append(multiplier)
+            homeMods[playerstlat].append(multiplier)
     return awayMods, homeMods
 
 

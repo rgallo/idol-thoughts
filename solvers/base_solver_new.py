@@ -20,6 +20,7 @@ BEST_RESULT = 10000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
 BEST_EXACT = 10000000000.0
+BEST_FAILCOUNT = 100000000.0
 CURRENT_ITERATION = 1
 LAST_CHECKTIME = 0.0
 BEST_QUARTER_FAIL = 1.0
@@ -191,6 +192,7 @@ def minimize_func(parameters, *data):
     global BEST_FAIL_RATE
     global BEST_LINEAR_ERROR
     global BEST_EXACT
+    global BEST_FAILCOUNT
     global LAST_CHECKTIME
     global BEST_QUARTER_FAIL
     global TOTAL_GAME_COUNTER
@@ -285,7 +287,10 @@ def minimize_func(parameters, *data):
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
                 game_counter += game_game_counter
-                fail_counter += game_fail_counter                
+                fail_counter += game_fail_counter 
+                if fail_counter > BEST_FAILCOUNT:
+                    reject_solution = True
+                    break
                 if game_game_counter == 1:
                     all_vals.append(game_away_val)   
                     if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
@@ -451,7 +456,8 @@ def minimize_func(parameters, *data):
                 debug_print("Fail rate = {:.4f}".format(fail_rate), debug, "::::::::")
             linear_fail = (k9_max_err - k9_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
     if linear_fail < BEST_RESULT:
-        BEST_RESULT = linear_fail        
+        BEST_RESULT = linear_fail   
+        BEST_FAILCOUNT = fail_counter
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
             BEST_LINEAR_ERROR = linear_error
