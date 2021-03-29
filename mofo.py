@@ -4,7 +4,8 @@ from __future__ import print_function
 import collections
 
 import helpers
-from helpers import geomean
+import math
+from helpers import StlatTerm, ParkTerm, geomean
 import os
 
 WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
@@ -17,10 +18,9 @@ def calc_team(terms, termset, mods, skip_mods=False):
         term = terms[termname]        
         #reset to 1 for each new termname
         multiplier = 1.0 
-        if not skip_mods:
-            modterms = (mods or {}).get(termname, [])            
-            for modterm in modterms:
-                multiplier *= modterm                
+        if not skip_mods:            
+            modterms = (mods or {}).get(termname, [])                                    
+            multiplier *= math.prod(modterms)            
         total += term.calc(val) * multiplier
     return total
 
@@ -75,13 +75,23 @@ def team_offense(terms, teamname, mods, team_stat_data, skip_mods=False):
     return calc_team(terms, termset, mods, skip_mods=skip_mods)
 
 
-def calc_stlatmod(name, pitcher_data, team_data, stlatterm):
+def calc_stlatmod(name, pitcher_data, team_data, stlatterm):    
     if name in helpers.PITCHING_STLATS:
-        value = pitcher_data[name]
-    elif "mean" in name:
-        value = geomean(team_data[name])
+        value = pitcher_data[name]    
+    elif "mean" in name:        
+        stlatname = name[4:]        
+        if stlatname == "basethirst":
+            stlatname = "baseThirst"
+        if stlatname == "groundfriction":
+            stlatname = "groundFriction"
+        value = geomean(team_data[stlatname])
     else:
-        value = max(team_data[name])
+        stlatname = name[3:]
+        if stlatname == "basethirst":
+            stlatname = "baseThirst"
+        if stlatname == "groundfriction":
+            stlatname = "groundFriction"
+        value = max(team_data[stlatname])
     normalized_value = stlatterm.calc(value)
     base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))                
     multiplier = 2.0 * base_multiplier
@@ -92,7 +102,7 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
     awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
     lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
-    bird_weather = helpers.get_weather_idx("Birds")
+    bird_weather = helpers.get_weather_idx("Birds")    
     for attr in mods:
         # Special case for Affinity for Crows
         if attr == "affinity_for_crows" and weather != bird_weather:
@@ -110,20 +120,21 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
                 homeMods[name].append(multiplier)
             for name, stlatterm in mods[attr]["opp"].items():
                 multiplier = calc_stlatmod(name, pitcher_stat_data[awayPitcher], team_stat_data[awayTeam], stlatterm)
-                awayMods[name].append(multiplier)
-    for ballparkstlat, stlatterms in ballpark_mods.items():
-        for playerstlat, stlaterm in stlatterms.items():
-            value = ballpark[ballparkstlat]
-            normalized_value = stlatterm.calc(value)
-            base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
-            if value > 0.5:
-                multiplier = 2.0 * base_multiplier
-            elif value < 0.5:
-                multiplier = 2.0 - (2.0 * base_multiplier)                
-            else:
-                multiplier = 1.0
-            awayMods[playerstlat].append(multiplier)
-            homeMods[playerstlat].append(multiplier)
+                awayMods[name].append(multiplier)    
+    for ballparkstlat, stlatterms in ballpark_mods.items():        
+        for playerstlat, stlatterm in stlatterms.items():
+            if type(stlatterm) == ParkTerm:            
+                value = ballpark[ballparkstlat]
+                normalized_value = stlatterm.calc(value)
+                base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
+                if value > 0.5:
+                    multiplier = 2.0 * base_multiplier
+                elif value < 0.5:
+                    multiplier = 2.0 - (2.0 * base_multiplier)                
+                else:
+                    multiplier = 1.0
+                awayMods[playerstlat].append(multiplier)
+                homeMods[playerstlat].append(multiplier)
     return awayMods, homeMods
 
 

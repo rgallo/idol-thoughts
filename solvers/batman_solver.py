@@ -7,6 +7,7 @@ import sys
 
 sys.path.append("..")
 from solvers import base_solver
+from solvers.batman_ballpark_terms import BALLPARK_TERMS
 from batman import get_batman
 
 
@@ -29,7 +30,7 @@ BATMAN_ABS_SPECIAL_CASES = ("exponent", "everythingelse", "reverberation", "repe
 
 def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, team_stat_data, pitcher_stat_data, pitcher, batter, lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods):
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
-    special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
+    special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE_BATMAN
     games, fail_batman, fail_batman_by, actual, real_val = 0, 100, 100.0, 0, 0
     if special_game_attrs:
         fail_batman, fail_batman_by, actual, real_val = 0, 0, 0, 0
@@ -79,8 +80,9 @@ def handle_args():
     parser.add_argument('--hits', help="solve for hits", action='store_true')
     parser.add_argument('--homers', help="solve for homers", action='store_true')    
     parser.add_argument('--statfolder', help="path to stat folder")
-    parser.add_argument('--gamefile', help="path to game file")
-    parser.add_argument('--batterfile', help="path to the batter file")    
+    parser.add_argument('--ballparks', help="path to ballparks folder")
+    parser.add_argument('--gamefile', help="path to game file")    
+    parser.add_argument('--batterfile', help="path to the batter file")      
     parser.add_argument('--debug', help="print output", action='store_true')
     parser.add_argument('--debug2', help="print output", action='store_true')
     parser.add_argument('--debug3', help="print output", action='store_true')
@@ -93,7 +95,8 @@ def main():
     cmd_args = handle_args()    
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)    
-    batter_list = base_solver.get_batters(cmd_args.batterfile)        
+    batter_list = base_solver.get_batters(cmd_args.batterfile)    
+    ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)
     stlatlist = BATMAN_STLAT_LIST
     special_cases = BATMAN_SPECIAL_CASES
     with open('team_attrs.json') as f:
@@ -102,15 +105,18 @@ def main():
         games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
-        bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2]]
+        base_bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2]]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2]]
+        base_bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2]]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2], [0, 0.02], [0, 0.02]]
+        base_bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2], [0, 0.02], [0, 0.02]]
+    bounds_park_mods = [modterm.bounds for modterm in BALLPARK_TERMS if modterm.playerstat in stlatlist]
+    bounds_park = [item for sublist in bounds_park_mods for item in sublist]
+    bounds = base_bounds + bounds_park
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, [], stat_file_map, game_list, team_attrs, games_swept_elsewhere, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=40, tol=0.0001, 

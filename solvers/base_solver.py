@@ -24,7 +24,8 @@ BEST_RESULT = 10000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
 BEST_UNEXVAR_ERROR = -100.0
-BEST_EXACT = 0.0
+BEST_EXACT = 10000000000.0
+BEST_FAILCOUNT = 10000000000.0
 CURRENT_ITERATION = 1
 LAST_CHECKTIME = 0.0
 BEST_QUARTER_FAIL = 1.0
@@ -36,17 +37,13 @@ BEST_ONO = 10000000000.0
 BEST_WIP = 10000000000.0
 BEST_EXK = 10000000000.0
 BEST_EXB = 10000000000.0
-BASE_LOVE = 10000000000.0
-BASE_INSTINCT = 10000000000.0
-BASE_ONO = 10000000000.0
-BASE_WIP = 10000000000.0
-BASE_EXK = 10000000000.0
-BASE_EXB = 10000000000.0
+BEST_UNMOD = 10000000000.0
 WORST_ERROR = 1000000000.0
 MOD_BASELINE = False
 HAS_GAMES = {}
 
-ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
+ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING"}
+ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
@@ -76,12 +73,11 @@ def get_batters(filename):
 def get_ballpark_map(ballpark_folder):
     filelist = [f for f in os.listdir(ballpark_folder) if os.path.isfile(os.path.join(ballpark_folder, f))]
     results = {}
-    for filepath in filelist:
-        filename = filepath.split(os.sep)[-1]
+    for filename in filelist:        
         match = re.match(r'stadiumsS([0-9]*)preD([0-9]*).json', filename)
         if match:
             season, day = match.groups()
-            results[(int(season), int(day))] = filepath
+            results[(int(season), int(day))] = os.path.join(ballpark_folder, filename)
     return results
 
 
@@ -99,7 +95,7 @@ def pair_games(games):
 def get_stat_file_map(stat_folder):
     filelist = [y for x in os.walk(stat_folder) for y in glob(os.path.join(x[0], '*.csv'))]
     results = {}
-    for filepath in filelist:
+    for filepath in filelist:        
         filename = filepath.split(os.sep)[-1]
         match = re.match(r'outputS([0-9]*)preD([0-9]*).csv', filename)
         if match:
@@ -218,6 +214,7 @@ def minimize_func(parameters, *data):
     global BEST_FAIL_RATE
     global BEST_LINEAR_ERROR
     global BEST_EXACT
+    global BEST_FAILCOUNT
     global LAST_CHECKTIME
     global BEST_QUARTER_FAIL
     global TOTAL_GAME_COUNTER
@@ -228,6 +225,7 @@ def minimize_func(parameters, *data):
     global BEST_WIP
     global BEST_EXK
     global BEST_EXB
+    global BEST_UNMOD
     global BASE_LOVE
     global BASE_INSTINCT
     global BASE_ONO
@@ -235,29 +233,28 @@ def minimize_func(parameters, *data):
     global BASE_EXK
     global BASE_EXB
     global HAS_GAMES
-    global WORST_ERROR
-    global MOD_BASELINE
+    global WORST_ERROR    
     calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []            
-    park_mod_list_size = len(ballpark_list)
-    team_mod_list_size = len(mod_list)
+    park_mod_list_size = len(ballpark_list) * 3
+    team_mod_list_size = len(mod_list) * 3
     special_cases_count = len(special_case_list)
     base_mofo_list_size = len(parameters) - special_cases_count - park_mod_list_size - team_mod_list_size
     terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_mofo_list_size])] * 3))}
     mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
-    ballpark_mods = {}
+    ballpark_mods = collections.defaultdict(lambda: {"bpterm": {}})
     mod_mode = True        
-    for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):        
-        mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)            
-    for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):
-        ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(a, b, c)                
+    for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
+        mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)      
+    for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):        
+        ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(a, b, c)           
     special_cases = parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)] if special_case_list else []
     game_counter, fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0
     quarter_fail = 100.0
     linear_fail = 100.0
     linear_error = 0.0
-    love_rate, instinct_rate, ono_rate, wip_rate, exk_rate, exb_rate = 100.0, 100.0, 100.0, 100.0, 100.0, 100.0
+    love_rate, instinct_rate, ono_rate, wip_rate, exk_rate, exb_rate, unmod_rate = 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0
     k9_max_err, k9_min_err = 0, 0
     mod_fails = [0] * 6
     mod_games = [0] * 6
@@ -273,7 +270,7 @@ def minimize_func(parameters, *data):
             continue
         season_start = datetime.datetime.now()
         debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
-        pitchers, team_stat_data, pitcher_stat_data, last_stat_filename, last_ballpark_filename = (None, ) * 5
+        pitchers, team_stat_data, pitcher_stat_data, last_stat_filename, ballparks = (None, ) * 5
         season_team_attrs = team_attrs.get(str(season), {})
         season_days = 0        
         for day in range(1, 125):
@@ -311,24 +308,31 @@ def minimize_func(parameters, *data):
             if not pitchers:
                 raise Exception("No stat file found")
             cached_ballparks = BALLPARK_CACHE.get((season, day))
-            if not cached_ballparks:
+            if cached_ballparks is None:
                 ballpark_filename = ballpark_file_map.get((season, day))
+                if CURRENT_ITERATION > 1:
+                    print("Ballparks not cached, season {}, day {}".format(season, day))
                 if ballpark_filename:
                     with open(ballpark_filename) as f:
                         ballparks = json.load(f)
                 else:
-                    if not ballparks:  # this should use the previous value of ballparks by default, use default if not
+                    if ballparks is None:  # this should use the previous value of ballparks by default, use default if not
                         ballparks = collections.defaultdict(lambda: collections.defaultdict(lambda: 0.5))
                 BALLPARK_CACHE[(season, day)] = ballparks
+            else:
+                ballparks = cached_ballparks                
             good_game_list = []
             for game in paired_games:
                 ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
-                game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods)
+                game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods)                
                 if not is_cached and game_game_counter:
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
                 game_counter += game_game_counter
-                fail_counter += game_fail_counter                
+                fail_counter += game_fail_counter    
+                if fail_counter > BEST_FAILCOUNT:
+                    reject_solution = True
+                    break
                 if game_game_counter == 1:
                     all_vals.append(game_away_val)   
                     if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
@@ -450,7 +454,7 @@ def minimize_func(parameters, *data):
     fail_points, linear_points = 10000000000.0, 10000000000.0    
     linear_fail = 90000000000.0
     if not reject_solution:
-        if len(win_loss) > 0:            
+        if len(win_loss) > 0:                  
             sorted_win_loss = [x for _,x in sorted(zip(all_vals, win_loss))]
             all_vals.sort()
             linear_error, max_linear_error, min_linear_error, max_error_value, max_error_ratio, errors, shape = calc_linear_unex_error(all_vals, sorted_win_loss, game_counter)
@@ -465,25 +469,16 @@ def minimize_func(parameters, *data):
                 #currently no new data available for WIP or EXB
                 #wip_rate = (mod_fails[3] / mod_games[3]) * 100.0
                 exk_rate = (mod_fails[4] / mod_games[4]) * 100.0
-                #exb_rate = (mod_fails[5] / mod_games[5]) * 100.0              
+                #exb_rate = (mod_fails[5] / mod_games[5]) * 100.0     
+                unmod_rate = ((fail_counter - sum(mod_fails)) / (game_counter - sum(mod_games))) * 100.0
                 #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB)) / 2.0                
                 tolerance = min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK) / 10.0
-                #if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (wip_rate <= BEST_WIP) or (exk_rate <= BEST_EXK) or (exb_rate <= BEST_EXB):
-                if not MOD_BASELINE:
-                    BASE_LOVE = love_rate
-                    BASE_INSTINCT = instinct_rate
-                    BASE_ONO = ono_rate
-                    BASE_WIP = wip_rate
-                    BASE_EXK = exk_rate
-                    BASE_EXB = exb_rate                    
-                    MOD_BASELINE = True
-                if (love_rate <= BASE_LOVE) and (instinct_rate <= BASE_INSTINCT) and (ono_rate <= BASE_ONO) and (exk_rate <= BASE_EXK):
-                    if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (exk_rate <= BEST_EXK):
-                        #if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (wip_rate <= BEST_WIP + tolerance) and (exk_rate <= BEST_EXK + tolerance) and (exb_rate <= BEST_EXB + tolerance):
-                        if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (exk_rate <= BEST_EXK + tolerance):
+                #if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (wip_rate <= BEST_WIP) or (exk_rate <= BEST_EXK) or (exb_rate <= BEST_EXB):                
+                if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (exk_rate <= BEST_EXK) or (unmod_rate <= BEST_UNMOD) or (fail_rate <= BEST_FAIL_RATE):                        
+                    if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (exk_rate <= BEST_EXK + tolerance) and (unmod_rate <= BEST_UNMOD + tolerance) and (fail_rate <= BEST_FAIL_RATE):
                             #linear_fail = (love_rate + instinct_rate + ono_rate + wip_rate + exk_rate + exb_rate) / 6.0
-                            fail_points = ((love_rate + instinct_rate + ono_rate + exk_rate) * 2.5) ** 2.0                
-                            linear_fail = fail_points + linear_points
+                        fail_points = ((fail_rate * 1000.0) ** 2) * 2.5
+                        linear_fail = fail_points + linear_points                        
         elif game_counter == TOTAL_GAME_COUNTER and TOTAL_GAME_COUNTER > 0:        
             pass_exact = (pass_exact / game_counter) * 100.0
             pass_within_one = (pass_within_one / game_counter) * 100.0
@@ -495,7 +490,8 @@ def minimize_func(parameters, *data):
                 debug_print("Fail rate = {:.4f}".format(fail_rate), debug, "::::::::")
             linear_fail = (k9_max_err - k9_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
     if linear_fail < BEST_RESULT:
-        BEST_RESULT = linear_fail        
+        BEST_RESULT = linear_fail  
+        BEST_FAILCOUNT = fail_counter
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
             BEST_LINEAR_ERROR = linear_error
@@ -507,11 +503,15 @@ def minimize_func(parameters, *data):
                 BEST_WIP = wip_rate if (wip_rate < BEST_WIP) else BEST_WIP
                 BEST_EXK = exk_rate if (exk_rate < BEST_EXK) else BEST_EXK
                 BEST_EXB = exb_rate if (exb_rate < BEST_EXB) else BEST_EXB
+                BEST_UNMOD = unmod_rate if (unmod_rate < BEST_UNMOD) else BEST_UNMOD
         debug_print("-"*20, debug, run_id)
-        if type(stlat_list) == dict:
-            mods_output = "\n".join("{},{},{},{},{},{}".format(stat.attr, stat.team, stat.stat, a, b, c) for stat, (a, b, c) in zip(mod_list, zip(*[iter(parameters)] * 3)))
-            debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + mods_output, debug, run_id)
-            debug_print("{} games".format(game_counter), debug, run_id)
+        if len(win_loss) > 0:
+            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_mofo_list_size)])] * 3)))            
+            mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
+            ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-(park_mod_list_size):])] * 3)))
+            debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug, run_id)
+            debug_print("{} games".format(game_counter), debug, run_id)            
+            debug_print("{:.4f}% Unmodded fail rate, Best {:.4f}%".format(unmod_rate, BEST_UNMOD), debug, run_id)
             debug_print("{:.4f}% Love fail rate, Best {:.4f}%".format(love_rate, BEST_LOVE), debug, run_id)
             debug_print("{:.4f}% Base Instincts fail rate, Best {:.4f}%".format(instinct_rate, BEST_INSTINCT), debug, run_id)
             debug_print("{:.4f}% O No fail rate, Best {:.4f}%".format(ono_rate, BEST_ONO), debug, run_id)
@@ -535,6 +535,7 @@ def minimize_func(parameters, *data):
             else:
                 debug_print("Somehow no errors", debug, run_id)            
             debug_print("Fail error points = {:.4f}, Linearity error points = {:.4f}, total = {:.4f}".format(fail_points, linear_points, linear_fail), debug, run_id)
+            debug_print("Iteration #{}".format(CURRENT_ITERATION), debug, run_id)
         else:
             terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
             special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
@@ -571,10 +572,10 @@ def minimize_func(parameters, *data):
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1       
     current_runtime = time.process_time()
-    if ((current_runtime - LAST_CHECKTIME) >= 1800):
-        debug_print("2 minute power nap, been working for {:.2f} minutes".format((current_runtime - LAST_CHECKTIME) / 60.0), debug, datetime.datetime.now())
-        time.sleep(120)                
-        debug_print("Waking back up", debug, datetime.datetime.now())
+    if ((current_runtime - LAST_CHECKTIME) >= 600):
+        #debug_print("2 minute power nap, been working for {:.2f} minutes".format((current_runtime - LAST_CHECKTIME) / 60.0), debug, datetime.datetime.now())
+        time.sleep(60)  
+        #debug_print("Waking back up", debug, datetime.datetime.now())
         LAST_CHECKTIME = time.process_time()
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
