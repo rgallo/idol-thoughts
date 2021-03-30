@@ -39,6 +39,8 @@ BEST_EXK = 10000000000.0
 BEST_EXB = 10000000000.0
 BEST_UNMOD = 10000000000.0
 WORST_ERROR = 1000000000.0
+HALF_GAMES = 0
+REJECTS = 0
 MOD_BASELINE = False
 HAS_GAMES = {}
 LAST_ITERATION_TIME = datetime.datetime.now()
@@ -242,6 +244,8 @@ def minimize_func(parameters, *data):
     global HAS_GAMES
     global WORST_ERROR
     global LAST_ITERATION_TIME
+    global HALF_GAMES    
+    global REJECTS
     calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []            
@@ -258,7 +262,7 @@ def minimize_func(parameters, *data):
     for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):        
         ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(a, b, c)           
     special_cases = parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)] if special_case_list else []
-    game_counter, fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0
+    game_counter, fail_counter, half_fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 1000000000, 0, 0, 0, 0, 0
     quarter_fail = 100.0
     linear_fail = 100.0
     linear_error = 0.0
@@ -270,7 +274,7 @@ def minimize_func(parameters, *data):
     reject_solution, viability_unchecked = False, True
     all_vals = []
     win_loss = []    
-    for season in range(11, 15):
+    for season in reversed(range(12, 15)):
         if reject_solution:
             break
         # if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
@@ -337,10 +341,14 @@ def minimize_func(parameters, *data):
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
                 game_counter += game_game_counter
-                fail_counter += game_fail_counter    
-                if fail_counter > BEST_FAILCOUNT:
-                    reject_solution = True
-                    break
+                fail_counter += game_fail_counter                  
+                if game_counter >= HALF_GAMES and HALF_GAMES > 0 and viability_unchecked:
+                    half_fail_counter = fail_counter
+                    viability_unchecked = False
+                    if half_fail_counter > BEST_FAILCOUNT:
+                        reject_solution = True
+                        REJECTS += 1
+                        break
                 if game_game_counter == 1:
                     all_vals.append(game_away_val)   
                     if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
@@ -499,7 +507,8 @@ def minimize_func(parameters, *data):
             linear_fail = (k9_max_err - k9_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail  
-        BEST_FAILCOUNT = fail_counter
+        HALF_GAMES = (game_counter / 2)
+        BEST_FAILCOUNT = half_fail_counter
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
             BEST_LINEAR_ERROR = linear_error
@@ -583,7 +592,8 @@ def minimize_func(parameters, *data):
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0)):
         if len(win_loss) > 0:
             now = datetime.datetime.now()
-            debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, linear error {:.4f}, {:.2f} seconds".format(BEST_RESULT, CURRENT_ITERATION, (BEST_FAIL_RATE * 100.0), BEST_LINEAR_ERROR, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)
+            debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, linear error {:.4f}, {} rejects since last check-in, {:.2f} seconds".format(BEST_RESULT, CURRENT_ITERATION, (BEST_FAIL_RATE * 100.0), BEST_LINEAR_ERROR, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)
+            REJECTS = 0
             LAST_ITERATION_TIME = now
         else:
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
