@@ -1,5 +1,6 @@
 import collections
 import csv
+import sys
 import time
 import math
 import datetime
@@ -548,6 +549,8 @@ def minimize_func(parameters, *data):
             debug_print(detailtext, debug, run_id)
             if outputdir:
                 write_file(outputdir, run_id, "details.txt", detailtext)
+            if sys.platform == "darwin":  # MacOS
+                os.system("""osascript -e 'display notification "Fail rate {:.4f}%" with title "New solution found!"'""".format(fail_rate * 100.0))
             if len(errors) > 0:
                 errors_output = ", ".join(map(str, errors))
                 debug_print("Major errors at: " + errors_output, debug, run_id)
