@@ -49,6 +49,7 @@ def handle_args():
     parser.add_argument('--debug', help="print output", action='store_true')
     parser.add_argument('--debug2', help="print output", action='store_true')
     parser.add_argument('--debug3', help="print output", action='store_true')
+    parser.add_argument('--output', required=False, help="file output directory")
     args = parser.parse_args()
     return args
 
@@ -67,13 +68,14 @@ def main():
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
-            game_list, team_attrs, cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
+            game_list, team_attrs, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=40, tol=0.0001,
                                     mutation=(0.01, 1.99), recombination=0.7, workers=1, maxiter=10000)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, None, stat_file_map,
-                                                 ballpark_file_map, game_list, team_attrs, False, False, False)
+                                                 ballpark_file_map, game_list, team_attrs, False, False, False,
+                                                 cmd_args.output)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())
 

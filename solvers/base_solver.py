@@ -206,6 +206,12 @@ def calc_linear_unex_error(vals, wins_losses, games):
         idx += 1
     return error, max_error, min_error, max_error_val, max_error_ratio, major_errors, error_shape
 
+
+def write_file(outputdir, run_id, filename, content):
+    with open(os.path.join(outputdir, "{}-{}".format(run_id, filename)), "w") as f:
+        f.write(content)
+
+
 #for mofo and k9
 def minimize_func(parameters, *data):
     run_id = uuid.uuid4()
@@ -236,7 +242,7 @@ def minimize_func(parameters, *data):
     global HAS_GAMES
     global WORST_ERROR
     global LAST_ITERATION_TIME
-    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, debug, debug2, debug3 = data
+    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []            
     park_mod_list_size = len(ballpark_list) * 3
@@ -511,6 +517,10 @@ def minimize_func(parameters, *data):
             terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_mofo_list_size)])] * 3)))            
             mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
             ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-(park_mod_list_size):])] * 3)))
+            if outputdir:
+                write_file(outputdir, run_id, "terms.csv", "name,a,b,c\n" + terms_output)
+                write_file(outputdir, run_id, "mods.csv", "identifier,team,name,a,b,c\n" + mods_output)
+                write_file(outputdir, run_id, "ballparkmods.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
             debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug, run_id)
             debug_print("{} games".format(game_counter), debug, run_id)            
             debug_print("{:.4f}% Unmodded fail rate, Best {:.4f}%".format(unmod_rate, BEST_UNMOD), debug, run_id)
@@ -526,6 +536,11 @@ def minimize_func(parameters, *data):
             #debug_print("{:.4f}% Extra Base fail rate, Best {:.4f}%".format(exb_rate, BEST_EXB), debug, run_id)                        
             debug_print("Best so far - fail rate {:.4f}%, linear error {:.4f}".format(fail_rate * 100.0, linear_error), debug, run_id)
             debug_print("Max linear error {:.4f}% ({:.4f} actual, {:.4f} calculated), Min linear error {:.4f}%".format(max_linear_error, max_error_ratio, max_error_value, min_linear_error), debug, run_id)
+            if outputdir:
+                detailtext = "{} games".format(game_counter)
+                detailtext += "\nBest so far - fail rate {:.4f}%, linear error {:.4f}".format(fail_rate * 100.0, linear_error)
+                detailtext += "\nMax linear error {:.4f}% ({:.4f} actual, {:.4f} calculated), Min linear error {:.4f}%".format(max_linear_error, max_error_ratio, max_error_value, min_linear_error)
+                write_file(outputdir, run_id, "details.txt", detailtext)
             if len(errors) > 0:
                 errors_output = ", ".join(map(str, errors))
                 debug_print("Major errors at: " + errors_output, debug, run_id)
