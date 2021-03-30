@@ -41,6 +41,7 @@ BEST_UNMOD = 10000000000.0
 WORST_ERROR = 1000000000.0
 MOD_BASELINE = False
 HAS_GAMES = {}
+LAST_ITERATION_TIME = datetime.datetime.now()
 
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING"}
 ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
@@ -233,7 +234,8 @@ def minimize_func(parameters, *data):
     global BASE_EXK
     global BASE_EXB
     global HAS_GAMES
-    global WORST_ERROR    
+    global WORST_ERROR
+    global LAST_ITERATION_TIME
     calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []            
@@ -567,7 +569,9 @@ def minimize_func(parameters, *data):
         debug_print("-" * 20 + "\n", debug, run_id)
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0)):
         if len(win_loss) > 0:
-            debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, linear error {:.4f}".format(BEST_RESULT, CURRENT_ITERATION, (BEST_FAIL_RATE * 100.0), BEST_LINEAR_ERROR), debug, datetime.datetime.now())
+            now = datetime.datetime.now()
+            debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, linear error {:.4f}, {:.2f} seconds".format(BEST_RESULT, CURRENT_ITERATION, (BEST_FAIL_RATE * 100.0), BEST_LINEAR_ERROR, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)
+            LAST_ITERATION_TIME = now
         else:
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1       
