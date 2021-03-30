@@ -576,7 +576,7 @@ def minimize_func(parameters, *data):
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1       
     current_runtime = time.process_time()
-    if ((current_runtime - LAST_CHECKTIME) >= 600):
+    if ((current_runtime - LAST_CHECKTIME) >= 1200):
         #debug_print("2 minute power nap, been working for {:.2f} minutes".format((current_runtime - LAST_CHECKTIME) / 60.0), debug, datetime.datetime.now())
         time.sleep(60)  
         #debug_print("Waking back up", debug, datetime.datetime.now())
@@ -600,7 +600,7 @@ def minimize_batman_func(parameters, *data):
     global MAX_OBSERVED_DIFFERENCE    
     global HAS_GAMES
     global WORST_ERROR        
-    eventofinterest, batter_list, calc_func, stlat_list, special_case_list, atbats_list, stat_file_map, game_list, team_attrs, games_swept, debug, debug2, debug3 = data
+    eventofinterest, batter_list, calc_func, stlat_list, special_case_list, atbats_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept, debug, debug2, debug3 = data
     debug_print("func start: {}".format(starttime), debug3, run_id)         
     if CURRENT_ITERATION == 1:        
         if eventofinterest == "abs":
@@ -665,6 +665,20 @@ def minimize_batman_func(parameters, *data):
                 STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, players)
             if not players:
                 raise Exception("No stat file found")
+            cached_ballparks = BALLPARK_CACHE.get((season, day))
+            if cached_ballparks is None:
+                ballpark_filename = ballpark_file_map.get((season, day))
+                if CURRENT_ITERATION > 1:
+                    print("Ballparks not cached, season {}, day {}".format(season, day))
+                if ballpark_filename:
+                    with open(ballpark_filename) as f:
+                        ballparks = json.load(f)
+                else:
+                    if ballparks is None:  # this should use the previous value of ballparks by default, use default if not
+                        ballparks = collections.defaultdict(lambda: collections.defaultdict(lambda: 0.5))
+                BALLPARK_CACHE[(season, day)] = ballparks
+            else:
+                ballparks = cached_ballparks  
             good_game_list = []
             for game in paired_games:
                 game_attrs = get_attrs_from_paired_game(season_team_attrs, game)

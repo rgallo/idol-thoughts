@@ -69,7 +69,7 @@ def main():
     args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=40, tol=0.0001,
-                                    mutation=(0.05, 1.99), recombination=0.4, workers=1, maxiter=10000)
+                                    mutation=(0.01, 1.99), recombination=0.7, workers=1, maxiter=10000)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, None, stat_file_map,
