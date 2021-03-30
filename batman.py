@@ -7,92 +7,171 @@ import copy
 
 from helpers import geomean, load_terms
 
+def calc_team(terms, termset, mods, skip_mods=False):
+    total = 0.0
+    for termname, val in termset:
+        term = terms[termname]        
+        #reset to 1 for each new termname
+        multiplier = 1.0 
+        if not skip_mods:            
+            modterms = (mods or {}).get(termname, [])                                    
+            multiplier *= math.prod(modterms)            
+        total += term.calc(val) * multiplier
+    return total
 
-def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam):
-    pitcher_data = pitcher_stat_data[pitcher]    
+termset = (
+        ("unthwackability", pitcher_data["unthwackability"]),
+        ("ruthlessness", pitcher_data["ruthlessness"]),
+        ("overpowerment", pitcher_data["overpowerment"]),
+        ("shakespearianism", pitcher_data["shakespearianism"]),
+        ("coldness", pitcher_data["coldness"]),
+        ("meanomniscience", geomean(team_data["omniscience"])),
+        ("meantenaciousness", geomean(team_data["tenaciousness"])),
+        ("meanwatchfulness", geomean(team_data["watchfulness"])),
+        ("meananticapitalism", geomean(team_data["anticapitalism"])),
+        ("meanchasiness", geomean(team_data["chasiness"])),
+        ("maxomniscience", max(team_data["omniscience"])),
+        ("maxtenaciousness", max(team_data["tenaciousness"])),
+        ("maxwatchfulness", max(team_data["watchfulness"])),
+        ("maxanticapitalism", max(team_data["anticapitalism"])),
+        ("maxchasiness", max(team_data["chasiness"])))
+    return calc_team(terms, termset, mods, skip_mods=skip_mods)
+
+def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, pitchingmods, battingmods):
+    pitcher = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, pitchingmods)
+    batter = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingmods)
+    pitcher_batter = pitcher + batter
+    return pitcher_batter
+
+def calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, mods):
+    pitcher_data = pitcher_stat_data[pitcher]        
+    termset = (
+        ("unthwackability", pitcher_data["unthwackability"]),
+        ("ruthlessness", pitcher_data["ruthlessness"]),
+        ("overpowerment", pitcher_data["overpowerment"]),
+        ("shakespearianism", pitcher_data["shakespearianism"]),
+        ("coldness", pitcher_data["coldness"])        
+    return calc_team(terms, termset, mods, False)
+
+def calc_batter(terms, team_pid_stat_data, batter, battingteam, mods):    
     batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]
     batter_data = batter_list_dict[0]    
-    return sum([term.calc(val) for term, val in (
-        (terms["unthwackability"], pitcher_data["unthwackability"]),
-        (terms["ruthlessness"], pitcher_data["ruthlessness"]),
-        (terms["overpowerment"], pitcher_data["overpowerment"]),
-        (terms["shakespearianism"], pitcher_data["shakespearianism"]),
-        (terms["coldness"], pitcher_data["coldness"]),
-        (terms["tragicness"], batter_data["tragicness"]),
-        (terms["patheticism"], batter_data["patheticism"]),
-        (terms["thwackability"], batter_data["thwackability"]),
-        (terms["divinity"], batter_data["divinity"]),
-        (terms["moxie"], batter_data["moxie"]),
-        (terms["musclitude"], batter_data["musclitude"]),
-        (terms["martyrdom"], batter_data["martyrdom"])
-    )])
+    termset = (        
+        ("tragicness", batter_data["tragicness"]),
+        ("patheticism", batter_data["patheticism"]),
+        ("thwackability", batter_data["thwackability"]),
+        ("divinity", batter_data["divinity"]),
+        ("moxie", batter_data["moxie"]),
+        ("musclitude", batter_data["musclitude"]),
+        ("martyrdom", batter_data["martyrdom"])))
+    return calc_team(terms, termset, mods, False)
 
-def calc_pitcher(terms, pitcher, pitcher_stat_data):    
-    pitcher_data = pitcher_stat_data[pitcher]    
-    return sum([term.calc(val) for term, val in (
-        (terms["unthwackability"], pitcher_data["unthwackability"]),
-        (terms["ruthlessness"], pitcher_data["ruthlessness"]),
-        (terms["overpowerment"], pitcher_data["overpowerment"]),
-        (terms["shakespearianism"], pitcher_data["shakespearianism"]),
-        (terms["coldness"], pitcher_data["coldness"])
-    )])
+def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter, pitchingmods, battingmods):
+    offense = calc_offense(terms, battingteam, team_pid_stat_data, batter, battingmods)
+    defense = calc_defense(calc_defense(terms, pitchingteam, team_pid_stat_data, pitchingmods)
+    everythingelse = offense + defense
+    return everythingelse
 
-def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter):
+def calc_offense(terms, battingteam, team_pid_stat_data, batter, mods):
     pitching_team_data = [stlats for player_id, stlats in team_pid_stat_data[pitchingteam].items()]
     batting_team_data = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if (player_id != batter and not stlats.get("shelled", False))]
-    return sum([term.calc(val) for term, val in (
-        (terms["meanomniscience"], geomean([row["omniscience"] for row in pitching_team_data])),
-        (terms["meantenaciousness"], geomean([row["tenaciousness"] for row in pitching_team_data])),
-        (terms["meanwatchfulness"], geomean([row["watchfulness"] for row in pitching_team_data])),
-        (terms["meananticapitalism"], geomean([row["anticapitalism"] for row in pitching_team_data])),
-        (terms["meanchasiness"], geomean([row["chasiness"] for row in pitching_team_data])),        
-        (terms["meanlaserlikeness"], geomean([row["laserlikeness"] for row in batting_team_data])),
-        (terms["meanbasethirst"], geomean([row["baseThirst"] for row in batting_team_data])),
-        (terms["meancontinuation"], geomean([row["continuation"] for row in batting_team_data])),
-        (terms["meangroundfriction"], geomean([row["groundFriction"] for row in batting_team_data])),
-        (terms["meanindulgence"], geomean([row["indulgence"] for row in batting_team_data])),
-        (terms["maxomniscience"], max([row["omniscience"] for row in pitching_team_data])),
-        (terms["maxtenaciousness"], max([row["tenaciousness"] for row in pitching_team_data])),
-        (terms["maxwatchfulness"], max([row["watchfulness"] for row in pitching_team_data])),
-        (terms["maxanticapitalism"], max([row["anticapitalism"] for row in pitching_team_data])),
-        (terms["maxchasiness"], max([row["chasiness"] for row in pitching_team_data])),                
-        (terms["maxlaserlikeness"], max([row["laserlikeness"] for row in batting_team_data])),
-        (terms["maxbasethirst"], max([row["baseThirst"] for row in batting_team_data])),
-        (terms["maxcontinuation"], max([row["continuation"] for row in batting_team_data])),
-        (terms["maxgroundfriction"], max([row["groundFriction"] for row in batting_team_data])),
-        (terms["maxindulgence"], max([row["indulgence"] for row in batting_team_data])),
-    )])
+    termset = (            
+        ("meanlaserlikeness", geomean([row["laserlikeness"] for row in batting_team_data])),
+        ("meanbasethirst", geomean([row["baseThirst"] for row in batting_team_data])),
+        ("meancontinuation", geomean([row["continuation"] for row in batting_team_data])),
+        ("meangroundfriction", geomean([row["groundFriction"] for row in batting_team_data])),
+        ("meanindulgence", geomean([row["indulgence"] for row in batting_team_data])),                    
+        ("maxlaserlikeness", max([row["laserlikeness"] for row in batting_team_data])),
+        ("maxbasethirst", max([row["baseThirst"] for row in batting_team_data])),
+        ("maxcontinuation", max([row["continuation"] for row in batting_team_data])),
+        ("maxgroundfriction", max([row["groundFriction"] for row in batting_team_data])),
+        ("maxindulgence", max([row["indulgence"] for row in batting_team_data])))
+    return calc_team(terms, termset, mods, False)
 
-def calc_defense(terms, pitchingteam, team_pid_stat_data, batter):
+def calc_defense(terms, pitchingteam, team_pid_stat_data, mods):
     pitching_team_data = [stlats for player_id, stlats in team_pid_stat_data[pitchingteam].items()]    
-    return sum([term.calc(val) for term, val in (
-        (terms["meanomniscience"], geomean([row["omniscience"] for row in pitching_team_data])),
-        (terms["meantenaciousness"], geomean([row["tenaciousness"] for row in pitching_team_data])),
-        (terms["meanwatchfulness"], geomean([row["watchfulness"] for row in pitching_team_data])),
-        (terms["meananticapitalism"], geomean([row["anticapitalism"] for row in pitching_team_data])),
-        (terms["meanchasiness"], geomean([row["chasiness"] for row in pitching_team_data])),                
-        (terms["maxomniscience"], max([row["omniscience"] for row in pitching_team_data])),
-        (terms["maxtenaciousness"], max([row["tenaciousness"] for row in pitching_team_data])),
-        (terms["maxwatchfulness"], max([row["watchfulness"] for row in pitching_team_data])),
-        (terms["maxanticapitalism"], max([row["anticapitalism"] for row in pitching_team_data])),
-        (terms["maxchasiness"], max([row["chasiness"] for row in pitching_team_data])),                        
-    )])
+    termset = (
+        ("meanomniscience", geomean([row["omniscience"] for row in pitching_team_data])),
+        ("meantenaciousness", geomean([row["tenaciousness"] for row in pitching_team_data])),
+        ("meanwatchfulness", geomean([row["watchfulness"] for row in pitching_team_data])),
+        ("meananticapitalism", geomean([row["anticapitalism"] for row in pitching_team_data])),
+        ("meanchasiness", geomean([row["chasiness"] for row in pitching_team_data])),                
+        ("maxomniscience", max([row["omniscience"] for row in pitching_team_data])),
+        ("maxtenaciousness", max([row["tenaciousness"] for row in pitching_team_data])),
+        ("maxwatchfulness", max([row["watchfulness"] for row in pitching_team_data])),
+        ("maxanticapitalism", max([row["anticapitalism"] for row in pitching_team_data])),
+        ("maxchasiness", max([row["chasiness"] for row in pitching_team_data])))                        
+    return calc_team(terms, termset, mods, False)
 
+def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data):
+    awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
+    lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
+    lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
+    bird_weather = helpers.get_weather_idx("Birds")    
+    for attr in mods:
+        # Special case for Affinity for Crows
+        if attr == "affinity_for_crows" and weather != bird_weather:
+            continue
+        if attr in lowerAwayAttrs:            
+            for name, stlatterm in mods[attr]["same"].items():
+                multiplier = calc_stlatmod(name, pitcher_stat_data[awayPitcher], team_stat_data[awayTeam], stlatterm)
+                awayMods[name].append(multiplier)
+            for name, stlatterm in mods[attr]["opp"].items():
+                multiplier = calc_stlatmod(name, pitcher_stat_data[homePitcher], team_stat_data[homeTeam], stlatterm)
+                homeMods[name].append(multiplier)
+        if attr in lowerHomeAttrs and attr != "traveling":
+            for name, stlatterm in mods[attr]["same"].items():
+                multiplier = calc_stlatmod(name, pitcher_stat_data[homePitcher], team_stat_data[homeTeam], stlatterm)
+                homeMods[name].append(multiplier)
+            for name, stlatterm in mods[attr]["opp"].items():
+                multiplier = calc_stlatmod(name, pitcher_stat_data[awayPitcher], team_stat_data[awayTeam], stlatterm)
+                awayMods[name].append(multiplier)    
+    for ballparkstlat, stlatterms in ballpark_mods.items():        
+        for playerstlat, stlatterm in stlatterms.items():
+            if type(stlatterm) == ParkTerm:            
+                value = ballpark[ballparkstlat]
+                normalized_value = stlatterm.calc(value)
+                base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
+                if value > 0.5:
+                    multiplier = 2.0 * base_multiplier
+                elif value < 0.5:
+                    multiplier = 2.0 - (2.0 * base_multiplier)                
+                else:
+                    multiplier = 1.0
+                awayMods[playerstlat].append(multiplier)
+                homeMods[playerstlat].append(multiplier)
+    return awayMods, homeMods
 
-def setup(eventofinterest):
+def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods):
     if eventofinterest == "hits":
         terms_url = os.getenv("BATMAN_HIT_TERMS")
+        mods_url = os.getenv("BATMAN_HIT_MODS")
+        ballpark_mods_url = os.getenv("BATMAN_HIT_BALLPARK_TERMS")
     elif eventofinterest == "hrs":
         terms_url = os.getenv("BATMAN_HR_TERMS")
+        mods_url = os.getenv("BATMAN_HR_MODS")
+        ballpark_mods_url = os.getenv("BATMAN_HR_BALLPARK_TERMS")
     elif eventofinterest == "abs":
         terms_url = os.getenv("BATMAN_AB_TERMS")
+        mods_url = os.getenv("BATMAN_AB_MODS")
+        ballpark_mods_url = os.getenv("BATMAN_AB_BALLPARK_TERMS")
     else:
         raise ValueError("Unsupported event of interest type")
+    
     terms, special_cases = load_terms(terms_url, ["factors"])
-    return terms, special_cases
+    mods = helpers.load_mods(mods_url)
+    ballparks_url = os.getenv("BALLPARKS")
+    ballparks = helpers.load_ballparks(ballparks_url)    
+    ballpark_mods = helpers.load_bp_terms(ballpark_mods_url)
+    homeTeamId = helpers.get_team_id(homeTeam)
+    ballpark = ballparks.get(homeTeamId, collections.defaultdict(lambda: 0.5))
 
-def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3):
-    factor_exp, factor_const, reverberation, repeating = special_cases["factors"][:4]
+    awayMods, homeMods = get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data)    
+
+    return terms, special_cases, awayMods, homeMods
+
+def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, pitchingmods, battingmods, special_cases, outs_pi=3):
+    factor_exp, factor_const, reverberation, repeating = special_cases["factors"][:4]    
     team_atbat_data = {}
     atbats, temp_factor = 0.0, 1.0
     batters = team_pid_stat_data.get(battingteam)        
@@ -115,8 +194,8 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
                 break                
             if batter_id not in team_atbat_data:
                 team_atbat_data[batter_id] = 0.0            
-            pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam)
-            everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id)
+            pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, pitchingmods, battingmods)            
+            everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, pitchingmods, battingmods)
             temp_factor = factor_exp if (pitcher_batter > 0) else 1.0            
             hits_hrs_walks = ((pitcher_batter ** float(temp_factor)) + everythingelse) * (float(factor_const) / 1000.0)
             if math.isnan(hits_hrs_walks):
@@ -143,39 +222,43 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
     return team_atbat_data
 
 
-def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases, outs_pi=3):            
+def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases, outs_pi=3):       
     if eventofinterest == "abs":                
-        atbats_data = get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, 9.0, False, terms, special_cases, outs_pi)
+        atbats_data = get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, 9.0, False, terms, defenseMods, battingMods, special_cases, outs_pi)
         batman = atbats_data[batter]
     else:        
         factor_exp, factor_const = special_cases["factors"][:2]
-        everythingelse = calc_defense(terms, pitchingteam, team_pid_stat_data, batter)
-        pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam)
+        everythingelse = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
+        pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods)
         factor_exp = factor_exp if (pitcher_batter > 0) else 1.0
         batman = ((pitcher_batter ** float(factor_exp)) + everythingelse) * (float(factor_const) / 1000.0)
         batman = max(batman, 0.0)
     return batman
 
 
-def calculatePitcherVsBatter(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data):
-    terms, special_cases = setup(eventofinterest)
-    return get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, special_cases)
+def calculatePitcherVsBatter(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods):
+    terms, special_cases, awayMods, homeMods = setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods)
+    if homeTeam == battingteam:
+        battingMods, defenseMods = homeMods, awayMods
+    else:
+        battingMods, defenseMods = awayMods, homeMods
+    return get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases)
 
 
-def calculate(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data):
+def calculate(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods):
     batters = team_pid_stat_data.get(battingteam)
-    batting_lineup_size = len([bid for bid, batter in batters.items() if not batter.get("shelled", False)])
+    batting_lineup_size = len([bid for bid, batter in batters.items() if not batter.get("shelled", False)])    
     results = []
     for batter_id, batter in batters.items():
         if batter.get("shelled", False):
             continue
         name = batter["name"]
-        batman_atbats = calculatePitcherVsBatter("abs", pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data)
-        batman_hits = calculatePitcherVsBatter("hits", pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data)
-        batman_homers = calculatePitcherVsBatter("hrs", pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data)
-        at_bats = max(batman_atbats, 9 * 3 / batting_lineup_size)
-        hits = max(batman_hits * (at_bats * (9.0 / batting_lineup_size)), 0)
-        homers = max(batman_homers * (at_bats * (9.0 / batting_lineup_size)), 0)
+        batman_atbats = calculatePitcherVsBatter("abs", weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods)
+        batman_hits = calculatePitcherVsBatter("hits", weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods)
+        batman_homers = calculatePitcherVsBatter("hrs", weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods)
+        at_bats = batman_atbats
+        hits = batman_hits * at_bats
+        homers = batman_homers * at_bats
         results.append({"name": name, "team": battingteam, "hits": hits, "homers": homers, "abs": at_bats,
                         "attrs": batter["attrs"]})
     return results

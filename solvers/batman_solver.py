@@ -8,6 +8,7 @@ import sys
 sys.path.append("..")
 from solvers import base_solver
 from solvers.batman_ballpark_terms import BALLPARK_TERMS
+from solvers.batman_mod_terms import BATMAN_MOD_TERMS
 from batman import get_batman
 
 
@@ -28,9 +29,10 @@ BATMAN_SPECIAL_CASES = ("exponent", "everythingelse")
 BATMAN_ABS_SPECIAL_CASES = ("exponent", "everythingelse", "reverberation", "repeating")
 
 
-def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, team_stat_data, pitcher_stat_data, pitcher, batter, lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods):
+def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, team_stat_data, pitcher_stat_data, pitcher, batter, lineup_size, terms, special_cases, game, battingteam, pitchingteam, pitchingmods, battingmods):
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
-    special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE_BATMAN
+    awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]
+    special_game_attrs = (homeAttrs.union(awayAttrs)) - base_solver.ALLOWED_IN_BASE_BATMAN        
     games, fail_batman, fail_batman_by, actual, real_val = 0, 100, 100.0, 0, 0
     if special_game_attrs:
         fail_batman, fail_batman_by, actual, real_val = 0, 0, 0, 0
@@ -45,8 +47,8 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
             real_val = atbats
             actual = "Real vals {} in {} innings, batman {:.2f} in {} innings".format(atbats, innings, batman, innings)            
         else:
-            try:
-                batman = get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, terms, {"factors": special_cases})            
+            try:                
+                batman = get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, terms, pitchingmods, battingmods, {"factors": special_cases})            
             except ValueError:
                 batman = -10000      
             if math.isnan(batman):
@@ -86,6 +88,7 @@ def handle_args():
     parser.add_argument('--debug', help="print output", action='store_true')
     parser.add_argument('--debug2', help="print output", action='store_true')
     parser.add_argument('--debug3', help="print output", action='store_true')
+    parser.add_argument('--output', required=False, help="file output directory")
     args = parser.parse_args()
     return args
 
@@ -114,11 +117,13 @@ def main():
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
         base_bounds = [[-10, 10], [-2, 3], [0, 3]] * len(stlatlist) + [[1, 3], [0, 2], [0, 0.02], [0, 0.02]]
+    bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS]
+    bounds_team = [item for sublist in bounds_team_mods for item in sublist]
     bounds_park_mods = [modterm.bounds for modterm in BALLPARK_TERMS if modterm.playerstat in stlatlist]
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
-    bounds = base_bounds + bounds_park
-    args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, [], BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, 
-            cmd_args.debug, cmd_args.debug2, cmd_args.debug3)
+    bounds = base_bounds + bounds_team + bounds_park            
+    args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, BATMAN_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, 
+            cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=40, tol=0.0001, 
                                     mutation=(0.01, 1.99), recombination=0.7, workers=1, maxiter=10000)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in

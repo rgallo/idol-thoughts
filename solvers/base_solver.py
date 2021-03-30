@@ -46,7 +46,7 @@ HAS_GAMES = {}
 LAST_ITERATION_TIME = datetime.datetime.now()
 
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING"}
-ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
+ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
@@ -345,7 +345,7 @@ def minimize_func(parameters, *data):
                 if game_counter >= HALF_GAMES and HALF_GAMES > 0 and viability_unchecked:
                     half_fail_counter = fail_counter
                     viability_unchecked = False
-                    if half_fail_counter > BEST_FAILCOUNT:
+                    if half_fail_counter > (BEST_FAILCOUNT * 1.02):
                         reject_solution = True
                         REJECTS += 1
                         break
@@ -507,7 +507,7 @@ def minimize_func(parameters, *data):
             linear_fail = (k9_max_err - k9_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail  
-        HALF_GAMES = (game_counter / 2)
+        HALF_GAMES = 1000
         BEST_FAILCOUNT = half_fail_counter
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
@@ -523,7 +523,7 @@ def minimize_func(parameters, *data):
                 BEST_UNMOD = unmod_rate if (unmod_rate < BEST_UNMOD) else BEST_UNMOD
         debug_print("-"*20, debug, run_id)
         if len(win_loss) > 0:
-            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_mofo_list_size)])] * 3)))            
+            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_mofo_list_size)])] * 3)))  
             mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
             ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-(park_mod_list_size):])] * 3)))
             if outputdir:
@@ -623,19 +623,35 @@ def minimize_batman_func(parameters, *data):
     global MAX_OBSERVED_DIFFERENCE    
     global HAS_GAMES
     global WORST_ERROR        
-    eventofinterest, batter_list, calc_func, stlat_list, special_case_list, atbats_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept, debug, debug2, debug3 = data
+    eventofinterest, batter_list, calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)         
+    special_case_list = special_case_list or []            
+    park_mod_list_size = len(ballpark_list) * 3
+    team_mod_list_size = len(mod_list) * 3
+    special_cases_count = len(special_case_list)
+    base_batman_list_size = len(parameters) - special_cases_count - park_mod_list_size - team_mod_list_size    
+    mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
+    ballpark_mods = collections.defaultdict(lambda: {"bpterm": {}})
+    mod_mode = True            
+    #special_cases = parameters[base_batman_list_size:-(team_mod_list_size + park_mod_list_size)] if special_case_list else []    
     if CURRENT_ITERATION == 1:        
         if eventofinterest == "abs":
-            baseline_parameters = [0, 0, 1] * len(stlat_list) + [1, 0, 0, 0]                    
+            baseline_parameters = ([0, 0, 1] * base_batman_list_size) + [1, 0, 0, 0] + ([0, 0, 1] * team_mod_list_size) + ([0, 0, 1] * park_mod_list_size)
         else:
-            baseline_parameters = [0, 0, 1] * len(stlat_list) + [1, 0]                 
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(baseline_parameters[:(-len(special_case_list) or None)])] * 3))}  
-        special_cases = baseline_parameters[-len(special_case_list):] if special_case_list else []
+            baseline_parameters = ([0, 0, 1] * base_batman_list_size) + [1, 0] + ([0, 0, 1] * team_mod_list_size) + ([0, 0, 1] * park_mod_list_size)            
+        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(baseline_parameters[:base_batman_list_size])] * 3))}        
+        for mod, (a, b, c) in zip(mod_list, zip(*[iter(baseline_parameters[(base_batman_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
+            mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)                     
+        for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(baseline_parameters[-park_mod_list_size:])] * 3)):        
+            ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(a, b, c)
+        special_cases = baseline_parameters[base_batman_list_size:-(team_mod_list_size + park_mod_list_size)] if special_case_list else []
     else:
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_case_list) or None)])] * 3))}  
-        special_cases = parameters[-len(special_case_list):] if special_case_list else []
-    mods = {}    
+        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_batman_list_size])] * 3))}        
+        for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_batman_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
+            mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)                     
+        for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):        
+            ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(a, b, c)
+        special_cases = parameters[base_batman_list_size:-(team_mod_list_size + park_mod_list_size)] if special_case_list else []      
     bat_counter, fail_counter, zero_counter, bat_pos_counter, fail_pos_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
     zero_fail_counter, pos_fail_counter = 0.0, 0.0
     batman_max_err, batman_min_err = 0.0, 100000000.0        
@@ -643,7 +659,7 @@ def minimize_batman_func(parameters, *data):
     fail_rate, pos_fail_rate, zero_avg_error, pos_avg_error = 1.0, 1.0, 100.0, 100.0
     max_err_actual, min_err_actual = "", ""
     reject_solution, viability_unchecked = False, True            
-    for season in range(12, 15):
+    for season in reversed(range(12, 15)):
         if reject_solution:
             break
         # if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
@@ -703,16 +719,17 @@ def minimize_batman_func(parameters, *data):
             else:
                 ballparks = cached_ballparks  
             good_game_list = []
-            for game in paired_games:
+            for game in paired_games:                
                 game_attrs = get_attrs_from_paired_game(season_team_attrs, game)
-                special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - ALLOWED_IN_BASE
-                if (game["away"]["game_id"] in games_swept) and (eventofinterest == "abs"):
+                awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]                
+                special_game_attrs = (homeAttrs.union(awayAttrs)) - ALLOWED_IN_BASE_BATMAN                
+                if (game["away"]["game_id"] in games_swept):
                     print("Game id {} swept away!".format(game["away"]["game_id"]))
                     continue
                 if not is_cached and not special_game_attrs:
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
-                if not special_game_attrs:
+                if not special_game_attrs:                    
                     cached_batters = BATTER_CACHE.get((season, day, game["away"]["game_id"]))
                     iscached_batters = False
                     if cached_batters:                        
@@ -734,7 +751,7 @@ def minimize_batman_func(parameters, *data):
                     atbats_team_stat_data = {}                                        
                     for batter_perf in batter_perf_data:                                 
                         battingteam = get_team_name(batter_perf["batter_team_id"], season, day)
-                        pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)                                               
+                        pitchingteam = get_team_name(batter_perf["pitcher_team_id"], season, day)                           
                         if not iscached_batters:            
                             if (minimum_atbats < previous_innings * 3) and not (previous_batting_team == battingteam) and not omit_from_good_abs:
                                 print("team did not achieve the requisite number of atbats for their minimum number of outs: {} at bats, {} outs".format(minimum_atbats, previous_innings * 3))
@@ -749,19 +766,27 @@ def minimize_batman_func(parameters, *data):
                                 omit_from_good_abs = False
                             elif omit_from_good_abs:                           
                                 continue       
+                        pitchername = players[batter_perf["pitcher_id"]][0]
+                        away_game, home_game = game["away"], game["home"]
+                        awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
+                        homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
                         if previous_batting_team != battingteam:
-                            minimum_atbats = 0
+                            minimum_atbats = 0                            
+                            awayMods, homeMods = get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitchername, pitchingteam, batter_perf["batter_id"], battingteam, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)
+                            if homeTeam == battingteam:
+                                battingMods, defenseMods = homeMods, awayMods
+                            else:
+                                battingMods, defenseMods = awayMods, homeMods
                         batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
                         if not batter_list_dict:
-                            continue
-                        pitchername = players[batter_perf["pitcher_id"]][0]       
-                        previous_batting_team = battingteam
+                            continue                                                                               
+                        previous_batting_team = battingteam                        
                         if (eventofinterest == "abs"):                            
                             if (batter_perf["batter_id"] not in atbats_team_stat_data):                                  
-                                flip_lineup = (battingteam == "San Francisco Lovers") and (season == 13) and (day > 27)                                
-                                atbats_team_stat_data = get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, {"factors": special_cases})
+                                flip_lineup = (battingteam == "San Francisco Lovers") and (season == 13) and (day > 27)                                     
+                                atbats_team_stat_data = get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, defenseMods, battingMods, {"factors": special_cases})                            
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)                              
+                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, defenseMods, battingMods)                              
                             minimum_atbats += int(batter_perf["at_bats"]) + batman_fail_by
                             previous_innings = max(int(batter_perf["num_innings"]), previous_innings)                            
                             if real_val == 1:
@@ -776,7 +801,7 @@ def minimize_batman_func(parameters, *data):
                                 abs_batter_perf_data.extend([batter_perf])                            
                         else:
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods)       
+                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, mods, ballpark, ballpark_mods)       
                         bat_counter += bat_bat_counter
                         fail_counter += bat_fail_counter                                                                  
                         if real_val > 0:
@@ -874,8 +899,15 @@ def minimize_batman_func(parameters, *data):
         BEST_EXACT = pass_exact
         BEST_FAIL_RATE = pos_fail_rate
         BEST_UNEXVAR_ERROR = batman_unexvar
-        terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
-        special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
+        terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_batman_list_size)])] * 3)))            
+        special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)
+        mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_batman_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
+        ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-(park_mod_list_size):])] * 3)))
+        if outputdir:
+            write_file(outputdir, run_id, eventofinterest + "terms.csv", "name,a,b,c\n" + terms_output + "\n" + special_case_output)
+            write_file(outputdir, run_id, eventofinterest + "mods.csv", "identifier,team,name,a,b,c\n" + mods_output)
+            write_file(outputdir, run_id, eventofinterest + "ballparkmods.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
+        debug_print("\n" + terms_output + "\n" + special_case_output + "\n" + mods_output + "\n" + ballpark_mods_output + "\n", debug, run_id)   
         debug_print("::: Pass Rates over {} batters, fail counter {} :::".format(bat_counter, fail_counter), debug, run_id)
         debug_print("Exact (+/- {:.2f}) = {:.4f}".format(stageexact, pass_exact), debug, run_id)
         debug_print("+/- {:.2f} = {:.4f}".format(stageone, pass_within_one), debug, run_id)
@@ -886,7 +918,7 @@ def minimize_batman_func(parameters, *data):
         debug_print("actual val underest {}".format(min_err_actual), debug, run_id)
         debug_print("actual val overest {}".format(max_err_actual), debug, run_id)
         debug_print("zero average error {:.4f}, pos average error {:.4f}".format(zero_avg_error, pos_avg_error), debug, run_id)
-        debug_print("Best so far - fail rate {:.4f}%, pos fail rate {:.4f}%\n".format(fail_rate * 100.0, pos_fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)   
+        debug_print("Best so far - fail rate {:.4f}%, pos fail rate {:.4f}%\n".format(fail_rate * 100.0, pos_fail_rate * 100.0), debug, run_id)   
         WORST_ERROR = (batman_max_err - batman_min_err)        
         debug_print("Optimizing: {}, iteration #{}".format(eventofinterest, CURRENT_ITERATION), debug, run_id)               
         debug_print("-" * 20 + "\n", debug, run_id)
