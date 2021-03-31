@@ -773,13 +773,13 @@ def minimize_batman_func(parameters, *data):
                         away_game, home_game = game["away"], game["home"]
                         awayPitcher, awayTeam = players.get(away_game["pitcher_id"])
                         homePitcher, homeTeam = players.get(home_game["pitcher_id"])
+                        awayMods, homeMods = get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitchername, pitchingteam, batter_perf["batter_id"], battingteam, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)
+                        if homeTeam == battingteam:
+                            battingMods, defenseMods = homeMods, awayMods
+                        else:
+                            battingMods, defenseMods = awayMods, homeMods
                         if previous_batting_team != battingteam:
-                            minimum_atbats = 0                            
-                            awayMods, homeMods = get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitchername, pitchingteam, batter_perf["batter_id"], battingteam, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)
-                            if homeTeam == battingteam:
-                                battingMods, defenseMods = homeMods, awayMods
-                            else:
-                                battingMods, defenseMods = awayMods, homeMods
+                            minimum_atbats = 0                                                    
                         batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
                         if not batter_list_dict:
                             continue                                                                               

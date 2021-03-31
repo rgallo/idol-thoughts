@@ -74,10 +74,9 @@ def team_offense(terms, teamname, mods, team_stat_data, skip_mods=False):
             ("maxindulgence", max(team_data["indulgence"])))
     return calc_team(terms, termset, mods, skip_mods=skip_mods)
 
-
 def calc_stlatmod(name, pitcher_data, team_data, stlatterm):    
     if name in helpers.PITCHING_STLATS:
-        value = pitcher_data[name]    
+        value = pitcher_data[name]        
     elif "mean" in name:        
         stlatname = name[4:]        
         if stlatname == "basethirst":
@@ -96,7 +95,6 @@ def calc_stlatmod(name, pitcher_data, team_data, stlatterm):
     base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))                
     multiplier = 2.0 * base_multiplier
     return multiplier
-
 
 def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data):
     awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])

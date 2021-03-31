@@ -86,10 +86,11 @@ def calc_defense(terms, pitchingteam, team_pid_stat_data, mods):
         ("maxchasiness", max([row["chasiness"] for row in pitching_team_data])))                        
     return calc_team(terms, termset, mods, False)
 
-#need to pass batter terms and deal with them as well (grab helpers.BATTING_STLATS)
 def calc_stlatmod(name, pitcher_data, batter_data, team_data, stlatterm):    
     if name in helpers.PITCHING_STLATS:
-        value = pitcher_data[name]    
+        value = pitcher_data[name]
+    if name in helpers.BATTING_STLATS:        
+        value = batter_data[name]
     elif "mean" in name:        
         stlatname = name[4:]        
         if stlatname == "basethirst":
@@ -114,23 +115,25 @@ def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
     lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
     bird_weather = helpers.get_weather_idx("Birds")    
+    batter_list_dict = [stlats for player_id, stlats in team_data[battingteam].items() if player_id == batter]
+    batter_data = batter_list_dict[0]
     for attr in mods:
         # Special case for Affinity for Crows
         if attr == "affinity_for_crows" and weather != bird_weather:
             continue
         if attr in lowerAwayAttrs:            
             for name, stlatterm in mods[attr]["same"].items():
-                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], team_stat_data[awayTeam], stlatterm)
+                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, team_stat_data[awayTeam], stlatterm)
                 awayMods[name].append(multiplier)
             for name, stlatterm in mods[attr]["opp"].items():
-                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], team_stat_data[homeTeam], stlatterm)
+                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, team_stat_data[homeTeam], stlatterm)
                 homeMods[name].append(multiplier)
         if attr in lowerHomeAttrs and attr != "traveling":
             for name, stlatterm in mods[attr]["same"].items():
-                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], team_stat_data[homeTeam], stlatterm)
+                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, team_stat_data[homeTeam], stlatterm)
                 homeMods[name].append(multiplier)
             for name, stlatterm in mods[attr]["opp"].items():
-                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], team_stat_data[awayTeam], stlatterm)
+                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, team_stat_data[awayTeam], stlatterm)
                 awayMods[name].append(multiplier)    
     for ballparkstlat, stlatterms in ballpark_mods.items():        
         for playerstlat, stlatterm in stlatterms.items():
