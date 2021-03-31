@@ -778,7 +778,7 @@ def main():
     if (outcomes or not stat_file_exists or args.forceupdate or ((day == 1 and args.today) or day == 2)) and not args.skipupdate:
         if args.discord:
             message = "Generating new stat file, please stand by.\n\n{}".format("\n".join("`{}`".format(outcome) for outcome in outcomes))
-            send_discord_message("Sorry!", message[:DISCORD_SPLIT_LIMIT])
+            send_discord_message("One sec!", message[:DISCORD_SPLIT_LIMIT])
         else:
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile, False, args.archive, False)
