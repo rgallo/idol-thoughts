@@ -346,7 +346,7 @@ def minimize_func(parameters, *data):
                 if game_counter >= HALF_GAMES and HALF_GAMES > 0 and viability_unchecked:
                     half_fail_counter = fail_counter
                     viability_unchecked = False
-                    if half_fail_counter > (BEST_FAILCOUNT * 1.02):
+                    if half_fail_counter > (BEST_FAILCOUNT * 1.01):
                         reject_solution = True
                         REJECTS += 1
                         break
@@ -625,7 +625,9 @@ def minimize_batman_func(parameters, *data):
     global BEST_QUARTER_FAIL    
     global MAX_OBSERVED_DIFFERENCE    
     global HAS_GAMES
-    global WORST_ERROR        
+    global WORST_ERROR
+    global REJECTS
+    global LAST_ITERATION_TIME
     eventofinterest, batter_list, calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)             
     park_mod_list_size = len(ballpark_list) * 3
@@ -636,7 +638,7 @@ def minimize_batman_func(parameters, *data):
     ballpark_mods = collections.defaultdict(lambda: {"bpterm": {}})
     mod_mode = True            
     #special_cases = parameters[base_batman_list_size:-(team_mod_list_size + park_mod_list_size)] if special_case_list else []    
-    if CURRENT_ITERATION == 1:        
+    if CURRENT_ITERATION == 1:                
         if eventofinterest == "abs":
             baseline_parameters = ([0, 0, 1] * len(stlat_list)) + [1, 0, 0, 0] + ([0, 0, 1] * len(mod_list)) + ([0, 0, 1] * len(ballpark_list))            
         else:
@@ -672,7 +674,8 @@ def minimize_batman_func(parameters, *data):
         pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
         season_team_attrs = team_attrs.get(str(season), {})
         season_days = 0        
-        for day in range(1, 125):
+        for day in range(1, 125):            
+            #day_start = datetime.datetime.now()
             if reject_solution:
                 break
             is_cached = False
@@ -721,7 +724,9 @@ def minimize_batman_func(parameters, *data):
             else:
                 ballparks = cached_ballparks  
             good_game_list = []
-            for game in paired_games:                
+            for game in paired_games:       
+                if reject_solution:
+                    break
                 ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
                 game_attrs = get_attrs_from_paired_game(season_team_attrs, game)
                 awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]                
@@ -769,7 +774,13 @@ def minimize_batman_func(parameters, *data):
                                 omit_from_good_abs = False
                             elif omit_from_good_abs:                           
                                 continue       
-                        pitchername = players[batter_perf["pitcher_id"]][0]
+                        pitchername = players[batter_perf["pitcher_id"]][0]                        
+                        if previous_batting_team != battingteam:
+                            minimum_atbats = 0         
+                            previous_innings = 0
+                        batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
+                        if not batter_list_dict:
+                            continue                                       
                         away_game, home_game = game["away"], game["home"]
                         awayPitcher, awayTeam = players.get(away_game["pitcher_id"])
                         homePitcher, homeTeam = players.get(home_game["pitcher_id"])
@@ -778,11 +789,6 @@ def minimize_batman_func(parameters, *data):
                             battingMods, defenseMods = homeMods, awayMods
                         else:
                             battingMods, defenseMods = awayMods, homeMods
-                        if previous_batting_team != battingteam:
-                            minimum_atbats = 0                                                    
-                        batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter_perf["batter_id"]]
-                        if not batter_list_dict:
-                            continue                                                                               
                         previous_batting_team = battingteam                        
                         if (eventofinterest == "abs"):                            
                             if (batter_perf["batter_id"] not in atbats_team_stat_data):                                  
@@ -823,9 +829,11 @@ def minimize_batman_func(parameters, *data):
                                 min_err_actual = actual_result                        
                         if ((batman_max_err - batman_min_err) > WORST_ERROR) and (BEST_FAIL_RATE < 1.0):
                             reject_solution = True
+                            REJECTS += 1
                             break
                         if (batman_unexvar) > BEST_UNEXVAR_ERROR and (BEST_FAIL_RATE < 1.0):
                             reject_solution = True
+                            REJECTS += 1
                             break
                         if eventofinterest == "abs":
                             stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
@@ -861,8 +869,11 @@ def minimize_batman_func(parameters, *data):
                             BATTER_CACHE[(season, day, game["away"]["game_id"])] = good_batter_perf_data
                         else:
                             BATTER_CACHE[(season, day, game["away"]["game_id"])] = batter_perf_data
+            #day_end = datetime.datetime.now()
+            #if CURRENT_ITERATION > 1:
+             #   print("{:.2f} seconds for 1 day, season {} day {}".format((day_end - day_start).total_seconds(), season, day))
             if not is_cached:
-                GAME_CACHE[(season, day)] = good_game_list
+                GAME_CACHE[(season, day)] = good_game_list            
         if season not in HAS_GAMES:
             HAS_GAMES[season] = False
         season_end = datetime.datetime.now()
@@ -910,30 +921,41 @@ def minimize_batman_func(parameters, *data):
             write_file(outputdir, run_id, eventofinterest + "terms.csv", "name,a,b,c\n" + terms_output + "\n" + special_case_output)
             write_file(outputdir, run_id, eventofinterest + "mods.csv", "identifier,team,name,a,b,c\n" + mods_output)
             write_file(outputdir, run_id, eventofinterest + "ballparkmods.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
-        debug_print("\n" + terms_output + "\n" + special_case_output + "\n" + mods_output + "\n" + ballpark_mods_output + "\n", debug, run_id)   
-        debug_print("::: Pass Rates over {} batters, fail counter {} :::".format(bat_counter, fail_counter), debug, run_id)
-        debug_print("Exact (+/- {:.2f}) = {:.4f}".format(stageexact, pass_exact), debug, run_id)
-        debug_print("+/- {:.2f} = {:.4f}".format(stageone, pass_within_one), debug, run_id)
-        debug_print("+/- {:.2f} = {:.4f}".format(stagetwo, pass_within_two), debug, run_id)
-        debug_print("+/- {:.2f} = {:.4f}".format(stagethree, pass_within_three), debug, run_id)
-        debug_print("+/- {:.2f} = {:.4f}".format(stagefour, pass_within_four), debug, run_id)
-        debug_print("max underestimate {:.4f}, max overestimate {:.4f}, unexvar {:.4f}".format(batman_min_err, batman_max_err, batman_unexvar), debug, run_id)
-        debug_print("actual val underest {}".format(min_err_actual), debug, run_id)
-        debug_print("actual val overest {}".format(max_err_actual), debug, run_id)
-        debug_print("zero average error {:.4f}, pos average error {:.4f}".format(zero_avg_error, pos_avg_error), debug, run_id)
-        debug_print("Best so far - fail rate {:.4f}%, pos fail rate {:.4f}%\n".format(fail_rate * 100.0, pos_fail_rate * 100.0), debug, run_id)   
+        debug_print("\n" + terms_output + "\n" + special_case_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug, run_id)   
+        detailtext = "::: Pass Rates over {} batters, fail counter {} :::".format(bat_counter, fail_counter)
+        detailtext += "\nExact (+/- {:.2f}) = {:.4f}".format(stageexact, pass_exact)
+        detailtext += "\n+/- {:.2f} = {:.4f}".format(stageone, pass_within_one)
+        detailtext += "\n+/- {:.2f} = {:.4f}".format(stagetwo, pass_within_two)
+        detailtext += "\n+/- {:.2f} = {:.4f}".format(stagethree, pass_within_three)
+        detailtext += "\n+/- {:.2f} = {:.4f}".format(stagefour, pass_within_four)
+        detailtext += "\nmax underestimate {:.4f}, max overestimate {:.4f}, unexvar {:.4f}".format(batman_min_err, batman_max_err, batman_unexvar)
+        detailtext += "\nactual val underest {}".format(min_err_actual)
+        detailtext += "\nactual val overest {}".format(max_err_actual)
+        detailtext += "\nzero average error {:.4f}, pos average error {:.4f}".format(zero_avg_error, pos_avg_error)
+        detailtext += "\nBest so far - fail rate {:.4f}%, pos fail rate {:.4f}%".format(fail_rate * 100.0, pos_fail_rate * 100.0)
+        debug_print(detailtext, debug, run_id)
+        if outputdir:
+            write_file(outputdir, run_id, eventofinterest + "details.txt", detailtext)
         WORST_ERROR = (batman_max_err - batman_min_err)        
         debug_print("Optimizing: {}, iteration #{}".format(eventofinterest, CURRENT_ITERATION), debug, run_id)               
         debug_print("-" * 20 + "\n", debug, run_id)
+        current_runtime = time.process_time()
+        if ((current_runtime - LAST_CHECKTIME) >= 600):
+            #debug_print("2 minute power nap, been working for {:.2f} minutes".format((current_runtime - LAST_CHECKTIME) / 60.0), debug, datetime.datetime.now())
+            time.sleep(60)  
+            #debug_print("Waking back up", debug, datetime.datetime.now())
+            LAST_CHECKTIME = time.process_time()
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):
-        debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION), debug, datetime.datetime.now())
-    CURRENT_ITERATION += 1  
-    current_runtime = time.process_time()
-    if ((current_runtime - LAST_CHECKTIME) >= 600):
-        #debug_print("2 minute power nap, been working for {:.2f} minutes".format((current_runtime - LAST_CHECKTIME) / 60.0), debug, datetime.datetime.now())
-        time.sleep(60)  
-        #debug_print("Waking back up", debug, datetime.datetime.now())
-        LAST_CHECKTIME = time.process_time()
+        now = datetime.datetime.now()        
+        debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}, {} rejects since last check-in, {:.2f} seconds".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)
+        REJECTS = 0
+        LAST_ITERATION_TIME = now      
+    if CURRENT_ITERATION < 100:
+        now = datetime.datetime.now()        
+        debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}, {} rejects since last check-in, {:.2f} seconds".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)        
+        REJECTS = 0
+        LAST_ITERATION_TIME = now      
+    CURRENT_ITERATION += 1      
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)

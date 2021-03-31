@@ -16,9 +16,10 @@ def calc_team(terms, termset, mods, skip_mods=False):
         #reset to 1 for each new termname
         multiplier = 1.0 
         if not skip_mods:            
-            modterms = (mods or {}).get(termname, [])                                    
-            multiplier *= math.prod(modterms)            
-        total += term.calc(val) * multiplier
+            modterms = (mods or {}).get(termname, [])  
+            if not modterms is None:
+                multiplier *= math.prod(modterms)                   
+        total += term.calc(val) * multiplier        
     return total
 
 def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, pitchingmods, battingmods):
@@ -89,52 +90,87 @@ def calc_defense(terms, pitchingteam, team_pid_stat_data, mods):
 def calc_stlatmod(name, pitcher_data, batter_data, team_data, stlatterm):    
     if name in helpers.PITCHING_STLATS:
         value = pitcher_data[name]
-    if name in helpers.BATTING_STLATS:        
-        value = batter_data[name]
+    elif name in helpers.BATTING_STLATS:        
+        value = batter_data[name]    
     elif "mean" in name:        
         stlatname = name[4:]        
         if stlatname == "basethirst":
             stlatname = "baseThirst"
         if stlatname == "groundfriction":
-            stlatname = "groundFriction"
-        value = geomean(team_data[stlatname])
+            stlatname = "groundFriction"        
+        value = geomean([row[stlatname] for row in team_data])
     else:
         stlatname = name[3:]
         if stlatname == "basethirst":
             stlatname = "baseThirst"
         if stlatname == "groundfriction":
             stlatname = "groundFriction"
-        value = max(team_data[stlatname])
+        value = max([row[stlatname] for row in team_data])
     normalized_value = stlatterm.calc(value)
     base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))                
     multiplier = 2.0 * base_multiplier
     return multiplier
 
-def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data):
+def valid_stlat(name, teamisbatting):    
+    if name in helpers.PITCHING_STLATS:
+        return True
+    elif name in helpers.BATTING_STLATS:        
+        return True
+    elif "mean" in name:        
+        stlatname = name[4:]        
+        if stlatname == "basethirst":
+            stlatname = "baseThirst"
+        if stlatname == "groundfriction":
+            stlatname = "groundFriction"                
+    else:
+        stlatname = name[3:]
+        if stlatname == "basethirst":
+            stlatname = "baseThirst"
+        if stlatname == "groundfriction":
+            stlatname = "groundFriction"
+    if (stlatname in helpers.DEFENSE_STLATS) or ((stlatname in helpers.BASERUNNING_STLATS) and teamisbatting):
+        return True    
+    return False
+
+def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data):    
     awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
     lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
     bird_weather = helpers.get_weather_idx("Birds")    
-    batter_list_dict = [stlats for player_id, stlats in team_data[battingteam].items() if player_id == batter]
+    batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter]
     batter_data = batter_list_dict[0]
+    batting_team_data = [stlats for player_id, stlats in team_stat_data[battingteam].items() if (player_id != batter and not stlats.get("shelled", False))]
+    pitching_team_data = [stlats for player_id, stlats in team_stat_data[pitchingteam].items()]
+    if battingteam == homeTeam:        
+        home_team_data = batting_team_data
+        away_team_data = pitching_team_data
+        hometeamisbatting, awayteamisbatting = True, False
+    else:        
+        away_team_data = batting_team_data
+        home_team_data = pitching_team_data
+        hometeamisbatting, awayteamisbatting = False, True
     for attr in mods:
         # Special case for Affinity for Crows
         if attr == "affinity_for_crows" and weather != bird_weather:
             continue
         if attr in lowerAwayAttrs:            
             for name, stlatterm in mods[attr]["same"].items():
-                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, team_stat_data[awayTeam], stlatterm)
-                awayMods[name].append(multiplier)
-            for name, stlatterm in mods[attr]["opp"].items():
-                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, team_stat_data[homeTeam], stlatterm)
-                homeMods[name].append(multiplier)
+                if valid_stlat(name, awayteamisbatting):
+                    multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, away_team_data, stlatterm)
+                    awayMods[name].append(multiplier)
+            for name, stlatterm in mods[attr]["opp"].items():                
+                if valid_stlat(name, hometeamisbatting):
+                    multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, home_team_data, stlatterm)
+                    homeMods[name].append(multiplier)
         if attr in lowerHomeAttrs and attr != "traveling":
-            for name, stlatterm in mods[attr]["same"].items():
-                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, team_stat_data[homeTeam], stlatterm)
-                homeMods[name].append(multiplier)
+            for name, stlatterm in mods[attr]["same"].items():                
+                if valid_stlat(name, hometeamisbatting):
+                    multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, home_team_data, stlatterm)
+                    homeMods[name].append(multiplier)
             for name, stlatterm in mods[attr]["opp"].items():
-                multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, team_stat_data[awayTeam], stlatterm)
-                awayMods[name].append(multiplier)    
+                if valid_stlat(name, awayteamisbatting):
+                    multiplier = calc_stlatmod(name, pitcher_stat_data[pitcher], batter_data, away_team_data, stlatterm)
+                    awayMods[name].append(multiplier)    
     for ballparkstlat, stlatterms in ballpark_mods.items():        
         for playerstlat, stlatterm in stlatterms.items():
             if type(stlatterm) == ParkTerm:            
@@ -148,7 +184,7 @@ def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 else:
                     multiplier = 1.0
                 awayMods[playerstlat].append(multiplier)
-                homeMods[playerstlat].append(multiplier)
+                homeMods[playerstlat].append(multiplier)    
     return awayMods, homeMods
 
 def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods):
@@ -192,7 +228,7 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
     current_outs = 0
     while current_outs < outs_pg:        
         #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup
-        if (outs_pg - previous_outs_pg) >= active_batters:
+        if (outs_pg - previous_outs_pg) >= active_batters:            
             current_outs += 1
         previous_outs_pg = outs_pg
         for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):            
