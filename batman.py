@@ -16,12 +16,11 @@ def calc_team(terms, termset, mods, skip_mods=False):
         #reset to 1 for each new termname
         multiplier = 1.0 
         if not skip_mods:            
-            modterms = (mods or {}).get(termname, [])  
-            if not modterms is None:
-                multiplier *= math.prod(modterms)                   
+            modterms = (mods or {}).get(termname, [])              
+            multiplier *= math.prod(modterms)                      
         total += term.calc(val) * multiplier        
     return total
-
+            
 def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, pitchingmods, battingmods):
     pitcher = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, pitchingmods)
     batter = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingmods)
@@ -219,23 +218,21 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
     factor_exp, factor_const, reverberation, repeating = special_cases
     team_atbat_data = {}
     atbats, temp_factor = 0.0, 1.0
-    batters = team_pid_stat_data.get(battingteam)        
-    active_batters = len(batters)
-    hits_hrs_walks = 0.0
+    batters = team_pid_stat_data.get(battingteam)            
+    hits_hrs_walks, remainder = 0.0, 0.0    
     ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"], reverse=flip_lineup)    
+    active_batters = len(ordered_active_batters)
     outs_pg = innings * outs_pi           
     previous_outs_pg = outs_pg
     current_outs = 0
-    while current_outs < outs_pg:        
-        #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup
-        if (outs_pg - previous_outs_pg) >= active_batters:            
-            current_outs += 1
-        previous_outs_pg = outs_pg
+    while current_outs < outs_pg:                        
+        guaranteed_hhw = 0
         for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):            
             #if we have any remainder, it should go to the next batter, as they either will have gotten an extra atbat or not depending
             if current_outs >= outs_pg:      
-                if (outs_pg > (current_outs - 1)) and (outs_pg > innings * outs_pi):
-                    team_atbat_data[batter_id] += (outs_pg - (current_outs - 1))
+                if (remainder > 0.0) and (outs_pg > innings * outs_pi):
+                    team_atbat_data[batter_id] += remainder
+                    remainder = 0.0
                 break                
             if batter_id not in team_atbat_data:
                 team_atbat_data[batter_id] = 0.0            
@@ -249,6 +246,7 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
                 return team_atbat_data            
             if hits_hrs_walks > 1.0:
                 hits_hrs_walks = 1.0
+                guaranteed_hhw += 1
             if hits_hrs_walks > 0:
                 outs_pg += hits_hrs_walks                      
             team_atbat_data[batter_id] += 1.0          
@@ -260,10 +258,23 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
                 team_atbat_data[batter_id] += repeating
                 if hits_hrs_walks > 0.0:
                     outs_pg += hits_hrs_walks * repeating
-            current_outs += 1                      
+            current_outs += 1       
+            remainder = (outs_pg - (current_outs - 1))
+        #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup        
+        if guaranteed_hhw >= active_batters:
+            for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
+                team_atbat_data[bat_id] = -10000.0                    
+            return team_atbat_data
+        if (outs_pg - previous_outs_pg) >= active_batters:            
+            current_outs += 1            
+            remainder = (outs_pg - (current_outs - 1))
+        previous_outs_pg = outs_pg    
     for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
         if batter_id not in team_atbat_data:
             team_atbat_data[batter_id] = 0.0    
+        if (remainder > 0.0) and (outs_pg > innings * outs_pi):
+            team_atbat_data[batter_id] += remainder
+            remainder = 0.0
     return team_atbat_data
 
 

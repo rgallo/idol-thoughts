@@ -19,8 +19,8 @@ def calc_team(terms, termset, mods, skip_mods=False):
         #reset to 1 for each new termname
         multiplier = 1.0 
         if not skip_mods:            
-            modterms = (mods or {}).get(termname, [])                                    
-            multiplier *= math.prod(modterms)            
+            modterms = (mods or {}).get(termname, [])             
+            multiplier *= math.prod(modterms)                
         total += term.calc(val) * multiplier
     return total
 
