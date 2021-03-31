@@ -50,6 +50,7 @@ def handle_args():
     parser.add_argument('--debug2', help="print output", action='store_true')
     parser.add_argument('--debug3', help="print output", action='store_true')
     parser.add_argument('--output', required=False, help="file output directory")
+    parser.add_argument('--workers', default="1", help="number of workers to use")
     args = parser.parse_args()
     return args
 
@@ -65,12 +66,13 @@ def main():
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     game_list = base_solver.get_games(cmd_args.gamefile)
+    workers = int(cmd_args.workers)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=15, tol=0.0001,
-                                    mutation=(0.01, 1.99), recombination=0.7, workers=1, maxiter=10000)
+                                    mutation=(0.01, 1.99), recombination=0.7, workers=workers, maxiter=10000)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, None, stat_file_map,
