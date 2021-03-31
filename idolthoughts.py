@@ -741,11 +741,7 @@ def main():
                     message = message.format(total_seconds // 60, "" if total_seconds // 60 == 1 else "s",
                                              "{} seconds ".format(total_seconds % 60) if total_seconds % 60 else "")
                     if args.discord:
-                        is_magic = False
-                        for game in today_schedule:
-                            if not game["finalized"] and "Magic" in (game["awayTeamNickname"], game["homeTeamNickname"]):
-                                is_magic = True
-                        send_discord_message("Sorry!{}".format(" :frog:" if is_magic else ""), message)
+                        send_discord_message("Sorry!", message)
                     else:
                         print(message)
                 first_try = False
