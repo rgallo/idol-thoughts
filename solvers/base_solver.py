@@ -40,7 +40,7 @@ BEST_EXK = 10000000000.0
 BEST_EXB = 10000000000.0
 BEST_UNMOD = 10000000000.0
 WORST_ERROR = 1000000000.0
-HALF_GAMES = 0
+HALF_GAMES = 1188
 REJECTS = 0
 MOD_BASELINE = False
 HAS_GAMES = {}
@@ -507,8 +507,7 @@ def minimize_func(parameters, *data):
                 debug_print("Fail rate = {:.4f}".format(fail_rate), debug, "::::::::")
             linear_fail = (k9_max_err - k9_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
     if linear_fail < BEST_RESULT:
-        BEST_RESULT = linear_fail  
-        HALF_GAMES = 1000
+        BEST_RESULT = linear_fail          
         BEST_FAILCOUNT = half_fail_counter
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
@@ -592,6 +591,8 @@ def minimize_func(parameters, *data):
                 debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)      
                 WORST_ERROR = (k9_max_err - k9_min_err)
         debug_print("-" * 20 + "\n", debug, run_id)
+        #trying to just sleep a minute when we get a solution
+        time.sleep(60)
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0)):
         if len(win_loss) > 0:
             now = datetime.datetime.now()
@@ -600,13 +601,7 @@ def minimize_func(parameters, *data):
             LAST_ITERATION_TIME = now
         else:
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
-    CURRENT_ITERATION += 1       
-    current_runtime = time.process_time()
-    if ((current_runtime - LAST_CHECKTIME) >= 1200):
-        #debug_print("2 minute power nap, been working for {:.2f} minutes".format((current_runtime - LAST_CHECKTIME) / 60.0), debug, datetime.datetime.now())
-        time.sleep(60)  
-        #debug_print("Waking back up", debug, datetime.datetime.now())
-        LAST_CHECKTIME = time.process_time()
+    CURRENT_ITERATION += 1           
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
@@ -783,19 +778,14 @@ def minimize_batman_func(parameters, *data):
                             continue                                       
                         away_game, home_game = game["away"], game["home"]
                         awayPitcher, awayTeam = players.get(away_game["pitcher_id"])
-                        homePitcher, homeTeam = players.get(home_game["pitcher_id"])                        
-                        awayMods, homeMods = get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitchername, pitchingteam, batter_perf["batter_id"], battingteam, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)                        
-                        if homeTeam == battingteam:
-                            battingMods, defenseMods = homeMods, awayMods
-                        else:
-                            battingMods, defenseMods = awayMods, homeMods
+                        homePitcher, homeTeam = players.get(home_game["pitcher_id"])                                                
                         previous_batting_team = battingteam                        
                         if (eventofinterest == "abs"):                            
                             if (batter_perf["batter_id"] not in atbats_team_stat_data):                                  
-                                flip_lineup = (battingteam == "San Francisco Lovers") and (season == 13) and (day > 27)                                                                     
-                                atbats_team_stat_data = get_team_atbats(pitchername, pitchingteam, battingteam, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, defenseMods, battingMods, special_cases)                                                            
+                                flip_lineup = (battingteam == "San Francisco Lovers") and (season == 13) and (day > 27)                                                                        
+                                atbats_team_stat_data = get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitchername, pitchingteam, battingteam, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, special_cases)                                                            
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
-                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, defenseMods, battingMods)                              
+                                                                                        batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, None, None)                              
                             minimum_atbats += int(batter_perf["at_bats"]) + batman_fail_by
                             previous_innings = max(int(batter_perf["num_innings"]), previous_innings)                            
                             if real_val == 1:
@@ -808,7 +798,12 @@ def minimize_batman_func(parameters, *data):
                                 continue
                             if not iscached_batters and not omit_from_good_abs:
                                 abs_batter_perf_data.extend([batter_perf])                            
-                        else:                                                                                            
+                        else:                                                                               
+                            awayMods, homeMods = get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitchername, pitchingteam, batter_perf["batter_id"], battingteam, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)                        
+                            if homeTeam == battingteam:
+                                battingMods, defenseMods = homeMods, awayMods
+                            else:
+                                battingMods, defenseMods = awayMods, homeMods
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, team_stat_data, pitcher_stat_data, pitchername, 
                                                                                         batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, defenseMods, battingMods)       
                         bat_counter += bat_bat_counter
@@ -831,7 +826,7 @@ def minimize_batman_func(parameters, *data):
                             reject_solution = True
                             REJECTS += 1
                             break
-                        if (batman_unexvar) > BEST_UNEXVAR_ERROR and (BEST_FAIL_RATE < 1.0):
+                        if (batman_unexvar) > (BEST_UNEXVAR_ERROR * 1.05) and (BEST_FAIL_RATE < 1.0):
                             reject_solution = True
                             REJECTS += 1
                             break
@@ -938,8 +933,7 @@ def minimize_batman_func(parameters, *data):
             write_file(outputdir, run_id, eventofinterest + "details.txt", detailtext)
         WORST_ERROR = (batman_max_err - batman_min_err)        
         debug_print("Optimizing: {}, iteration #{}".format(eventofinterest, CURRENT_ITERATION), debug, run_id)               
-        debug_print("-" * 20 + "\n", debug, run_id)
-        current_runtime = time.process_time()        
+        debug_print("-" * 20 + "\n", debug, run_id)        
         #trying to just sleep a minute when we get a solution
         time.sleep(60)          
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):

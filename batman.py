@@ -113,22 +113,25 @@ def calc_stlatmod(name, pitcher_data, batter_data, team_data, stlatterm):
 def valid_stlat(name, teamisbatting):    
     if name in helpers.PITCHING_STLATS:
         return True
-    elif name in helpers.BATTING_STLATS:        
+    elif name in helpers.BATTING_STLATS and teamisbatting:        
         return True
-    elif "mean" in name:        
-        stlatname = name[4:]        
-        if stlatname == "basethirst":
-            stlatname = "baseThirst"
-        if stlatname == "groundfriction":
-            stlatname = "groundFriction"                
     else:
-        stlatname = name[3:]
-        if stlatname == "basethirst":
-            stlatname = "baseThirst"
-        if stlatname == "groundfriction":
-            stlatname = "groundFriction"
-    if (stlatname in helpers.DEFENSE_STLATS) or ((stlatname in helpers.BASERUNNING_STLATS) and teamisbatting):
-        return True    
+        if "mean" in name:        
+            stlatname = name[4:]        
+            if stlatname == "basethirst":
+                stlatname = "baseThirst"
+            if stlatname == "groundfriction":
+                stlatname = "groundFriction"                
+            if (stlatname in helpers.DEFENSE_STLATS) or ((stlatname in helpers.BASERUNNING_STLATS) and teamisbatting):
+                return True
+        elif "max" in name:
+            stlatname = name[3:]
+            if stlatname == "basethirst":
+                stlatname = "baseThirst"
+            if stlatname == "groundfriction":
+                stlatname = "groundFriction"
+            if (stlatname in helpers.DEFENSE_STLATS) or ((stlatname in helpers.BASERUNNING_STLATS) and teamisbatting):
+                return True    
     return False
 
 def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data):    
@@ -214,13 +217,23 @@ def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pi
 
     return terms, special_cases, awayMods, homeMods
 
-def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, pitchingmods, battingmods, special_cases, outs_pi=3):    
+def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3):    
     factor_exp, factor_const, reverberation, repeating = special_cases
-    team_atbat_data = {}
+    team_atbat_data = {} 
+    batting_mods_by_Id = {}
     atbats, temp_factor = 0.0, 1.0
     batters = team_pid_stat_data.get(battingteam)            
     hits_hrs_walks, remainder = 0.0, 0.0    
     ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"], reverse=flip_lineup)    
+    #need to create a dict of mods to pass into the calculations based on the active batter
+    for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
+        defenseMods, offenseMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
+        awayMods, homeMods = get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter_id, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data)
+        if homeTeam == battingteam:
+            battingMods, defenseMods = homeMods, awayMods
+        else:
+            battingMods, defenseMods = awayMods, homeMods
+        batting_mods_by_Id[batter_id] = offenseMods
     active_batters = len(ordered_active_batters)
     outs_pg = innings * outs_pi           
     previous_outs_pg = outs_pg
@@ -236,8 +249,8 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
                 break                
             if batter_id not in team_atbat_data:
                 team_atbat_data[batter_id] = 0.0            
-            pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, pitchingmods, battingmods)            
-            everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, pitchingmods, battingmods)
+            pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, defenseMods, batting_mods_by_Id[batter_id])            
+            everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, defenseMods, batting_mods_by_Id[batter_id])
             temp_factor = factor_exp if (pitcher_batter > 0) else 1.0            
             hits_hrs_walks = ((pitcher_batter ** float(temp_factor)) + everythingelse) * (float(factor_const) / 1000.0)
             if math.isnan(hits_hrs_walks):
@@ -263,7 +276,7 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
         #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup        
         if guaranteed_hhw >= active_batters:
             for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
-                team_atbat_data[bat_id] = -10000.0                    
+                team_atbat_data[bat_id] = 500.0                    
             return team_atbat_data
         if (outs_pg - previous_outs_pg) >= active_batters:            
             current_outs += 1            
@@ -278,17 +291,13 @@ def get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitc
     return team_atbat_data
 
 
-def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases, outs_pi=3):       
-    if eventofinterest == "abs":                
-        atbats_data = get_team_atbats(pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, 9.0, False, terms, defenseMods, battingMods, special_cases, outs_pi)
-        batman = atbats_data[batter]
-    else:        
-        factor_exp, factor_const = special_cases["factors"][:2]
-        everythingelse = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
-        pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods)
-        factor_exp = factor_exp if (pitcher_batter > 0) else 1.0
-        batman = ((pitcher_batter ** float(factor_exp)) + everythingelse) * (float(factor_const) / 1000.0)
-        batman = max(batman, 0.0)
+def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases, outs_pi=3):                 
+    factor_exp, factor_const = special_cases["factors"][:2]
+    everythingelse = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
+    pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods)
+    factor_exp = factor_exp if (pitcher_batter > 0) else 1.0
+    batman = ((pitcher_batter ** float(factor_exp)) + everythingelse) * (float(factor_const) / 1000.0)
+    batman = max(batman, 0.0)
     return batman
 
 
@@ -304,12 +313,25 @@ def calculatePitcherVsBatter(eventofinterest, weather, awayAttrs, homeAttrs, awa
 def calculate(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods):
     batters = team_pid_stat_data.get(battingteam)
     batting_lineup_size = len([bid for bid, batter in batters.items() if not batter.get("shelled", False)])    
+    atbats_data = {}
     results = []
     for batter_id, batter in batters.items():
         if batter.get("shelled", False):
             continue
+        if (batter_id not in atbats_data):
+            terms_url = os.getenv("BATMAN_AB_TERMS")
+            mods_url = os.getenv("BATMAN_AB_MODS")
+            ballpark_mods_url = os.getenv("BATMAN_AB_BALLPARK_TERMS")
+            terms, special_cases = load_terms(terms_url, ["factors"])
+            mods = helpers.load_mods(mods_url)
+            ballparks_url = os.getenv("BALLPARKS")
+            ballparks = helpers.load_ballparks(ballparks_url)    
+            ballpark_mods = helpers.load_bp_terms(ballpark_mods_url)
+            homeTeamId = helpers.get_team_id(homeTeam)
+            ballpark = ballparks.get(homeTeamId, collections.defaultdict(lambda: 0.5))            
+            atbats_data = get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, 9.0, False, terms, special_cases, outs_pi)
         name = batter["name"]
-        batman_atbats = calculatePitcherVsBatter("abs", weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods)
+        batman_atbats = atbats_data[batter_id]
         batman_hits = calculatePitcherVsBatter("hits", weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods)
         batman_homers = calculatePitcherVsBatter("hrs", weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods)
         at_bats = batman_atbats

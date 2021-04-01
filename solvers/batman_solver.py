@@ -117,12 +117,14 @@ def main():
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
         base_bounds = ([(-10, 10), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (0, 2), (0, 0.02), (0, 0.02)]
-    bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS]
+    bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
-    bounds_park_mods = [modterm.bounds for modterm in BATMAN_BALLPARK_TERMS]
+    modterms = [modterm for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
+    bounds_park_mods = [modterm.bounds for modterm in BATMAN_BALLPARK_TERMS if modterm.playerstat.lower() in stlatlist]
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
+    parkterms = [modterm for modterm in BATMAN_BALLPARK_TERMS if modterm.playerstat.lower() in stlatlist]
     bounds = base_bounds + bounds_team + bounds_park            
-    args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, BATMAN_MOD_TERMS, BATMAN_BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, 
+    args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, modterms, parkterms, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=40, tol=0.0001, 
                                     mutation=(0.01, 1.99), recombination=0.7, workers=1, maxiter=10000)
