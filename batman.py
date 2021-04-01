@@ -253,7 +253,8 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
             everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, defenseMods, batting_mods_by_Id[batter_id])
             temp_factor = factor_exp if (pitcher_batter > 0) else 1.0            
             hits_hrs_walks = ((pitcher_batter ** float(temp_factor)) + everythingelse) * (float(factor_const) / 1000.0)
-            if math.isnan(hits_hrs_walks):
+            #catch nan and also 3 atbats per inning as a fail state
+            if math.isnan(hits_hrs_walks):                
                 for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
                     team_atbat_data[bat_id] = -10000.0
                 return team_atbat_data            
@@ -262,7 +263,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 guaranteed_hhw += 1
             if hits_hrs_walks > 0:
                 outs_pg += hits_hrs_walks                      
-            team_atbat_data[batter_id] += 1.0          
+            team_atbat_data[batter_id] += 1.0                      
             if team_pid_stat_data[battingteam][batter_id]["reverberating"]:                        
                 team_atbat_data[batter_id] += reverberation
                 if hits_hrs_walks > 0.0:                    
@@ -271,14 +272,18 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 team_atbat_data[batter_id] += repeating
                 if hits_hrs_walks > 0.0:
                     outs_pg += hits_hrs_walks * repeating
+            if team_atbat_data[batter_id] >= (2.0 * innings):
+                #print("Unrealistic number of atbats caught, {} in {} innings".format(team_atbat_data[batter_id], innings))
+                return team_atbat_data            
             current_outs += 1       
             remainder = (outs_pg - (current_outs - 1))
         #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup        
         if guaranteed_hhw >= active_batters:
             for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
-                team_atbat_data[bat_id] = 500.0                    
+                team_atbat_data[bat_id] = -500.0                    
             return team_atbat_data
-        if (outs_pg - previous_outs_pg) >= active_batters:            
+        if (outs_pg - previous_outs_pg) >= active_batters:      
+            #print("Pretty sure we never hit this; in atbats, getting more outs_pg - previous outs than active batters, but not entire lineup guaranteed hhw")
             current_outs += 1            
             remainder = (outs_pg - (current_outs - 1))
         previous_outs_pg = outs_pg    

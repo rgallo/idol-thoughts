@@ -346,13 +346,14 @@ def minimize_func(parameters, *data):
                 fail_counter += game_fail_counter  
                 if season == 14 and day < 100:
                     season_game_counter += game_game_counter
-                if game_counter >= SEASON_GAMES and SEASON_GAMES > 0 and viability_unchecked:
-                    half_fail_counter = fail_counter
+                if fail_counter >= BEST_FAILCOUNT and viability_unchecked:
                     viability_unchecked = False
-                    if half_fail_counter > (BEST_FAILCOUNT * 1.01):
+                    if game_counter <= SEASON_GAMES:
                         reject_solution = True
                         REJECTS += 1
                         break
+                if game_counter == SEASON_GAMES:
+                    half_fail_counter = fail_counter
                 if game_game_counter == 1:
                     all_vals.append(game_away_val)   
                     if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
@@ -511,8 +512,7 @@ def minimize_func(parameters, *data):
             linear_fail = (k9_max_err - k9_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail       
-        SEASON_GAMES = season_game_counter
-        print("Season 14 has {} regular season games".format(SEASON_GAMES))
+        SEASON_GAMES = season_game_counter        
         BEST_FAILCOUNT = half_fail_counter
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
@@ -664,6 +664,7 @@ def minimize_batman_func(parameters, *data):
     fail_rate, pos_fail_rate, zero_avg_error, pos_avg_error = 1.0, 1.0, 100.0, 100.0
     max_err_actual, min_err_actual = "", ""
     reject_solution, viability_unchecked = False, True
+    atbats_team_stat_data = {}
     #let some games jump the line
     for gameid in LINE_JUMP_GAMES:
         game = LINE_JUMP_GAMES[gameid]
@@ -692,7 +693,7 @@ def minimize_batman_func(parameters, *data):
         batter_perf_data = cached_batters                    
         last_lineup_id, previous_batting_team = "", ""
         lineup_size = 0
-        atbats_team_stat_data = {}                                        
+        atbats_team_stat_data.clear()                                        
         for batter_perf in batter_perf_data:         
             if reject_solution:
                 break              
@@ -854,7 +855,7 @@ def minimize_batman_func(parameters, *data):
                     last_lineup_id, previous_batting_team = "", ""
                     previous_innings, minimum_atbats, lineup_size = 0, 0, 0
                     omit_from_good_abs = False
-                    atbats_team_stat_data = {}                                        
+                    atbats_team_stat_data.clear()
                     for batter_perf in batter_perf_data:    
                         if reject_solution:
                             break          
