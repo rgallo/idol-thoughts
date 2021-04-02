@@ -89,8 +89,27 @@ def handle_args():
     parser.add_argument('--debug2', help="print output", action='store_true')
     parser.add_argument('--debug3', help="print output", action='store_true')
     parser.add_argument('--output', required=False, help="file output directory")
+    parser.add_argument('--workers', default="1", help="number of workers to use")
+    parser.add_argument('--init', required=False, help="directory to use for init")
+    parser.add_argument('--random', help="use random files instead of top 15", action='store_true')
     args = parser.parse_args()
     return args
+
+
+def get_init_values(init_dir, popsize, is_random):
+    pattern = re.compile(r'^Best so far - fail rate (\d*.\d*)%, linear error (\d*.\d*)$', re.MULTILINE)
+    results = []
+    job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
+    if len(job_ids) < popsize:
+        raise Exception("Population is set to {} and there are only {} solutions, find more solutions or decrease pop size".format(popsize, len(job_ids)))
+    for job_id in job_ids:
+        with open(os.path.join(init_dir, "{}-solution.json".format(job_id))) as solution_file, open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:
+            results.append((float(pattern.findall(details_file.read())[0][0]), json.load(solution_file)))
+    if is_random:
+        random.shuffle(results)
+    else:
+        results.sort(key=lambda x: x[0])
+    return np.array([result[1] for result in results[:popsize]])
 
 
 def main():
@@ -98,6 +117,7 @@ def main():
     cmd_args = handle_args()    
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)    
+    workers = int(cmd_args.workers)
     batter_list = base_solver.get_batters(cmd_args.batterfile)    
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)
     stlatlist = BATMAN_STLAT_LIST
@@ -124,10 +144,12 @@ def main():
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
     parkterms = [modterm for modterm in BATMAN_BALLPARK_TERMS if modterm.playerstat.lower() in stlatlist]
     bounds = base_bounds + bounds_team + bounds_park            
+    popsize = 25
+    init = get_init_values(cmd_args.init, popsize, cmd_args.random) if cmd_args.init else 'latinhypercube'
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, modterms, parkterms, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
-    result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=40, tol=0.0001, 
-                                    mutation=(0.01, 1.99), recombination=0.7, workers=1, maxiter=10000)
+    result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=popsize, tol=0.0001, 
+                                    mutation=(0.01, 1.99), recombination=0.7, workers=workers, maxiter=10000, init=init)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in
                     zip(BATMAN_STLAT_LIST, zip(*[iter(result.x[:-len(BATMAN_SPECIAL_CASES)])] * 3))))
     print("factors,{},{}".format(result.x[-2], result.x[-1]))

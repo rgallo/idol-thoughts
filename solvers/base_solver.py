@@ -1026,6 +1026,7 @@ def minimize_batman_func(parameters, *data):
             write_file(outputdir, run_id, eventofinterest + "terms.csv", "name,a,b,c\n" + terms_output + "\n" + special_case_output)
             write_file(outputdir, run_id, eventofinterest + "mods.csv", "identifier,team,name,a,b,c\n" + mods_output)
             write_file(outputdir, run_id, eventofinterest + "ballparkmods.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
+            write_parameters(outputdir, run_id, eventofinterest + "solution.json", parameters)
         debug_print("\n" + terms_output + special_case_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug, run_id)   
         detailtext = "::: Pass Rates over {} batters, fail counter {} :::".format(bat_counter, fail_counter)
         detailtext += "\nExact (+/- {:.2f}) = {:.4f}".format(stageexact, pass_exact)
