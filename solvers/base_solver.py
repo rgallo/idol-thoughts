@@ -983,7 +983,7 @@ def minimize_batman_func(parameters, *data):
         season_end = datetime.datetime.now()
         # debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)         
     if not reject_solution:
-        print("Possible solution! {:.4f} error span".format(batman_max_err - batman_min_err))
+        print("Possible solution! {:.4f} error span, max = {:.4f}, min = {:.4f}".format(batman_max_err - batman_min_err, batman_max_err, batman_min_err))
         if eventofinterest == "abs":            
             zero_avg_error = 0.0            
         else:
@@ -1007,7 +1007,7 @@ def minimize_batman_func(parameters, *data):
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if batman_max_err >= batman_min_err:            
             fail_points = (fail_rate * 100.0 * zero_avg_error * 0.6) + (pos_fail_rate * 100.0 * pos_avg_error * 1.4) - (pass_exact * 1.4)            
-            print("Candidate for success! {:.4f} error span, fail points = {:.2f}".format((batman_max_err - batman_min_err), fail_points))            
+            print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format((batman_max_err - batman_min_err), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))            
             if ((not (eventofinterest == "abs")) and (CURRENT_ITERATION == 1)) or not (pos_fail_rate < 1.0):
                 linear_fail = 1000000.0 + fail_points
             else:
