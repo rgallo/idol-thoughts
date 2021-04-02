@@ -743,7 +743,7 @@ def minimize_batman_func(parameters, *data):
                 if batman_fail_by < batman_min_err:
                     batman_min_err = batman_fail_by
                     min_err_actual = actual_result                        
-            if ((batman_max_err - batman_min_err) > WORST_ERROR) and (BEST_FAIL_RATE < 1.0):
+            if ((batman_max_err - batman_min_err) > WORST_ERROR):
                 reject_solution = True
                 REJECTS += 1
                 break            
@@ -934,7 +934,7 @@ def minimize_batman_func(parameters, *data):
                             if batman_fail_by < batman_min_err:
                                 batman_min_err = batman_fail_by
                                 min_err_actual = actual_result                        
-                        if ((batman_max_err - batman_min_err) > WORST_ERROR) and (BEST_FAIL_RATE < 1.0):
+                        if ((batman_max_err - batman_min_err) > WORST_ERROR):
                             reject_solution = True
                             REJECTS += 1
                             LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
@@ -1016,7 +1016,8 @@ def minimize_batman_func(parameters, *data):
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact
         BEST_FAIL_RATE = pos_fail_rate
-        BEST_UNEXVAR_ERROR = batman_unexvar
+        BEST_UNEXVAR_ERROR = batman_unexvar        
+        WORST_ERROR = (batman_max_err - batman_min_err)
         LINE_JUMP_GAMES.clear()
         terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_batman_list_size)])] * 3)))            
         special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases))
@@ -1041,8 +1042,7 @@ def minimize_batman_func(parameters, *data):
         detailtext += "\nBest so far - fail rate {:.4f}%, pos fail rate {:.4f}%".format(fail_rate * 100.0, pos_fail_rate * 100.0)
         debug_print(detailtext, debug, run_id)
         if outputdir:
-            write_file(outputdir, run_id, eventofinterest + "details.txt", detailtext)
-        WORST_ERROR = (batman_max_err - batman_min_err)        
+            write_file(outputdir, run_id, eventofinterest + "details.txt", detailtext)                
         debug_print("Optimizing: {}, iteration #{}".format(eventofinterest, CURRENT_ITERATION), debug, run_id)               
         debug_print("-" * 20 + "\n", debug, run_id)        
         #trying to just sleep a minute when we get a solution
