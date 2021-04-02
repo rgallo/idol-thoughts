@@ -216,6 +216,11 @@ def write_file(outputdir, run_id, filename, content):
         f.write(content)
 
 
+def write_parameters(outputdir, run_id, filename, parameters):
+    with open(os.path.join(outputdir, "{}-{}".format(run_id, filename)), "w") as f:
+        json.dump(list(parameters), f)
+
+
 #for mofo and k9
 def minimize_func(parameters, *data):
     run_id = uuid.uuid4()
@@ -535,6 +540,7 @@ def minimize_func(parameters, *data):
                 write_file(outputdir, run_id, "terms.csv", "name,a,b,c\n" + terms_output)
                 write_file(outputdir, run_id, "mods.csv", "identifier,team,name,a,b,c\n" + mods_output)
                 write_file(outputdir, run_id, "ballparkmods.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
+                write_parameters(outputdir, run_id, "solution.json", parameters)
             debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug, run_id)
             detailtext = "{} games".format(game_counter)
             detailtext += "\n{:.4f}% Unmodded fail rate, Best {:.4f}%".format(unmod_rate, BEST_UNMOD)

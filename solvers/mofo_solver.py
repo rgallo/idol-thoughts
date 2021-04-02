@@ -1,5 +1,10 @@
 import argparse
 import json
+import os
+import random
+import re
+
+import numpy as np
 from scipy.optimize import differential_evolution
 import datetime
 import sys
@@ -51,8 +56,24 @@ def handle_args():
     parser.add_argument('--debug3', help="print output", action='store_true')
     parser.add_argument('--output', required=False, help="file output directory")
     parser.add_argument('--workers', default="1", help="number of workers to use")
+    parser.add_argument('--init', required=False, help="directory to use for init")
+    parser.add_argument('--random', help="use random files instead of top 15", action='store_true')
     args = parser.parse_args()
     return args
+
+
+def get_init_values(init_dir, popsize, is_random):
+    pattern = re.compile(r'^Best so far - fail rate (\d*.\d*)%, linear error (\d*.\d*)$', re.MULTILINE)
+    results = []
+    job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
+    for job_id in job_ids:
+        with open(os.path.join(init_dir, "{}-solution.json".format(job_id))) as solution_file, open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:
+            results.append((float(pattern.findall(details_file.read())[0][0]), json.load(solution_file)))
+    if is_random:
+        random.shuffle(results)
+    else:
+        results.sort(key=lambda x: x[0])
+    return np.array([result[1] for result in results[:popsize]])
 
 
 def main():
@@ -69,10 +90,13 @@ def main():
     workers = int(cmd_args.workers)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
+    popsize = 15
+    init = get_init_values(cmd_args.init, popsize, cmd_args.random) if cmd_args.init else 'latinhypercube'
     args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
-    result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=30, tol=0.0001,
-                                    mutation=(0.01, 1.99), recombination=0.7, workers=workers, maxiter=10000)
+    result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
+                                    mutation=(0.01, 1.99), recombination=0.7, workers=workers, maxiter=10000,
+                                    init=init)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, None, stat_file_map,
