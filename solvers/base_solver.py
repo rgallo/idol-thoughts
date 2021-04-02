@@ -938,11 +938,7 @@ def minimize_batman_func(parameters, *data):
                             reject_solution = True
                             REJECTS += 1
                             LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
-                            break
-                        if (batman_unexvar) > (BEST_UNEXVAR_ERROR * 1.05) and (BEST_FAIL_RATE < 1.0):
-                            reject_solution = True
-                            REJECTS += 1
-                            break
+                            break                        
                         if eventofinterest == "abs":
                             stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
                         elif eventofinterest == "hrs":
