@@ -66,6 +66,8 @@ def get_init_values(init_dir, popsize, is_random):
     pattern = re.compile(r'^Best so far - fail rate (\d*.\d*)%, linear error (\d*.\d*)$', re.MULTILINE)
     results = []
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
+    if len(job_ids) < popsize:
+        raise Exception("Population is set to {} and there are only {} solutions, find more solutions or decrease pop size".format(popsize, len(job_ids)))
     for job_id in job_ids:
         with open(os.path.join(init_dir, "{}-solution.json".format(job_id))) as solution_file, open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:
             results.append((float(pattern.findall(details_file.read())[0][0]), json.load(solution_file)))
@@ -90,7 +92,7 @@ def main():
     workers = int(cmd_args.workers)
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
-    popsize = 15
+    popsize = 25
     init = get_init_values(cmd_args.init, popsize, cmd_args.random) if cmd_args.init else 'latinhypercube'
     args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
