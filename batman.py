@@ -24,7 +24,7 @@ def calc_team(terms, termset, mods, skip_mods=False):
 def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, pitchingmods, battingmods):
     pitcher = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, pitchingmods)
     batter = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingmods)
-    pitcher_batter = pitcher + batter
+    pitcher_batter = batter - pitcher
     return pitcher_batter
 
 def calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, mods):
@@ -53,7 +53,7 @@ def calc_batter(terms, team_pid_stat_data, batter, battingteam, mods):
 def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter, pitchingmods, battingmods):    
     offense = calc_offense(terms, battingteam, team_pid_stat_data, batter, battingmods)
     defense = calc_defense(terms, pitchingteam, team_pid_stat_data, pitchingmods)
-    everything_else = offense + defense
+    everything_else = offense - defense
     return everything_else
 
 def calc_offense(terms, battingteam, team_pid_stat_data, batter, mods):    
@@ -301,7 +301,7 @@ def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team
     everythingelse = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
     pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods)
     factor_exp = factor_exp if (pitcher_batter > 0) else 1.0
-    batman = ((pitcher_batter ** float(factor_exp)) + everythingelse) * (float(factor_const) / 1000.0)
+    batman = ((pitcher_batter ** float(factor_exp)) - everythingelse) * (float(factor_const) / 1000.0)
     batman = max(batman, 0.0)
     return batman
 

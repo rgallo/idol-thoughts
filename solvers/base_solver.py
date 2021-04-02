@@ -38,8 +38,9 @@ BEST_ONO = 10000000000.0
 BEST_WIP = 10000000000.0
 BEST_EXK = 10000000000.0
 BEST_EXB = 10000000000.0
-BEST_UNMOD = 10000000000.0
+BEST_UNMOD = 1000000000000.0
 WORST_ERROR = 1000000000.0
+BASELINE_ERROR = 1000000000.0
 SEASON_GAMES = 1188
 REJECTS = 0
 MOD_BASELINE = False
@@ -230,7 +231,7 @@ def minimize_func(parameters, *data):
     global BEST_FAIL_RATE
     global BEST_LINEAR_ERROR
     global BEST_EXACT
-    global BEST_FAILCOUNT
+    global BEST_FAILCOUNT    
     global LAST_CHECKTIME
     global BEST_QUARTER_FAIL
     global TOTAL_GAME_COUNTER
@@ -275,8 +276,8 @@ def minimize_func(parameters, *data):
     linear_error = 0.0
     love_rate, instinct_rate, ono_rate, wip_rate, exk_rate, exb_rate, unmod_rate = 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0
     k9_max_err, k9_min_err = 0, 0
-    mod_fails = [0] * 6
-    mod_games = [0] * 6
+    mod_fails = [0, 0, 0, 0, 0, 0]
+    mod_games = [0, 0, 0, 0, 0, 0]    
     multi_mod_fails, multi_mod_games, mvm_fails, mvm_games = 0, 0, 0, 0
     reject_solution, viability_unchecked = False, True
     all_vals = []
@@ -356,9 +357,7 @@ def minimize_func(parameters, *data):
                     if game_counter <= SEASON_GAMES:
                         reject_solution = True
                         REJECTS += 1
-                        break
-                if game_counter == SEASON_GAMES:
-                    half_fail_counter = fail_counter
+                        break                
                 if game_game_counter == 1:
                     all_vals.append(game_away_val)   
                     if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
@@ -379,27 +378,27 @@ def minimize_func(parameters, *data):
                             if name == "love":
                                 mod_fails[0] += game_fail_counter
                                 mod_games[0] += game_game_counter
-                                awayMods += 1
+                                awayMods += 1                                
                             if name == "base_instincts":
                                 mod_fails[1] += game_fail_counter
                                 mod_games[1] += game_game_counter
-                                awayMods += 1
+                                awayMods += 1                                
                             if name == "o_no":
                                 mod_fails[2] += game_fail_counter
                                 mod_games[2] += game_game_counter
-                                awayMods += 1
+                                awayMods += 1                                
                             if name == "walk_in_the_park":
                                 mod_fails[3] += game_fail_counter
                                 mod_games[3] += game_game_counter
-                                awayMods += 1
+                                awayMods += 1                                
                             if name == "extra_strike":
                                 mod_fails[4] += game_fail_counter
                                 mod_games[4] += game_game_counter
-                                awayMods += 1
+                                awayMods += 1                                
                             if name == "extra_base":
                                 mod_fails[5] += game_fail_counter
                                 mod_games[5] += game_game_counter
-                                awayMods += 1
+                                awayMods += 1                                
                             if awayMods > 1:
                                 multi_mod_fails += game_fail_counter
                                 multi_mod_games += game_game_counter
@@ -407,33 +406,35 @@ def minimize_func(parameters, *data):
                             if name == "love":
                                 mod_fails[0] += game_fail_counter
                                 mod_games[0] += game_game_counter
-                                homeMods += 1
+                                homeMods += 1                                
                             if name == "base_instincts":
                                 mod_fails[1] += game_fail_counter
                                 mod_games[1] += game_game_counter
-                                homeMods += 1
+                                homeMods += 1                                
                             if name == "o_no":
                                 mod_fails[2] += game_fail_counter
                                 mod_games[2] += game_game_counter
-                                homeMods += 1
+                                homeMods += 1                                
                             if name == "walk_in_the_park":
                                 mod_fails[3] += game_fail_counter
                                 mod_games[3] += game_game_counter
-                                homeMods += 1
+                                homeMods += 1                                
                             if name == "extra_strike":
                                 mod_fails[4] += game_fail_counter
                                 mod_games[4] += game_game_counter
-                                homeMods += 1
+                                homeMods += 1                                
                             if name == "extra_base":
                                 mod_fails[5] += game_fail_counter
                                 mod_games[5] += game_game_counter
-                                homeMods += 1
+                                homeMods += 1                                
                             if homeMods > 1:
                                 multi_mod_fails += game_fail_counter
                                 multi_mod_games += game_game_counter
                         if awayMods > 0 and homeMods > 0:
                             mvm_fails += game_fail_counter
-                            mvm_games += game_game_counter
+                            mvm_games += game_game_counter                                            
+                    if game_counter == SEASON_GAMES:
+                        half_fail_counter = fail_counter                                                
                 elif game_game_counter == 2:                    
                     k9_max_err = game_away_val if (game_away_val > k9_max_err) else k9_max_err
                     k9_max_err = game_home_val if (game_home_val > k9_max_err) else k9_max_err
@@ -498,13 +499,12 @@ def minimize_func(parameters, *data):
                 #exb_rate = (mod_fails[5] / mod_games[5]) * 100.0     
                 unmod_rate = ((fail_counter - sum(mod_fails)) / (game_counter - sum(mod_games))) * 100.0
                 #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB)) / 2.0                
-                tolerance = min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK) / 10.0
+                #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK, BEST_UNMOD) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK, BEST_UNMOD)) * 1.02
+                tolerance = max(love_rate, instinct_rate, ono_rate, exk_rate, unmod_rate) - min(love_rate, instinct_rate, ono_rate, exk_rate, unmod_rate)
                 #if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (wip_rate <= BEST_WIP) or (exk_rate <= BEST_EXK) or (exb_rate <= BEST_EXB):                
-                if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (exk_rate <= BEST_EXK) or (unmod_rate <= BEST_UNMOD) or (fail_rate <= BEST_FAIL_RATE):                        
-                    if (love_rate <= BEST_LOVE + tolerance) and (instinct_rate <= BEST_INSTINCT + tolerance) and (ono_rate <= BEST_ONO + tolerance) and (exk_rate <= BEST_EXK + tolerance) and (unmod_rate <= BEST_UNMOD + tolerance) and (fail_rate <= BEST_FAIL_RATE):
-                            #linear_fail = (love_rate + instinct_rate + ono_rate + wip_rate + exk_rate + exb_rate) / 6.0
-                        fail_points = ((fail_rate * 1000.0) ** 2) * 2.5
-                        linear_fail = fail_points + linear_points                        
+                if (love_rate <= BEST_LOVE) or (instinct_rate <= BEST_INSTINCT) or (ono_rate <= BEST_ONO) or (exk_rate <= BEST_EXK) or (unmod_rate <= BEST_UNMOD) or (fail_rate <= BEST_FAIL_RATE):                                            
+                    fail_points = (fail_rate * 100.0) * (max(love_rate, instinct_rate, ono_rate, exk_rate, unmod_rate)) * 250.0
+                    linear_fail = fail_points + linear_points                        
         elif game_counter == TOTAL_GAME_COUNTER and TOTAL_GAME_COUNTER > 0:        
             pass_exact = (pass_exact / game_counter) * 100.0
             pass_within_one = (pass_within_one / game_counter) * 100.0
@@ -518,7 +518,7 @@ def minimize_func(parameters, *data):
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail       
         SEASON_GAMES = season_game_counter        
-        BEST_FAILCOUNT = half_fail_counter
+        BEST_FAILCOUNT = half_fail_counter        
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
             BEST_LINEAR_ERROR = linear_error
@@ -632,6 +632,7 @@ def minimize_batman_func(parameters, *data):
     global MAX_OBSERVED_DIFFERENCE    
     global HAS_GAMES
     global WORST_ERROR
+    global BASELINE_ERROR
     global REJECTS
     global LAST_ITERATION_TIME
     global LINE_JUMP_GAMES
@@ -743,7 +744,7 @@ def minimize_batman_func(parameters, *data):
                 if batman_fail_by < batman_min_err:
                     batman_min_err = batman_fail_by
                     min_err_actual = actual_result                        
-            if ((batman_max_err - batman_min_err) > WORST_ERROR):
+            if ((batman_max_err - batman_min_err) > WORST_ERROR) or ((batman_max_err - batman_min_err) >= BASELINE_ERROR):
                 reject_solution = True
                 REJECTS += 1
                 break            
@@ -934,7 +935,7 @@ def minimize_batman_func(parameters, *data):
                             if batman_fail_by < batman_min_err:
                                 batman_min_err = batman_fail_by
                                 min_err_actual = actual_result                        
-                        if ((batman_max_err - batman_min_err) > WORST_ERROR):
+                        if ((batman_max_err - batman_min_err) > WORST_ERROR) or ((batman_max_err - batman_min_err) >= BASELINE_ERROR):
                             reject_solution = True
                             REJECTS += 1
                             LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
@@ -1006,7 +1007,7 @@ def minimize_batman_func(parameters, *data):
         if pass_exact > BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if batman_max_err >= batman_min_err:            
-            fail_points = (fail_rate * 100.0 * zero_avg_error * 0.6) + (pos_fail_rate * 100.0 * pos_avg_error * 1.4) - (pass_exact * 1.4)            
+            fail_points = (fail_rate * 100.0 * zero_avg_error * 0.1) + (pos_fail_rate * 100.0 * pos_avg_error * 3.0) - (pass_exact * 2.0)            
             print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format((batman_max_err - batman_min_err), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                        
             linear_fail = (((batman_max_err - batman_min_err) ** ((pos_avg_error * 2.0) + zero_avg_error)) * 100.0) + fail_points
     if linear_fail < BEST_RESULT:
@@ -1015,6 +1016,8 @@ def minimize_batman_func(parameters, *data):
         BEST_FAIL_RATE = pos_fail_rate
         BEST_UNEXVAR_ERROR = batman_unexvar        
         WORST_ERROR = (batman_max_err - batman_min_err)
+        if CURRENT_ITERATION == 1:
+            BASELINE_ERROR = (batman_max_err - batman_min_err)
         LINE_JUMP_GAMES.clear()
         terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_batman_list_size)])] * 3)))            
         special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases))
