@@ -734,6 +734,9 @@ def minimize_batman_func(parameters, *data):
                                                                             batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, defenseMods, battingMods)       
             bat_counter += bat_bat_counter
             fail_counter += bat_fail_counter                                                                  
+            max_hits = int(batter_perf["hits"]) if (int(batter_perf["hits"]) > max_hits) else max_hits
+            max_homers = int(batter_perf["home_runs"]) if (int(batter_perf["home_runs"]) > max_homers) else max_homers
+            max_atbats = int(batter_perf["at_bats"]) if (int(batter_perf["at_bats"]) > max_atbats) else max_atbats
             if real_val > 0:
                 bat_pos_counter += bat_bat_counter
                 fail_pos_counter += bat_fail_counter

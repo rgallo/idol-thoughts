@@ -26,7 +26,7 @@ def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, b
     pitcher_exp = factor_exp if pitcher_raw > 0 else 1.0
     batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingmods)
     batter_exp = factor_exp if batter_raw > 0 else 1.0
-    pitcher_batter = (batter_raw ** batter_exp) - (pitcher_raw ** pitcher_exp)
+    pitcher_batter = ((batter_raw ** batter_exp) - (pitcher_raw ** pitcher_exp)) / 100.0
     return pitcher_batter
 
 def calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, mods):
@@ -55,7 +55,7 @@ def calc_batter(terms, team_pid_stat_data, batter, battingteam, mods):
 def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter, pitchingmods, battingmods):    
     offense = calc_offense(terms, battingteam, team_pid_stat_data, batter, battingmods)
     defense = calc_defense(terms, pitchingteam, team_pid_stat_data, pitchingmods)
-    everything_else = defense - offense
+    everything_else = (defense - offense) / 100.0
     return everything_else
 
 def calc_offense(terms, battingteam, team_pid_stat_data, batter, mods):    
@@ -85,8 +85,9 @@ def calc_defense(terms, pitchingteam, team_pid_stat_data, mods):
         ("maxtenaciousness", max([row["tenaciousness"] for row in pitching_team_data])),
         ("maxwatchfulness", max([row["watchfulness"] for row in pitching_team_data])),
         ("maxanticapitalism", max([row["anticapitalism"] for row in pitching_team_data])),
-        ("maxchasiness", max([row["chasiness"] for row in pitching_team_data])))                        
-    return calc_team(terms, termset, mods, False)
+        ("maxchasiness", max([row["chasiness"] for row in pitching_team_data])))  
+    defense = (calc_team(terms, termset, mods, False)) / 100.0
+    return defense
 
 def calc_stlatmod(name, pitcher_data, batter_data, team_data, stlatterm):    
     if name in helpers.PITCHING_STLATS:
@@ -254,13 +255,14 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
             pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, defenseMods, batting_mods_by_Id[batter_id], float(factor_exp))            
             defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
             baserunners_out = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, defenseMods, batting_mods_by_Id[batter_id]) 
-            hits_hrs_walks_raw = (pitcher_batter - defense) * float(factor_const)
+            hits_hrs_walks_raw = (pitcher_batter - defense)
             #catch nan and also 3 atbats per inning as a fail state
             if math.isnan(hits_hrs_walks_raw):                
                 for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
                     team_atbat_data[bat_id] = -10000.0
                 return team_atbat_data            
-            hits_hrs_walks = (1.0 / (1.0 + (100.0 ** (-1.0 * hits_hrs_walks_raw))))
+            hits_hrs_walks = (1.0 / (1.0 + (2.0 ** (-1.0 * hits_hrs_walks_raw))))
+            hits_hrs_walks = hits_hrs_walks if (hits_hrs_walks > (float(factor_const) / 100.0)) else 0.0
             outs_pg += hits_hrs_walks if not baseline else 0.0
             team_atbat_data[batter_id] += 1.0                      
             if team_pid_stat_data[battingteam][batter_id]["reverberating"] and not baseline:                        
@@ -276,7 +278,8 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 return team_atbat_data            
             remainder = (outs_pg - current_outs)
             if not baseline:
-                current_outs += 1 + (1.0 / (1.0 + (100.0 ** (-1.0 * (baserunners_out * float(factor_const))))))            
+                added_out = (1.0 / (1.0 + (2.0 ** (-1.0 * (baserunners_out)))))
+                current_outs += 1 + added_out                
             else:
                 current_outs += 1
         #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup        
@@ -302,8 +305,9 @@ def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team
     factor_exp, factor_const = special_cases["factors"][:2]
     everythingelse = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
     pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods, float(factor_exp))    
-    batman_raw = (pitcher_batter - everythingelse) * float(factor_const)
-    batman = (1.0 / (1.0 + (100.0 ** (-1.0 * batman_raw))))
+    batman_raw = (pitcher_batter - everythingelse) 
+    batman = (1.0 / (1.0 + (2.0 ** (-1.0 * batman_raw))))
+    batman = batman if (batman > (float(factor_const) / 100.0)) else 0.0
     return batman
 
 
