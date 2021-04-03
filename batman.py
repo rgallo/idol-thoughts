@@ -21,10 +21,12 @@ def calc_team(terms, termset, mods, skip_mods=False):
         total += term.calc(val) * multiplier        
     return total
             
-def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, pitchingmods, battingmods):
-    pitcher = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, pitchingmods)
-    batter = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingmods)
-    pitcher_batter = batter - pitcher
+def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, pitchingmods, battingmods, factor_exp):
+    pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, pitchingmods)
+    pitcher_exp = factor_exp if pitcher_raw > 0 else 1.0
+    batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingmods)
+    batter_exp = factor_exp if batter_raw > 0 else 1.0
+    pitcher_batter = (batter_raw ** batter_exp) - (pitcher_raw ** pitcher_exp)
     return pitcher_batter
 
 def calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, mods):
@@ -53,7 +55,7 @@ def calc_batter(terms, team_pid_stat_data, batter, battingteam, mods):
 def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter, pitchingmods, battingmods):    
     offense = calc_offense(terms, battingteam, team_pid_stat_data, batter, battingmods)
     defense = calc_defense(terms, pitchingteam, team_pid_stat_data, pitchingmods)
-    everything_else = offense - defense
+    everything_else = defense - offense
     return everything_else
 
 def calc_offense(terms, battingteam, team_pid_stat_data, batter, mods):    
@@ -217,13 +219,13 @@ def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pi
 
     return terms, special_cases, awayMods, homeMods
 
-def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3):    
+def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3, baseline=False):    
     factor_exp, factor_const, reverberation, repeating = special_cases
     team_atbat_data = {} 
     batting_mods_by_Id = {}
-    atbats, temp_factor = 0.0, 1.0
+    atbats = 0.0
     batters = team_pid_stat_data.get(battingteam)            
-    hits_hrs_walks, remainder = 0.0, 0.0    
+    hits_hrs_walks, hits_hrs_walks_raw, remainder = 0.0, 0.0, 0.0 
     ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"], reverse=flip_lineup)    
     #need to create a dict of mods to pass into the calculations based on the active batter
     for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
@@ -249,34 +251,34 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 break                
             if batter_id not in team_atbat_data:
                 team_atbat_data[batter_id] = 0.0            
-            pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, defenseMods, batting_mods_by_Id[batter_id])            
-            everythingelse = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, defenseMods, batting_mods_by_Id[batter_id])
-            temp_factor = factor_exp if (pitcher_batter > 0) else 1.0            
-            hits_hrs_walks = ((pitcher_batter ** float(temp_factor)) + everythingelse) * (float(factor_const) / 1000.0)
+            pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, defenseMods, batting_mods_by_Id[batter_id], float(factor_exp))            
+            defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
+            baserunners_out = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, defenseMods, batting_mods_by_Id[batter_id]) 
+            hits_hrs_walks_raw = (pitcher_batter - defense) * float(factor_const)
             #catch nan and also 3 atbats per inning as a fail state
-            if math.isnan(hits_hrs_walks):                
+            if math.isnan(hits_hrs_walks_raw):                
                 for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
                     team_atbat_data[bat_id] = -10000.0
                 return team_atbat_data            
-            if hits_hrs_walks > 1.0:
-                hits_hrs_walks = 1.0
-                guaranteed_hhw += 1
-            if hits_hrs_walks > 0:
-                outs_pg += hits_hrs_walks                      
+            hits_hrs_walks = (1.0 / (1.0 + (100.0 ** (-1.0 * hits_hrs_walks_raw))))
+            outs_pg += hits_hrs_walks if not baseline else 0.0
             team_atbat_data[batter_id] += 1.0                      
-            if team_pid_stat_data[battingteam][batter_id]["reverberating"]:                        
+            if team_pid_stat_data[battingteam][batter_id]["reverberating"] and not baseline:                        
                 team_atbat_data[batter_id] += reverberation
                 if hits_hrs_walks > 0.0:                    
                     outs_pg += hits_hrs_walks * reverberation
-            if team_pid_stat_data[battingteam][batter_id]["repeating"]:                        
+            if team_pid_stat_data[battingteam][batter_id]["repeating"] and not baseline:                        
                 team_atbat_data[batter_id] += repeating
                 if hits_hrs_walks > 0.0:
                     outs_pg += hits_hrs_walks * repeating
             if team_atbat_data[batter_id] >= (2.0 * innings):
                 #print("Unrealistic number of atbats caught, {} in {} innings".format(team_atbat_data[batter_id], innings))
                 return team_atbat_data            
-            current_outs += 1       
-            remainder = (outs_pg - (current_outs - 1))
+            remainder = (outs_pg - current_outs)
+            if not baseline:
+                current_outs += 1 + (1.0 / (1.0 + (100.0 ** (-1.0 * (baserunners_out * float(factor_const))))))            
+            else:
+                current_outs += 1
         #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup        
         if guaranteed_hhw >= active_batters:
             for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
@@ -296,13 +298,12 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
     return team_atbat_data
 
 
-def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases, outs_pi=3):                 
+def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases):                     
     factor_exp, factor_const = special_cases["factors"][:2]
     everythingelse = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
-    pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods)
-    factor_exp = factor_exp if (pitcher_batter > 0) else 1.0
-    batman = ((pitcher_batter ** float(factor_exp)) - everythingelse) * (float(factor_const) / 1000.0)
-    batman = max(batman, 0.0)
+    pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods, float(factor_exp))    
+    batman_raw = (pitcher_batter - everythingelse) * float(factor_const)
+    batman = (1.0 / (1.0 + (100.0 ** (-1.0 * batman_raw))))
     return batman
 
 

@@ -646,7 +646,8 @@ def minimize_batman_func(parameters, *data):
     ballpark_mods = collections.defaultdict(lambda: {"bpterm": {}})
     mod_mode = True            
     #special_cases = parameters[base_batman_list_size:-(team_mod_list_size + park_mod_list_size)] if special_case_list else []    
-    if CURRENT_ITERATION == 1:                
+    if CURRENT_ITERATION == 1:   
+        baseline = True
         if eventofinterest == "abs":
             baseline_parameters = ([0, 0, 1] * len(stlat_list)) + [1, 0, 0, 0] + ([0, 0, 1] * len(mod_list)) + ([0, 0, 1] * len(ballpark_list))            
         else:
@@ -658,6 +659,7 @@ def minimize_batman_func(parameters, *data):
             ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(a, b, c)
         special_cases = baseline_parameters[base_batman_list_size:-(team_mod_list_size + park_mod_list_size)]        
     else:
+        baseline = False
         terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_batman_list_size])] * 3))}        
         for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_batman_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
             mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)                     
@@ -719,7 +721,7 @@ def minimize_batman_func(parameters, *data):
             if (eventofinterest == "abs"):                            
                 if (batter_perf["batter_id"] not in atbats_team_stat_data):                                  
                     flip_lineup = (battingteam == "San Francisco Lovers") and (season == 13) and (day > 27)                                                                        
-                    atbats_team_stat_data = get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitchername, pitchingteam, battingteam, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, special_cases)                                                            
+                    atbats_team_stat_data = get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitchername, pitchingteam, battingteam, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, special_cases, outs_pi=3, baseline=baseline)                                                            
                 bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
                                                                             batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, None, None)                                                                                                     
             else:                                                                               
@@ -736,16 +738,24 @@ def minimize_batman_func(parameters, *data):
                 bat_pos_counter += bat_bat_counter
                 fail_pos_counter += bat_fail_counter
                 batman_unexvar += batman_fail_by ** 2.0
-                pos_fail_counter += abs(batman_fail_by)
+                pos_fail_counter += abs(batman_fail_by)                
             else:
                 zero_counter += 1
+
+            #if eventofinterest == "abs" and abs(batman_fail_by) > 11:
+             #   print("failed by {:.4f}, batman calc value {:.2f}, actual value = {:.2f}".format(batman_fail_by, batman_fail_by + real_val, real_val))
+            #if eventofinterest == "hits" and abs(batman_fail_by) > 6:
+             #   print("failed by {:.4f}, actual {}, batman hits per atbat value {:.4f}, actual hits per atbat value = {:.4f}".format(batman_fail_by, real_val, (batman_fail_by + real_val) / (int(batter_perf["at_bats"])), real_val / (int(batter_perf["at_bats"]))))
+            #if eventofinterest == "hrs" and abs(batman_fail_by) > 4:
+             #   print("failed by {:.4f}, actual {}, batman hrs per atbat value {:.4f}, actual hrs per atbat value = {:.4f}".format(batman_fail_by, real_val, (batman_fail_by + real_val) / (int(batter_perf["at_bats"])), real_val / (int(batter_perf["at_bats"]))))
+
             if bat_bat_counter:                    
                 if batman_fail_by > batman_max_err:
                     batman_max_err = batman_fail_by
                     max_err_actual = actual_result
                 if batman_fail_by < batman_min_err:
                     batman_min_err = batman_fail_by
-                    min_err_actual = actual_result                        
+                    min_err_actual = actual_result            
             if ((batman_max_err - batman_min_err) > WORST_ERROR) or ((batman_max_err - batman_min_err) >= BASELINE_ERROR):
                 reject_solution = True
                 REJECTS += 1
@@ -910,7 +920,7 @@ def minimize_batman_func(parameters, *data):
                         if (eventofinterest == "abs"):                            
                             if (batter_perf["batter_id"] not in atbats_team_stat_data):                                  
                                 flip_lineup = (battingteam == "San Francisco Lovers") and (season == 13) and (day > 27)                                                                        
-                                atbats_team_stat_data = get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitchername, pitchingteam, battingteam, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, special_cases)                                                            
+                                atbats_team_stat_data = get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitchername, pitchingteam, battingteam, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data, int(batter_perf["num_innings"]), flip_lineup, terms, special_cases, outs_pi=3, baseline=baseline)                                                            
                             bat_bat_counter, bat_fail_counter, batman_fail_by, actual_result, real_val = calc_func(eventofinterest, batter_perf, season_team_attrs, atbats_team_stat_data, pitcher_stat_data, pitchername, 
                                                                                         batter_perf["batter_id"], lineup_size, terms, special_cases, game, battingteam, pitchingteam, None, None)                              
                             minimum_atbats += int(batter_perf["at_bats"]) + batman_fail_by
@@ -945,6 +955,14 @@ def minimize_batman_func(parameters, *data):
                             pos_fail_counter += abs(batman_fail_by)
                         else:
                             zero_counter += 1
+
+                        #if eventofinterest == "abs" and abs(batman_fail_by) > 11:
+                         #   print("failed by {:.4f}, batman calc value {:.2f}, actual value = {:.2f}".format(batman_fail_by, batman_fail_by + real_val, real_val))
+                        #if eventofinterest == "hits" and abs(batman_fail_by) > 6:
+                         #   print("failed by {:.4f}, actual {}, batman hits per atbat value {:.4f}, actual hits per atbat value = {:.4f}".format(batman_fail_by, real_val, (batman_fail_by + real_val) / (int(batter_perf["at_bats"])), real_val / (int(batter_perf["at_bats"]))))
+                        #if eventofinterest == "hrs" and abs(batman_fail_by) > 4:
+                         #   print("failed by {:.4f}, actual {}, batman hrs per atbat value {:.4f}, actual hrs per atbat value = {:.4f}".format(batman_fail_by, real_val, (batman_fail_by + real_val) / (int(batter_perf["at_bats"])), real_val / (int(batter_perf["at_bats"]))))                        
+
                         if bat_bat_counter:                    
                             if batman_fail_by > batman_max_err:
                                 batman_max_err = batman_fail_by
@@ -1024,7 +1042,7 @@ def minimize_batman_func(parameters, *data):
         if pass_exact > BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if batman_max_err >= batman_min_err:            
-            fail_points = (fail_rate * 100.0 * zero_avg_error * 0.1) + (pos_fail_rate * 100.0 * pos_avg_error * 3.0) - (pass_exact * 2.0)            
+            fail_points = (fail_rate * 100.0 * (pos_avg_error + zero_avg_error) * 0.1) + (pos_fail_rate * 100.0 * (pos_avg_error + zero_avg_error) * 3.0) - (pass_exact * 2.0)            
             print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format((batman_max_err - batman_min_err), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                        
             linear_fail = (((batman_max_err - batman_min_err) ** ((pos_avg_error * 2.0) + zero_avg_error)) * 100.0) + fail_points    
     if linear_fail < BEST_RESULT:

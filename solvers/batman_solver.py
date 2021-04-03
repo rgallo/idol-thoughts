@@ -52,7 +52,7 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
             except ValueError:
                 batman = -10000      
             if math.isnan(batman):
-                batman = -10000
+                batman = -10000            
             if eventofinterest == "hits":            
                 if (hits - 0.25) < (batman * atbats) < (hits + 0.25):                
                     fail_batman -= 1
