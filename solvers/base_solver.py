@@ -756,7 +756,7 @@ def minimize_batman_func(parameters, *data):
                 if batman_fail_by < batman_min_err:
                     batman_min_err = batman_fail_by
                     min_err_actual = actual_result            
-            if ((batman_max_err - batman_min_err) > WORST_ERROR) or ((batman_max_err - batman_min_err) >= BASELINE_ERROR):
+            if max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR:
                 reject_solution = True
                 REJECTS += 1
                 break            
@@ -970,7 +970,7 @@ def minimize_batman_func(parameters, *data):
                             if batman_fail_by < batman_min_err:
                                 batman_min_err = batman_fail_by
                                 min_err_actual = actual_result                        
-                        if ((batman_max_err - batman_min_err) > WORST_ERROR) or ((batman_max_err - batman_min_err) >= BASELINE_ERROR):
+                        if max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR:
                             reject_solution = True
                             REJECTS += 1
                             LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
@@ -1032,8 +1032,7 @@ def minimize_batman_func(parameters, *data):
     # need to sort win_loss to match up with what will be the sorted set of vals
     # also need to only do this when solving MOFO
     linear_fail = 90000000000.0
-    fail_points = 90000000000.0
-    multi = pos_avg_error + (zero_avg_error if zero_avg_error > 0 else (pos_avg_error * 2))
+    fail_points = 90000000000.0    
     if not reject_solution:        
         pass_exact = (pass_exact / bat_pos_counter) * 100.0
         pass_within_one = (pass_within_one / bat_pos_counter) * 100.0
@@ -1043,15 +1042,15 @@ def minimize_batman_func(parameters, *data):
         if pass_exact > BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if batman_max_err >= batman_min_err:            
-            fail_points = (fail_rate * 100.0 * multi * 0.1) + (pos_fail_rate * 100.0 * multi * 3.0) - (pass_exact * 2.0)            
+            fail_points = (fail_rate * 100.0 * zero_avg_error * 0.1) + (pos_fail_rate * 100.0 * pos_avg_error * 3.0) - (pass_exact * 2.0)            
             print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format((batman_max_err - batman_min_err), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                        
-            linear_fail = (((batman_max_err - batman_min_err) ** (pos_avg_error + multi)) * 100.0) + fail_points    
+            linear_fail = (((max(abs(batman_max_err), abs(batman_min_err))) ** (pos_avg_error + zero_avg_error)) * 100.0) + fail_points    
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact
         BEST_FAIL_RATE = pos_fail_rate
-        BEST_UNEXVAR_ERROR = batman_unexvar        
-        WORST_ERROR = (batman_max_err - batman_min_err)  
+        BEST_UNEXVAR_ERROR = batman_unexvar            
+        WORST_ERROR = max(abs(batman_max_err), abs(batman_min_err))
         maxevent = 0    
         if eventofinterest == "abs":
             maxevent = max_atbats
@@ -1060,7 +1059,7 @@ def minimize_batman_func(parameters, *data):
         if eventofinterest == "hrs":
             maxevent = max_homers
         if CURRENT_ITERATION == 1:
-            BASELINE_ERROR = (batman_max_err - batman_min_err)
+            BASELINE_ERROR = max(abs(batman_max_err), abs(batman_min_err))
         LINE_JUMP_GAMES.clear()
         terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_batman_list_size)])] * 3)))            
         special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases))
