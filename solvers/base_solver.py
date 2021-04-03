@@ -1033,6 +1033,7 @@ def minimize_batman_func(parameters, *data):
     # also need to only do this when solving MOFO
     linear_fail = 90000000000.0
     fail_points = 90000000000.0
+    multi = pos_avg_error + (zero_avg_error if zero_avg_error > 0 else pos_avg_error)
     if not reject_solution:        
         pass_exact = (pass_exact / bat_pos_counter) * 100.0
         pass_within_one = (pass_within_one / bat_pos_counter) * 100.0
@@ -1042,7 +1043,7 @@ def minimize_batman_func(parameters, *data):
         if pass_exact > BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if batman_max_err >= batman_min_err:            
-            fail_points = (fail_rate * 100.0 * (pos_avg_error + zero_avg_error) * 0.1) + (pos_fail_rate * 100.0 * (pos_avg_error + zero_avg_error) * 3.0) - (pass_exact * 2.0)            
+            fail_points = (fail_rate * 100.0 * multi * 0.1) + (pos_fail_rate * 100.0 * multi * 3.0) - (pass_exact * 2.0)            
             print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format((batman_max_err - batman_min_err), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                        
             linear_fail = (((batman_max_err - batman_min_err) ** ((pos_avg_error * 2.0) + zero_avg_error)) * 100.0) + fail_points    
     if linear_fail < BEST_RESULT:
