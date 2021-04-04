@@ -110,7 +110,7 @@ def calc_stlatmod(name, pitcher_data, batter_data, team_data, stlatterm):
             stlatname = "groundFriction"
         value = max([row[stlatname] for row in team_data])
     normalized_value = stlatterm.calc(value)
-    base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))                
+    base_multiplier = logistic_transform(normalized_value)
     multiplier = 2.0 * base_multiplier
     return multiplier
 
@@ -185,7 +185,7 @@ def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
             if type(stlatterm) == ParkTerm:            
                 value = ballpark[ballparkstlat]
                 normalized_value = stlatterm.calc(value)
-                base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
+                base_multiplier = logistic_transform(normalized_value)
                 if value > 0.5:
                     multiplier = 2.0 * base_multiplier
                 elif value < 0.5:
@@ -195,6 +195,13 @@ def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 awayMods[playerstlat].append(multiplier)
                 homeMods[playerstlat].append(multiplier)    
     return awayMods, homeMods
+
+def logistic_transform(value):
+    try:
+       transformed_value = (1.0 / (1.0 + (2.0 ** (-1.0 * value))))
+    except OverflowError:
+       transformed_value = 1.0
+    return transformed_value
 
 def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods):
     if eventofinterest == "hits":
@@ -264,8 +271,8 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
             if math.isnan(hits_hrs_walks_raw):                
                 for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
                     team_atbat_data[bat_id] = -10000.0
-                return team_atbat_data            
-            hits_hrs_walks = (1.0 / (1.0 + (2.0 ** (-1.0 * hits_hrs_walks_raw))))
+                return team_atbat_data                          
+            hits_hrs_walks = logistic_transform(hits_hrs_walks_raw)            
             hits_hrs_walks = hits_hrs_walks if (hits_hrs_walks > float(factor_const)) else 0.0
             outs_pg += hits_hrs_walks if not baseline else 0.0
             team_atbat_data[batter_id] += 1.0                      
@@ -281,8 +288,8 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 #print("Unrealistic number of atbats caught, {} in {} innings".format(team_atbat_data[batter_id], innings))
                 return team_atbat_data            
             remainder = (outs_pg - current_outs)
-            if not baseline:
-                added_out = (1.0 / (1.0 + (2.0 ** (-1.0 * (baserunners_out * 0.5)))))
+            if not baseline:                
+                added_out = logistic_transform(baserunners_out * 0.5)                
                 current_outs += 1 + added_out                
             else:
                 current_outs += 1
@@ -309,8 +316,8 @@ def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team
     factor_exp, factor_const = special_cases["factors"][:2]
     defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
     pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods, float(factor_exp))    
-    batman_raw = (pitcher_batter - (defense * 0.5)) 
-    batman = (1.0 / (1.0 + (2.0 ** (-1.0 * batman_raw))))
+    batman_raw = (pitcher_batter - (defense * 0.5))     
+    batman = logistic_transform(batman_raw)    
     batman = batman if (batman > float(factor_const)) else 0.0
     return batman
 
