@@ -21,7 +21,7 @@ BALLPARK_CACHE = {}
 GAME_CACHE = {}
 BATTER_CACHE = {}
 
-BEST_RESULT = 10000000000.0
+BEST_RESULT = 8000000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
 BEST_UNEXVAR_ERROR = -100.0
@@ -34,6 +34,7 @@ TOTAL_GAME_COUNTER = 0
 MAX_OBSERVED_DIFFERENCE = 0.0
 BEST_UNMOD = 1000000000000.0
 WORST_ERROR = 1000000000.0
+MAX_INTEREST = 1000000000.0
 BASELINE_ERROR = 1000000000.0
 SEASON_GAMES = 1188
 REJECTS = 0
@@ -584,6 +585,7 @@ def minimize_batman_func(parameters, *data):
     global MAX_OBSERVED_DIFFERENCE    
     global HAS_GAMES
     global WORST_ERROR
+    global MAX_INTEREST
     global BASELINE_ERROR
     global REJECTS
     global LAST_ITERATION_TIME
@@ -704,7 +706,7 @@ def minimize_batman_func(parameters, *data):
                 if batman_fail_by < batman_min_err:
                     batman_min_err = batman_fail_by
                     min_err_actual = actual_result            
-            if max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR:
+            if (max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR) or (max(abs(batman_max_err), abs(batman_min_err)) >= MAX_INTEREST):
                 reject_solution = True
                 REJECTS += 1
                 break            
@@ -722,9 +724,9 @@ def minimize_batman_func(parameters, *data):
                         pass_within_two += 1
                         if abs(batman_fail_by) < stageone:
                             pass_within_one += 1
-                            if abs(batman_fail_by) < stageexact:
+                            if abs(batman_fail_by) <= stageexact:
                                 pass_exact += 1      
-            if (abs(batman_fail_by) > stageexact) and real_val > 0:                
+            if (abs(batman_fail_by) > stageexact) and (real_val > 0):                
                 bat_pos_counter += bat_bat_counter
                 fail_pos_counter += bat_fail_counter
                 batman_unexvar += batman_fail_by ** 2.0
@@ -918,7 +920,7 @@ def minimize_batman_func(parameters, *data):
                             if batman_fail_by < batman_min_err:
                                 batman_min_err = batman_fail_by
                                 min_err_actual = actual_result                        
-                        if max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR:
+                        if (max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR) or (max(abs(batman_max_err), abs(batman_min_err)) >= MAX_INTEREST):
                             reject_solution = True
                             REJECTS += 1
                             LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
@@ -937,9 +939,9 @@ def minimize_batman_func(parameters, *data):
                                     pass_within_two += 1
                                     if abs(batman_fail_by) < stageone:
                                         pass_within_one += 1
-                                        if abs(batman_fail_by) < stageexact:
+                                        if abs(batman_fail_by) <= stageexact:
                                             pass_exact += 1      
-                        if (abs(batman_fail_by) > stageexact) and real_val > 0:                
+                        if (abs(batman_fail_by) > stageexact) and (real_val > 0):                
                             bat_pos_counter += bat_bat_counter
                             fail_pos_counter += bat_fail_counter
                             batman_unexvar += batman_fail_by ** 2.0
@@ -993,8 +995,9 @@ def minimize_batman_func(parameters, *data):
         fail_rate, pos_fail_rate, zero_fail_rate = 1.0, 1.0, 1.0
     # need to sort win_loss to match up with what will be the sorted set of vals
     # also need to only do this when solving MOFO
-    linear_fail = 90000000000.0
-    fail_points = 90000000000.0    
+    use_zero_error = zero_avg_error if (zero_avg_error > 0 or pos_avg_error < 0.5) else (pos_avg_error * 2)
+    linear_fail = 9000000000000.0
+    fail_points = 9000000000000.0    
     if not reject_solution:        
         pass_exact = (pass_exact / bat_pos_counter) * 100.0
         pass_within_one = (pass_within_one / bat_pos_counter) * 100.0
@@ -1003,10 +1006,10 @@ def minimize_batman_func(parameters, *data):
         pass_within_four = (pass_within_four / bat_pos_counter) * 100.0
         if pass_exact > BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, zero fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, zero_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
-        if batman_max_err >= batman_min_err:            
-            fail_points = (zero_fail_rate * 100.0 * zero_avg_error * 0.1) + (pos_fail_rate * 100.0 * pos_avg_error * 3.0) - (pass_exact * 5.0)            
-            #print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format((batman_max_err - batman_min_err), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                        
-            linear_fail = (((max(abs(batman_max_err), abs(batman_min_err))) ** (pos_avg_error + zero_avg_error)) * 100.0) + fail_points    
+        if batman_max_err >= batman_min_err:                        
+            fail_points = (zero_fail_rate * 100.0 * use_zero_error * 0.1) + (pos_fail_rate * 100.0 * pos_avg_error * 3.0) - (pass_exact * 5.0)            
+            #print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format(max(abs(batman_max_err), abs(batman_min_err)), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                        
+            linear_fail = (max(abs(batman_max_err), abs(batman_min_err)) * 100.0) + fail_points
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact
@@ -1084,6 +1087,12 @@ def minimize_batman_func(parameters, *data):
                         check_max_homers = homers if (homers > check_max_homers) else check_max_homers
                         check_max_atbats = atbats if (atbats > check_max_atbats) else check_max_atbats
         print("Maximums in cached data: hits = {}, homers = {}, atbats = {}, batters = {}".format(check_max_hits, check_max_homers, check_max_atbats, total_batters))
+        if eventofinterest == "hits":
+            MAX_INTEREST = check_max_hits
+        elif eventofinterest == "hrs":
+            MAX_INTEREST = check_max_homers
+        else:
+            MAX_INTEREST = max(abs(batman_max_err), abs(batman_min_err))
     CURRENT_ITERATION += 1      
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()

@@ -235,7 +235,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
     factor_exp, factor_const, reverberation, repeating = special_cases
     team_atbat_data = {} 
     batting_mods_by_Id = {}
-    atbats = 0.0
+    atbats, hhw_tally = 0.0, 0.0
     batters = team_pid_stat_data.get(battingteam)            
     hits_hrs_walks, hits_hrs_walks_raw, remainder = 0.0, 0.0, 0.0 
     ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"], reverse=flip_lineup)    
@@ -275,6 +275,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
             hits_hrs_walks = logistic_transform(hits_hrs_walks_raw)            
             hits_hrs_walks = hits_hrs_walks if (hits_hrs_walks > float(factor_const)) else 0.0
             outs_pg += hits_hrs_walks if not baseline else 0.0
+            hhw_tally += hits_hrs_walks if not baseline else 0.0
             team_atbat_data[batter_id] += 1.0                      
             if team_pid_stat_data[battingteam][batter_id]["reverberating"] and not baseline:                        
                 team_atbat_data[batter_id] += reverberation
@@ -288,11 +289,11 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 #print("Unrealistic number of atbats caught, {} in {} innings".format(team_atbat_data[batter_id], innings))
                 return team_atbat_data            
             remainder = (outs_pg - current_outs)
-            if not baseline:                
-                added_out = logistic_transform(baserunners_out * 0.5)                
-                current_outs += 1 + added_out                
-            else:
-                current_outs += 1
+            if (not baseline) and (hhw_tally > 1.0):                
+                added_out = logistic_transform(baserunners_out)
+                current_outs += added_out
+                hhw_tally -= 1.0            
+            current_outs += 1
         #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup        
         if guaranteed_hhw >= active_batters:
             for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):

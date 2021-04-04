@@ -57,14 +57,14 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
             if math.isnan(batman):
                 batman = -10000            
             if eventofinterest == "hits":            
-                if (hits - 0.25) < (batman * atbats) < (hits + 0.25):                
+                if (hits - 0.5) < (batman * atbats) < (hits + 0.5):                
                     fail_batman -= 1
                 fail_batman_by = (batman * atbats) - hits
                 batman_val = (batman * atbats)
                 real_val = hits
                 actual = "{} hits, batman {:.4f}".format(hits, (batman * atbats))
             elif eventofinterest == "hrs":
-                if (homers - 0.25) < (batman * atbats) < (homers + 0.25):
+                if (homers - 0.5) < (batman * atbats) < (homers + 0.5):
                     fail_batman -= 1
                 fail_batman_by = (batman * atbats) - homers
                 batman_val = (batman * atbats)
@@ -132,15 +132,15 @@ def main():
         games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
-        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.07, 0.22)]
+        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.07, 0.22)]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.02, 0.18)]
+        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.02, 0.18)]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.02, 0.12), (0, 0.02), (0, 0.02)]
+        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.02, 0.12), (0, 0.02), (0, 0.02)]
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
     modterms = [modterm for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
