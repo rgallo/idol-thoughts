@@ -26,7 +26,7 @@ def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, b
     pitcher_exp = factor_exp if pitcher_raw > 0 else 1.0
     batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingmods)
     batter_exp = factor_exp if batter_raw > 0 else 1.0
-    pitcher_batter = ((batter_raw ** batter_exp) - (pitcher_raw ** pitcher_exp)) / 100.0
+    pitcher_batter = ((batter_raw * 5.0 / 7.0) ** batter_exp) - ((pitcher_raw ** pitcher_exp) * 10.0)
     return pitcher_batter
 
 def calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, mods):
@@ -55,7 +55,7 @@ def calc_batter(terms, team_pid_stat_data, batter, battingteam, mods):
 def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter, pitchingmods, battingmods):    
     offense = calc_offense(terms, battingteam, team_pid_stat_data, batter, battingmods)
     defense = calc_defense(terms, pitchingteam, team_pid_stat_data, pitchingmods)
-    everything_else = (defense - offense) / 100.0
+    everything_else = defense - offense
     return everything_else
 
 def calc_offense(terms, battingteam, team_pid_stat_data, batter, mods):    
@@ -71,7 +71,8 @@ def calc_offense(terms, battingteam, team_pid_stat_data, batter, mods):
         ("maxcontinuation", max([row["continuation"] for row in batting_team_data])),
         ("maxgroundfriction", max([row["groundFriction"] for row in batting_team_data])),
         ("maxindulgence", max([row["indulgence"] for row in batting_team_data])))
-    return calc_team(terms, termset, mods, False)
+    offense = (calc_team(terms, termset, mods, False))
+    return offense
 
 def calc_defense(terms, pitchingteam, team_pid_stat_data, mods):
     pitching_team_data = [stlats for player_id, stlats in team_pid_stat_data[pitchingteam].items()]    
@@ -86,7 +87,7 @@ def calc_defense(terms, pitchingteam, team_pid_stat_data, mods):
         ("maxwatchfulness", max([row["watchfulness"] for row in pitching_team_data])),
         ("maxanticapitalism", max([row["anticapitalism"] for row in pitching_team_data])),
         ("maxchasiness", max([row["chasiness"] for row in pitching_team_data])))  
-    defense = (calc_team(terms, termset, mods, False)) / 100.0
+    defense = (calc_team(terms, termset, mods, False))
     return defense
 
 def calc_stlatmod(name, pitcher_data, batter_data, team_data, stlatterm):    
@@ -303,9 +304,9 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
 
 def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases):                     
     factor_exp, factor_const = special_cases["factors"][:2]
-    everythingelse = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
+    defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
     pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods, float(factor_exp))    
-    batman_raw = (pitcher_batter - everythingelse) 
+    batman_raw = (pitcher_batter - defense) 
     batman = (1.0 / (1.0 + (2.0 ** (-1.0 * batman_raw))))
     batman = batman if (batman > (float(factor_const) / 100.0)) else 0.0
     return batman

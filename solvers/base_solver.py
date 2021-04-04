@@ -494,9 +494,10 @@ def minimize_func(parameters, *data):
                 instinct_rate = (mod_fails[1] / mod_games[1]) * 100.0
                 ono_rate = (mod_fails[2] / mod_games[2]) * 100.0
                 #currently no new data available for WIP or EXB
-                #wip_rate = (mod_fails[3] / mod_games[3]) * 100.0
-                exk_rate = (mod_fails[4] / mod_games[4]) * 100.0
-                #exb_rate = (mod_fails[5] / mod_games[5]) * 100.0     
+                #wip_rate = (mod_fails[3] / mod_games[3]) * 100.0                
+                #exk_rate = (mod_fails[4] / mod_games[4]) * 100.0
+                #exk_rate = 0.0
+                exb_rate = (mod_fails[5] / mod_games[5]) * 100.0     
                 unmod_rate = ((fail_counter - sum(mod_fails)) / (game_counter - sum(mod_games))) * 100.0
                 #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB)) / 2.0                
                 #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK, BEST_UNMOD) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK, BEST_UNMOD)) * 1.02
@@ -636,7 +637,7 @@ def minimize_batman_func(parameters, *data):
     global REJECTS
     global LAST_ITERATION_TIME
     global LINE_JUMP_GAMES
-    eventofinterest, batter_list, calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept, debug, debug2, debug3, outputdir = data
+    eventofinterest, batter_list, calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept, establish_baseline, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)             
     park_mod_list_size = len(ballpark_list) * 3
     team_mod_list_size = len(mod_list) * 3
@@ -646,7 +647,7 @@ def minimize_batman_func(parameters, *data):
     ballpark_mods = collections.defaultdict(lambda: {"bpterm": {}})
     mod_mode = True            
     #special_cases = parameters[base_batman_list_size:-(team_mod_list_size + park_mod_list_size)] if special_case_list else []    
-    if CURRENT_ITERATION == 1:   
+    if CURRENT_ITERATION == 1 and establish_baseline:   
         baseline = True
         if eventofinterest == "abs":
             baseline_parameters = ([0, 0, 1] * len(stlat_list)) + [1, 0, 0, 0] + ([0, 0, 1] * len(mod_list)) + ([0, 0, 1] * len(ballpark_list))            
@@ -736,14 +737,7 @@ def minimize_batman_func(parameters, *data):
             fail_counter += bat_fail_counter                                                                  
             max_hits = int(batter_perf["hits"]) if (int(batter_perf["hits"]) > max_hits) else max_hits
             max_homers = int(batter_perf["home_runs"]) if (int(batter_perf["home_runs"]) > max_homers) else max_homers
-            max_atbats = int(batter_perf["at_bats"]) if (int(batter_perf["at_bats"]) > max_atbats) else max_atbats
-            if real_val > 0:
-                bat_pos_counter += bat_bat_counter
-                fail_pos_counter += bat_fail_counter
-                batman_unexvar += batman_fail_by ** 2.0
-                pos_fail_counter += abs(batman_fail_by)                
-            else:
-                zero_counter += 1
+            max_atbats = int(batter_perf["at_bats"]) if (int(batter_perf["at_bats"]) > max_atbats) else max_atbats            
 
             #if eventofinterest == "abs" and abs(batman_fail_by) > 11:
              #   print("failed by {:.4f}, batman calc value {:.2f}, actual value = {:.2f}".format(batman_fail_by, batman_fail_by + real_val, real_val))
@@ -752,7 +746,7 @@ def minimize_batman_func(parameters, *data):
             #if eventofinterest == "hrs" and abs(batman_fail_by) > 4:
              #   print("failed by {:.4f}, actual {}, batman hrs per atbat value {:.4f}, actual hrs per atbat value = {:.4f}".format(batman_fail_by, real_val, (batman_fail_by + real_val) / (int(batter_perf["at_bats"])), real_val / (int(batter_perf["at_bats"]))))
 
-            if bat_bat_counter:                    
+            if bat_bat_counter > 0:                    
                 if batman_fail_by > batman_max_err:
                     batman_max_err = batman_fail_by
                     max_err_actual = actual_result
@@ -779,8 +773,14 @@ def minimize_batman_func(parameters, *data):
                             pass_within_one += 1
                             if abs(batman_fail_by) < stageexact:
                                 pass_exact += 1      
+            if (abs(batman_fail_by) > stageexact) and real_val > 0:                
+                bat_pos_counter += bat_bat_counter
+                fail_pos_counter += bat_fail_counter
+                batman_unexvar += batman_fail_by ** 2.0
+                pos_fail_counter += abs(batman_fail_by)
             elif (abs(batman_fail_by) > stageexact) and (real_val == 0):
-                zero_fail_counter += abs(batman_fail_by)                                                                
+                zero_fail_counter += abs(batman_fail_by)      
+                zero_counter += 1
 
     for season in reversed(range(12, 15)):
         if reject_solution:
@@ -950,14 +950,7 @@ def minimize_batman_func(parameters, *data):
                         fail_counter += bat_fail_counter        
                         max_hits = int(batter_perf["hits"]) if (int(batter_perf["hits"]) > max_hits) else max_hits
                         max_homers = int(batter_perf["home_runs"]) if (int(batter_perf["home_runs"]) > max_homers) else max_homers
-                        max_atbats = int(batter_perf["at_bats"]) if (int(batter_perf["at_bats"]) > max_atbats) else max_atbats
-                        if real_val > 0:
-                            bat_pos_counter += bat_bat_counter
-                            fail_pos_counter += bat_fail_counter
-                            batman_unexvar += batman_fail_by ** 2.0
-                            pos_fail_counter += abs(batman_fail_by)
-                        else:
-                            zero_counter += 1
+                        max_atbats = int(batter_perf["at_bats"]) if (int(batter_perf["at_bats"]) > max_atbats) else max_atbats                                             
 
                         #if eventofinterest == "abs" and abs(batman_fail_by) > 11:
                          #   print("failed by {:.4f}, batman calc value {:.2f}, actual value = {:.2f}".format(batman_fail_by, batman_fail_by + real_val, real_val))
@@ -966,7 +959,7 @@ def minimize_batman_func(parameters, *data):
                         #if eventofinterest == "hrs" and abs(batman_fail_by) > 4:
                          #   print("failed by {:.4f}, actual {}, batman hrs per atbat value {:.4f}, actual hrs per atbat value = {:.4f}".format(batman_fail_by, real_val, (batman_fail_by + real_val) / (int(batter_perf["at_bats"])), real_val / (int(batter_perf["at_bats"]))))                        
 
-                        if bat_bat_counter:                    
+                        if bat_bat_counter > 0:
                             if batman_fail_by > batman_max_err:
                                 batman_max_err = batman_fail_by
                                 max_err_actual = actual_result
@@ -994,8 +987,15 @@ def minimize_batman_func(parameters, *data):
                                         pass_within_one += 1
                                         if abs(batman_fail_by) < stageexact:
                                             pass_exact += 1      
+                        if (abs(batman_fail_by) > stageexact) and real_val > 0:                
+                            bat_pos_counter += bat_bat_counter
+                            fail_pos_counter += bat_fail_counter
+                            batman_unexvar += batman_fail_by ** 2.0
+                            pos_fail_counter += abs(batman_fail_by)
                         elif (abs(batman_fail_by) > stageexact) and (real_val == 0):
-                            zero_fail_counter += abs(batman_fail_by)                                                
+                            zero_fail_counter += abs(batman_fail_by)      
+                            zero_counter += 1
+                
                     if not iscached_batters:                               
                         if (minimum_atbats < previous_innings * 3) and not omit_from_good_abs:
                             print("team did not achieve the requisite number of atbats for their minimum number of outs: {} at bats, {} outs".format(minimum_atbats, previous_innings * 3))
@@ -1022,16 +1022,22 @@ def minimize_batman_func(parameters, *data):
         season_end = datetime.datetime.now()
         # debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)      
     if not reject_solution:
-        print("Possible solution! {:.4f} error span, max = {:.4f}, min = {:.4f}".format(batman_max_err - batman_min_err, batman_max_err, batman_min_err))
-        if eventofinterest == "abs":            
-            zero_avg_error = 0.0            
+        #print("Possible solution! {:.4f} error span, max = {:.4f}, min = {:.4f}".format(batman_max_err - batman_min_err, batman_max_err, batman_min_err))
+        if eventofinterest == "abs" or zero_counter == 0:            
+            zero_avg_error = 0.0  
+            zero_fail_rate = 0.0
         else:
             zero_avg_error = zero_fail_counter / zero_counter
-        pos_avg_error = pos_fail_counter / bat_pos_counter
-        fail_rate = fail_counter / bat_counter
-        pos_fail_rate = fail_pos_counter / bat_pos_counter                
+            zero_fail_rate = (fail_counter - fail_pos_counter) / zero_counter
+        if bat_pos_counter > 0:
+            pos_avg_error = pos_fail_counter / bat_pos_counter
+            pos_fail_rate = fail_pos_counter / bat_pos_counter                
+        else:
+            pos_avg_error = 0
+            pos_fail_rate = 0
+        fail_rate = fail_counter / bat_counter        
     else:
-        fail_rate, pos_fail_rate = 1.0, 1.0
+        fail_rate, pos_fail_rate, zero_fail_rate = 1.0, 1.0, 1.0
     # need to sort win_loss to match up with what will be the sorted set of vals
     # also need to only do this when solving MOFO
     linear_fail = 90000000000.0
@@ -1043,10 +1049,10 @@ def minimize_batman_func(parameters, *data):
         pass_within_three = (pass_within_three / bat_pos_counter) * 100.0
         pass_within_four = (pass_within_four / bat_pos_counter) * 100.0
         if pass_exact > BEST_EXACT:            
-            debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
+            debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, zero fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, zero_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
         if batman_max_err >= batman_min_err:            
-            fail_points = (fail_rate * 100.0 * zero_avg_error * 0.1) + (pos_fail_rate * 100.0 * pos_avg_error * 3.0) - (pass_exact * 2.0)            
-            print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format((batman_max_err - batman_min_err), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                        
+            fail_points = (zero_fail_rate * 100.0 * zero_avg_error * 0.1) + (pos_fail_rate * 100.0 * pos_avg_error * 3.0) - (pass_exact * 5.0)            
+            #print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format((batman_max_err - batman_min_err), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                        
             linear_fail = (((max(abs(batman_max_err), abs(batman_min_err))) ** (pos_avg_error + zero_avg_error)) * 100.0) + fail_points    
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail
@@ -1085,7 +1091,7 @@ def minimize_batman_func(parameters, *data):
         detailtext += "\nactual val overest {}".format(max_err_actual)
         detailtext += "\nmaximum {} = {}".format(eventofinterest, maxevent)
         detailtext += "\nzero average error {:.4f}, pos average error {:.4f}".format(zero_avg_error, pos_avg_error)
-        detailtext += "\nBest so far - fail rate {:.4f}%, pos fail rate {:.4f}%".format(fail_rate * 100.0, pos_fail_rate * 100.0)
+        detailtext += "\nBest so far - fail rate {:.4f}%, pos fail rate {:.4f}%, zero fail rate {:.4f}% ".format(fail_rate * 100.0, pos_fail_rate * 100.0, zero_fail_rate * 100.0)
         debug_print(detailtext, debug, run_id)
         if outputdir:
             write_file(outputdir, run_id, eventofinterest + "details.txt", detailtext)                

@@ -1,9 +1,12 @@
 import argparse
 import json
 import math
+import numpy as np
 from scipy.optimize import differential_evolution
 import datetime
+import os
 import sys
+import re
 
 sys.path.append("..")
 from solvers import base_solver
@@ -96,19 +99,19 @@ def handle_args():
     return args
 
 
-def get_init_values(init_dir, popsize, is_random):
-    pattern = re.compile(r'^Best so far - fail rate (\d*.\d*)%, linear error (\d*.\d*)$', re.MULTILINE)
+def get_init_values(init_dir, eventofinterest, popsize, is_random):
+    pattern = re.compile(r'^Exact \(\+/- 0.10\) = ([\d\.]*)$', re.MULTILINE)
     results = []
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
     if len(job_ids) < popsize:
         raise Exception("Population is set to {} and there are only {} solutions, find more solutions or decrease pop size".format(popsize, len(job_ids)))
     for job_id in job_ids:
-        with open(os.path.join(init_dir, "{}-solution.json".format(job_id))) as solution_file, open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:
+        with open(os.path.join(init_dir, "{}-".format(job_id) + eventofinterest + "solution.json")) as solution_file, open(os.path.join(init_dir, "{}-".format(job_id) + eventofinterest + "details.txt")) as details_file:
             results.append((float(pattern.findall(details_file.read())[0][0]), json.load(solution_file)))
     if is_random:
         random.shuffle(results)
     else:
-        results.sort(key=lambda x: x[0])
+        results.sort(reverse=True, key=lambda x: x[0])
     return np.array([result[1] for result in results[:popsize]])
 
 
@@ -122,21 +125,22 @@ def main():
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)
     stlatlist = BATMAN_STLAT_LIST
     special_cases = BATMAN_SPECIAL_CASES
+    establish_baseline = False
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     with open("sweptelsewheregames.csv") as f_swelsewhere:
         games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
-        base_bounds = ([(-2, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (7, 11)]
+        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (7, 22)]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        base_bounds = ([(-2, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (2, 9)]
+        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (2, 18)]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        base_bounds = ([(-2, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (2, 6), (0, 0.02), (0, 0.02)]
+        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (2, 12), (0, 0.02), (0, 0.02)]
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
     modterms = [modterm for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
@@ -145,8 +149,10 @@ def main():
     parkterms = [modterm for modterm in BATMAN_BALLPARK_TERMS if modterm.playerstat.lower() in stlatlist]
     bounds = base_bounds + bounds_team + bounds_park            
     popsize = 25
-    init = get_init_values(cmd_args.init, popsize, cmd_args.random) if cmd_args.init else 'latinhypercube'
-    args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, modterms, parkterms, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, 
+    init = get_init_values(cmd_args.init, eventofinterest, popsize, cmd_args.random) if cmd_args.init else 'latinhypercube'
+    if str(init) == 'latinhypercube' or eventofinterest == "abs":
+        establish_baseline = True
+    args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, modterms, parkterms, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, establish_baseline, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=popsize, tol=0.0001, 
                                     mutation=(0.01, 1.99), recombination=0.7, workers=workers, maxiter=10000, init=init)
