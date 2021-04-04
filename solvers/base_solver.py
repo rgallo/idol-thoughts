@@ -43,8 +43,8 @@ LINE_JUMP_GAMES = {}
 HAS_GAMES = {}
 LAST_ITERATION_TIME = datetime.datetime.now()
 
-ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING"}
-ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING"}
+ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
+ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
@@ -138,7 +138,8 @@ def get_attrs_from_game(season_team_attrs, game, side):
     team_attrs = season_team_attrs.get(get_team_name(game["team_id"], int(game["season"]), int(game["day"])), [])
     for attr in team_attrs:
         if (attr == "TRAVELING" and side != "away") or (
-                attr == "AFFINITY_FOR_CROWS" and int(game["weather"]) != BIRD_WEATHER):
+                attr == "AFFINITY_FOR_CROWS" and int(game["weather"]) != BIRD_WEATHER) or (
+                attr == "HIGH_PRESSURE" and int(game["weather"]) != FLOOD_WEATHER):
             continue
         attrs.add(attr)
     return attrs
