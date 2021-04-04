@@ -56,6 +56,8 @@ def compare(byteam, season, mofo_list):
         awayScore, homeScore = gamedata["awayScore"], gamedata["homeScore"]
         mofoCorrect = (mofoodds > 50 and ((mofoIsAway and awayScore > homeScore) or (not mofoIsAway and homeScore > awayScore))) or (mofoodds < 50 and ((mofoIsAway and awayScore < homeScore) or (not mofoIsAway and homeScore < awayScore)))
         webCorrect = (awayOdds > homeOdds and awayScore > homeScore) or (awayOdds < homeOdds and awayScore < homeScore)
+        #mofoCorrect = (mofoodds > 50 and ((mofoIsAway and awayrbi > homerbi) or (not mofoIsAway and homerbi > awayrbi))) or (mofoodds < 50 and ((mofoIsAway and awayrbi < homerbi) or (not mofoIsAway and homerbi < awayrbi)))
+        #webCorrect = (awayOdds > homeOdds and awayrbi > homerbi) or (awayOdds < homeOdds and awayrbi < homerbi)
         isdadbet = (min(mofoodds, othermofoodds) * webodds_payout((min(awayOdds, homeOdds)) / 100.0, 1)) > 1.0 and (min(mofoodds, othermofoodds) * webodds_payout((min(awayOdds, homeOdds)) / 100.0, 1)) > (max(mofoodds, othermofoodds) * webodds_payout((max(awayOdds, homeOdds)) / 100.0, 1))
         if isdadbet: 
             dadbets += 1

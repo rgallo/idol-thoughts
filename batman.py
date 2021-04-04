@@ -26,7 +26,7 @@ def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, b
     pitcher_exp = factor_exp if pitcher_raw > 0 else 1.0
     batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingmods)
     batter_exp = factor_exp if batter_raw > 0 else 1.0
-    pitcher_batter = ((batter_raw * 5.0 / 7.0) ** batter_exp) - ((pitcher_raw ** pitcher_exp) * 10.0)
+    pitcher_batter = ((batter_raw * 5.0 / 7.0) ** batter_exp) - (pitcher_raw ** pitcher_exp)
     return pitcher_batter
 
 def calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, mods):
@@ -263,7 +263,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                     team_atbat_data[bat_id] = -10000.0
                 return team_atbat_data            
             hits_hrs_walks = (1.0 / (1.0 + (2.0 ** (-1.0 * hits_hrs_walks_raw))))
-            hits_hrs_walks = hits_hrs_walks if (hits_hrs_walks > (float(factor_const) / 100.0)) else 0.0
+            hits_hrs_walks = hits_hrs_walks if (hits_hrs_walks > float(factor_const)) else 0.0
             outs_pg += hits_hrs_walks if not baseline else 0.0
             team_atbat_data[batter_id] += 1.0                      
             if team_pid_stat_data[battingteam][batter_id]["reverberating"] and not baseline:                        
@@ -308,7 +308,7 @@ def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team
     pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods, float(factor_exp))    
     batman_raw = (pitcher_batter - defense) 
     batman = (1.0 / (1.0 + (2.0 ** (-1.0 * batman_raw))))
-    batman = batman if (batman > (float(factor_const) / 100.0)) else 0.0
+    batman = batman if (batman > float(factor_const)) else 0.0
     return batman
 
 

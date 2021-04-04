@@ -132,15 +132,15 @@ def main():
         games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
-        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (7, 22)]
+        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.07, 0.22)]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (2, 18)]
+        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.02, 0.18)]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (2, 12), (0, 0.02), (0, 0.02)]
+        base_bounds = ([(-8, 8), (0, 3), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.02, 0.12), (0, 0.02), (0, 0.02)]
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
     modterms = [modterm for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]

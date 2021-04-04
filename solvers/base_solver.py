@@ -489,15 +489,17 @@ def minimize_func(parameters, *data):
             if not mod_mode:
                 fail_points = ((fail_rate * 1000.0) ** 2) * 2.5        
                 linear_fail = fail_points + linear_points
-            else:        
+            else:                        
                 love_rate = (mod_fails[0] / mod_games[0]) * 100.0
                 instinct_rate = (mod_fails[1] / mod_games[1]) * 100.0
                 ono_rate = (mod_fails[2] / mod_games[2]) * 100.0
                 #currently no new data available for WIP or EXB
                 #wip_rate = (mod_fails[3] / mod_games[3]) * 100.0                
-                #exk_rate = (mod_fails[4] / mod_games[4]) * 100.0
-                #exk_rate = 0.0
-                exb_rate = (mod_fails[5] / mod_games[5]) * 100.0     
+                if mod_games[4] > 0:
+                    exk_rate = (mod_fails[4] / mod_games[4]) * 100.0
+                else:
+                    exk_rate = 0.0
+                #exb_rate = (mod_fails[5] / mod_games[5]) * 100.0     
                 unmod_rate = ((fail_counter - sum(mod_fails)) / (game_counter - sum(mod_games))) * 100.0
                 #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_WIP, BEST_EXK, BEST_EXB)) / 2.0                
                 #tolerance = (max(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK, BEST_UNMOD) - min(BEST_LOVE, BEST_INSTINCT, BEST_ONO, BEST_EXK, BEST_UNMOD)) * 1.02
@@ -555,7 +557,7 @@ def minimize_func(parameters, *data):
             if mvm_games > 0:
                 detailtext += "\n{:.4f}% mod vs mod fail rate, {} games".format((mvm_fails / mvm_games) * 100.0, mvm_games)
             #detailtext += "\n{:.4f}% Extra Base fail rate, Best {:.4f}%".format(exb_rate, BEST_EXB)
-            detailtext += "\nBest so far - fail rate {:.4f}%, linear error {:.4f}".format(fail_rate * 100.0, linear_error)
+            detailtext += "\nBest so far - Linear fail {:.4f}, fail rate {:.4f}%".format(linear_fail, fail_rate * 100.0)
             detailtext += "\nMax linear error {:.4f}% ({:.4f} actual, {:.4f} calculated), Min linear error {:.4f}%".format(max_linear_error, max_error_ratio, max_error_value, min_linear_error)
             debug_print(detailtext, debug, run_id)
             if outputdir:
