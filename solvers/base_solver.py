@@ -48,6 +48,7 @@ ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE"
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
+FLOOD_WEATHER = get_weather_idx("Flooding")
 
 
 def get_pitcher_id_lookup(filename):
