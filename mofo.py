@@ -101,9 +101,12 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
     lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
     bird_weather = helpers.get_weather_idx("Birds")    
+    flood_weather = helpers.get_weather_idx("Flooding")    
     for attr in mods:
-        # Special case for Affinity for Crows
+        # Special case for Affinity for Crows and High Pressure
         if attr == "affinity_for_crows" and weather != bird_weather:
+            continue
+        if attr == "high_pressure" and weather != flood_weather:
             continue
         if attr in lowerAwayAttrs:            
             for name, stlatterm in mods[attr]["same"].items():

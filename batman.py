@@ -143,6 +143,7 @@ def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
     lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
     bird_weather = helpers.get_weather_idx("Birds")    
+    flood_weather = helpers.get_weather_idx("Flooding")    
     batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter]
     batter_data = batter_list_dict[0]
     batting_team_data = [stlats for player_id, stlats in team_stat_data[battingteam].items() if (player_id != batter and not stlats.get("shelled", False))]
@@ -158,6 +159,8 @@ def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
     for attr in mods:
         # Special case for Affinity for Crows
         if attr == "affinity_for_crows" and weather != bird_weather:
+            continue
+        if attr == "high_pressure" and weather != flood_weather:
             continue
         if attr in lowerAwayAttrs:            
             for name, stlatterm in mods[attr]["same"].items():
