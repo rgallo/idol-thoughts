@@ -125,7 +125,7 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
     for ballparkstlat, stlatterms in ballpark_mods.items():        
         for playerstlat, stlatterm in stlatterms.items():
             if type(stlatterm) == ParkTerm:            
-                value = ballpark[ballparkstlat]
+                value = ballpark[ballparkstlat]                
                 normalized_value = stlatterm.calc(value)
                 base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
                 if value > 0.5:
@@ -170,9 +170,12 @@ def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitch
     home_defense = abs(team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data,
                                     skip_mods=skip_mods))
     numerator = (away_offense - home_defense) - (home_offense - away_defense)
-    denominator = (away_offense - home_defense) + (home_offense - away_defense)
+    denominator = (away_offense - home_defense) + (home_offense - away_defense)    
     if not denominator:
-        return .5, .5
-    away_formula = numerator / denominator
-    away_odds = (1 / (1 + 100 ** (-1 * away_formula)))
+        return .5, .5    
+    away_formula = numerator / denominator    
+    try:
+        away_odds = (1 / (1 + (100 ** (-1 * away_formula))))
+    except OverflowError:
+        away_odds = 1.0
     return away_odds, 1.0 - away_odds
