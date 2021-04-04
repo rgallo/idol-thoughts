@@ -259,7 +259,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
             pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, defenseMods, batting_mods_by_Id[batter_id], float(factor_exp))            
             defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
             baserunners_out = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, defenseMods, batting_mods_by_Id[batter_id]) 
-            hits_hrs_walks_raw = (pitcher_batter - defense)
+            hits_hrs_walks_raw = (pitcher_batter - (defense * 0.5))
             #catch nan and also 3 atbats per inning as a fail state
             if math.isnan(hits_hrs_walks_raw):                
                 for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
@@ -282,7 +282,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 return team_atbat_data            
             remainder = (outs_pg - current_outs)
             if not baseline:
-                added_out = (1.0 / (1.0 + (2.0 ** (-1.0 * (baserunners_out)))))
+                added_out = (1.0 / (1.0 + (2.0 ** (-1.0 * (baserunners_out * 0.5)))))
                 current_outs += 1 + added_out                
             else:
                 current_outs += 1
@@ -309,7 +309,7 @@ def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team
     factor_exp, factor_const = special_cases["factors"][:2]
     defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
     pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods, float(factor_exp))    
-    batman_raw = (pitcher_batter - defense) 
+    batman_raw = (pitcher_batter - (defense * 0.5)) 
     batman = (1.0 / (1.0 + (2.0 ** (-1.0 * batman_raw))))
     batman = batman if (batman > float(factor_const)) else 0.0
     return batman

@@ -64,7 +64,7 @@ def handle_args():
 
 
 def get_init_values(init_dir, popsize, is_random, is_worst):
-    pattern = re.compile(r'^Best so far - fail rate (\d*.\d*)%, linear error (\d*.\d*)$', re.MULTILINE)
+    pattern = re.compile(r'^Best so far - Linear fail (\d*.\d*), fail rate (\d*.\d*)%$', re.MULTILINE)
     results = []
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
     if len(job_ids) < popsize:

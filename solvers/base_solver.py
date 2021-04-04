@@ -453,17 +453,15 @@ def minimize_func(parameters, *data):
                     if mod_games[name] > 0:
                         mod_rates[name] = (mod_fails[name] / mod_games[name]) * 100.0
                         max_fail_rate = mod_rates[name] if (mod_rates[name] > max_fail_rate) else max_fail_rate
-                if unmod_games > 0:
-                    unmod_rate = (unmod_fails / unmod_games) * 100.0
-                    max_fail_rate = unmod_rate if (unmod_rate > max_fail_rate) else max_fail_rate
-                    
-                for name in mod_rates:              
                     if name not in BEST_MOD_RATES:
                         BEST_MOD_RATES[name] = 10000000.0
                     if mod_rates[name] <= BEST_MOD_RATES[name]:
                         calculate_solution = True
-                if unmod_rate <= BEST_UNMOD:
-                    calculate_solution = True
+                if unmod_games > 0:
+                    unmod_rate = (unmod_fails / unmod_games) * 100.0
+                    max_fail_rate = unmod_rate if (unmod_rate > max_fail_rate) else max_fail_rate                                                          
+                    if unmod_rate <= BEST_UNMOD:
+                        calculate_solution = True
 
                 if calculate_solution:                                            
                     fail_points = (fail_rate * 100.0) * max_fail_rate * 250.0
