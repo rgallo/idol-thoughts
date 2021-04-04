@@ -55,11 +55,11 @@ def parse_terms(data, special_case_list):
 
 
 def parse_bp_terms(data):
-    results = {}
+    results = collections.defaultdict(lambda: {"bpterm": {}})
     splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
     for row in splitdata:
-        hometeam, bpstlat, stlat = row[0].lower(), row[1].lower(), row[2].lower()
-        results[hometeam][bpstlat][stlat] = ParkTerm(float(row[3]), float(row[4]), float(row[5]))
+        bpstlat, stlat = row[0].lower(), row[1].lower()        
+        results[bpstlat][stlat] = ParkTerm(float(row[2]), float(row[3]), float(row[4]))
     return results
 
 
