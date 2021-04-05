@@ -1031,9 +1031,9 @@ def minimize_batman_func(parameters, *data):
         if pass_exact >= BEST_EXACT:            
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, zero fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(fail_rate, pos_fail_rate, zero_fail_rate, pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
             if batman_max_err >= batman_min_err:                        
-                fail_points = (zero_fail_rate * 10.0 * use_zero_error) + (pos_fail_rate * 300.0 * pos_avg_error) - (pass_exact * 5.0)            
+                fail_points = (zero_fail_rate * 10.0 * use_zero_error) + (pos_fail_rate * 300.0 * pos_avg_error) + ((100.0 - pass_exact) * 5.0)
                 #print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format(max(abs(batman_max_err), abs(batman_min_err)), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                        
-                linear_fail = ((abs(batman_max_err) + abs(batman_min_err) - (pass_exact / 50.0)) * 100.0) + fail_points
+                linear_fail = ((abs(batman_max_err) + abs(batman_min_err)) * 100.0) + fail_points
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact
