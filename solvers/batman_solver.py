@@ -27,9 +27,9 @@ BATMAN_ABS_STLAT_LIST = ("tragicness", "patheticism", "thwackability", "divinity
                  "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness",
                  "maxlaserlikeness", "maxbasethirst", "maxcontinuation", "maxgroundfriction", "maxindulgence")
 
-BATMAN_SPECIAL_CASES = ("exponent", "everythingelse")
+BATMAN_SPECIAL_CASES = ("battingexponent", "pitchingexponent", "everythingelse")
 
-BATMAN_ABS_SPECIAL_CASES = ("exponent", "everythingelse", "reverberation", "repeating")
+BATMAN_ABS_SPECIAL_CASES = ("battingexponent", "pitchingexponent", "everythingelse", "reverberation", "repeating")
 
 
 def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, team_stat_data, pitcher_stat_data, pitcher, batter, lineup_size, terms, special_cases, game, battingteam, pitchingteam, pitchingmods, battingmods):
@@ -132,15 +132,15 @@ def main():
         games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
-        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.07, 0.22)]
+        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (1, 3), (0.07, 0.22)]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.02, 0.18)]
+        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (1, 3), (0.02, 0.18)]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (0.02, 0.12), (0, 0.02), (0, 0.02)]
+        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 1), (1, 3), (0.02, 0.12), (0, 0.02), (0, 0.02)]
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
     modterms = [modterm for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
@@ -150,7 +150,7 @@ def main():
     bounds = base_bounds + bounds_team + bounds_park            
     popsize = 25
     init = get_init_values(cmd_args.init, eventofinterest, popsize, cmd_args.random) if cmd_args.init else 'latinhypercube'
-    if str(init) == 'latinhypercube' or eventofinterest == "abs":
+    if eventofinterest == "abs":
         establish_baseline = True
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, modterms, parkterms, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, establish_baseline, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)

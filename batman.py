@@ -21,12 +21,12 @@ def calc_team(terms, termset, mods, skip_mods=False):
         total += term.calc(val) * multiplier        
     return total
             
-def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, pitchingmods, battingmods, factor_exp):
+def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, pitchingmods, battingmods, factor_bexp, factor_pexp):
     pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, pitchingmods)
-    pitcher_exp = factor_exp if pitcher_raw > 0 else 1.0
+    pitcher_exp = factor_pexp if pitcher_raw > 0 else 1.0
     batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingmods)
-    batter_exp = factor_exp if batter_raw > 0 else 1.0
-    pitcher_batter = ((batter_raw * 5.0 / 7.0) ** batter_exp) - (pitcher_raw ** pitcher_exp)
+    batter_exp = factor_bexp if batter_raw > 0 else 1.0
+    pitcher_batter = (batter_raw ** batter_exp) - (pitcher_raw ** pitcher_exp)
     return pitcher_batter
 
 def calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, mods):
@@ -232,7 +232,7 @@ def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pi
     return terms, special_cases, awayMods, homeMods
 
 def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3, baseline=False):    
-    factor_exp, factor_const, reverberation, repeating = special_cases
+    factor_bexp, factor_pexp, factor_const, reverberation, repeating = special_cases["factors"][:5]
     team_atbat_data = {} 
     batting_mods_by_Id = {}
     atbats, hhw_tally = 0.0, 0.0
@@ -263,7 +263,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 break                
             if batter_id not in team_atbat_data:
                 team_atbat_data[batter_id] = 0.0            
-            pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, defenseMods, batting_mods_by_Id[batter_id], float(factor_exp))            
+            pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, defenseMods, batting_mods_by_Id[batter_id], float(factor_bexp) , float(factor_pexp))            
             defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
             baserunners_out = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, defenseMods, batting_mods_by_Id[batter_id]) 
             hits_hrs_walks_raw = (pitcher_batter - (defense * 0.5))
@@ -314,9 +314,9 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
 
 
 def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases):                     
-    factor_exp, factor_const = special_cases["factors"][:2]
+    factor_bexp, factor_pexp, factor_const = special_cases["factors"][:3]
     defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
-    pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods, float(factor_exp))    
+    pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods, float(factor_bexp), float(factor_pexp))    
     batman_raw = (pitcher_batter - (defense * 0.5))     
     batman = logistic_transform(batman_raw)    
     batman = batman if (batman > float(factor_const)) else 0.0
@@ -351,10 +351,14 @@ def calculate(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchi
             ballpark_mods = helpers.load_bp_terms(ballpark_mods_url)
             homeTeamId = helpers.get_team_id(homeTeam)
             ballpark = ballparks.get(homeTeamId, collections.defaultdict(lambda: 0.5))            
-            atbats_data = get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, 9.0, False, terms, special_cases, outs_pi)
+            atbats_data = get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, 9.0, False, terms, {"factors": special_cases}, outs_pi)
         name = batter["name"]
         batman_atbats = atbats_data[batter_id]
+
+        #hits        
         batman_hits = calculatePitcherVsBatter("hits", weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods)
+
+        #hrs
         batman_homers = calculatePitcherVsBatter("hrs", weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods)
         at_bats = batman_atbats
         hits = batman_hits * at_bats
