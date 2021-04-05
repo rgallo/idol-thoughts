@@ -318,47 +318,95 @@ def adjust_by_pct(row, pct, stlats, star_func):
     return new_row
 
 
+def batting_stars(player):
+    return (
+        ((1 - float(player["tragicness"])) ** 0.01)
+        * (float(player["buoyancy"]) ** 0)
+        * (float(player["thwackability"]) ** 0.35)
+        * (float(player["moxie"]) ** 0.075)
+        * (float(player["divinity"]) ** 0.35)
+        * (float(player["musclitude"]) ** 0.075)
+        * ((1 - float(player["patheticism"])) ** 0.05)
+        * (float(player["martyrdom"]) ** 0.02)
+        * 5.0
+    )
+
+
+def pitching_stars(player):
+    return (
+        (float(player["shakespearianism"]) ** 0.1)
+        * (float(player["suppression"]) ** 0)
+        * (float(player["unthwackability"]) ** 0.5)
+        * (float(player["coldness"]) ** 0.025)
+        * (float(player["overpowerment"]) ** 0.15)
+        * (float(player["ruthlessness"]) ** 0.4)
+        * 5.0
+    )
+
+
+def baserunning_stars(player):
+    return (
+        (float(player["laserlikeness"]) ** 0.5)
+        * (float(player["continuation"]) ** 0.1)
+        * (float(player["baseThirst"]) ** 0.1)
+        * (float(player["indulgence"]) ** 0.1)
+        * (float(player["groundFriction"]) ** 0.1)
+        * 5.0
+    )
+
+
+def defense_stars(player):
+    return (
+        (float(player["omniscience"]) ** 0.2)
+        * (float(player["tenaciousness"]) ** 0.2)
+        * (float(player["watchfulness"]) ** 0.1)
+        * (float(player["anticapitalism"]) ** 0.1)
+        * (float(player["chasiness"]) ** 0.1)
+        * 5.0
+    )
+
+
 def adjust_stlats(row, game, day, player_attrs, team_attrs=None):
     new_row = row.copy()
     if "UNDERPERFORMING" in player_attrs:
-        new_row = adjust_by_pct(new_row, -0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
-        new_row = adjust_by_pct(new_row, -0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
-        new_row = adjust_by_pct(new_row, -0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
-        new_row = adjust_by_pct(new_row, -0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
+        new_row = adjust_by_pct(new_row, -0.2, PITCHING_STLATS, pitching_stars)
+        new_row = adjust_by_pct(new_row, -0.2, BATTING_STLATS, batting_stars)
+        new_row = adjust_by_pct(new_row, -0.2, BASERUNNING_STLATS, baserunning_stars)
+        new_row = adjust_by_pct(new_row, -0.2, DEFENSE_STLATS, defense_stars)
     if "OVERPERFORMING" in player_attrs:
-        new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
-        new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
-        new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
-        new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
+        new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, pitching_stars)
+        new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, batting_stars)
+        new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, baserunning_stars)
+        new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, defense_stars)
     if game:
         coffee_weathers = [get_weather_idx("Coffee"), get_weather_idx("Coffee 2"), get_weather_idx("Coffee 3s")]
         if "PERK" in player_attrs and game["weather"] in coffee_weathers:
-            new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
-            new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
-            new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
-            new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
+            new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, pitching_stars)
+            new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, batting_stars)
+            new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, baserunning_stars)
+            new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, defense_stars)
         team = row["team"]
         current_team_attrs = (team_attrs if team_attrs is not None else get_team_attributes()).get(team, {})
         if "GROWTH" in current_team_attrs:
             growth_pct = .05 * min(day / 99, 1.0)
-            new_row = adjust_by_pct(new_row, growth_pct, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
-            new_row = adjust_by_pct(new_row, growth_pct, BATTING_STLATS, blaseball_stat_csv.batting_stars)
-            new_row = adjust_by_pct(new_row, growth_pct, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
-            new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, PITCHING_STLATS, pitching_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, BATTING_STLATS, batting_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, BASERUNNING_STLATS, baserunning_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, defense_stars)
         if "TRAVELING" in current_team_attrs and team == game["awayTeamName"]:
-            new_row = adjust_by_pct(new_row, 0.05, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
-            new_row = adjust_by_pct(new_row, 0.05, BATTING_STLATS, blaseball_stat_csv.batting_stars)
-            new_row = adjust_by_pct(new_row, 0.05, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
-            new_row = adjust_by_pct(new_row, 0.05, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
+            new_row = adjust_by_pct(new_row, 0.05, PITCHING_STLATS, pitching_stars)
+            new_row = adjust_by_pct(new_row, 0.05, BATTING_STLATS, batting_stars)
+            new_row = adjust_by_pct(new_row, 0.05, BASERUNNING_STLATS, baserunning_stars)
+            new_row = adjust_by_pct(new_row, 0.05, DEFENSE_STLATS, defense_stars)
         bird_weather = get_weather_idx("Birds")
         if "AFFINITY_FOR_CROWS" in current_team_attrs and game["weather"] == bird_weather:
-            new_row = adjust_by_pct(new_row, 0.50, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
-            new_row = adjust_by_pct(new_row, 0.50, BATTING_STLATS, blaseball_stat_csv.batting_stars)
+            new_row = adjust_by_pct(new_row, 0.50, PITCHING_STLATS, pitching_stars)
+            new_row = adjust_by_pct(new_row, 0.50, BATTING_STLATS, batting_stars)
         if ("EARLBIRDS" in current_team_attrs and 1 <= day <= 27) or ("LATE_TO_PARTY" in current_team_attrs and 73 <= day <= 99):
-            new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, blaseball_stat_csv.pitching_stars)
-            new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, blaseball_stat_csv.batting_stars)
-            new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, blaseball_stat_csv.baserunning_stars)
-            new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, blaseball_stat_csv.defense_stars)
+            new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, pitching_stars)
+            new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, batting_stars)
+            new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, baserunning_stars)
+            new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, defense_stars)
     return new_row
 
 
@@ -777,7 +825,7 @@ def main():
             send_discord_message("One sec!", message[:DISCORD_SPLIT_LIMIT])
         else:
             print("Generating new stat file, please stand by.")
-        blaseball_stat_csv.generate_file(args.statfile, False, args.archive, False)
+        blaseball_stat_csv.generate_file(args.statfile, False, args.archive)
     team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, game_schedule, day)
     team_pid_stat_data, _ = load_stat_data_pid(args.statfile, game_schedule, day)
     if args.lineupfile:
