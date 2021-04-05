@@ -14,19 +14,15 @@ def calc_team(terms, termset, mods, skip_mods=False):
     total = 0.0    
     for termname, val in termset:
         term = terms[termname]        
-        total += term.calc(val)        
+        base_term = term.calc(val)        
         modterms = (mods or {}).get(termname, [])
-        if modterms:
-            sum_mod_terms = 0.0            
-        else:
-            sum_mod_terms = 1.0
+        prod_mod_terms = 1.0
         for modterm in modterms:                  
-            this_mod_term = modterm[0]
-            sum_mod_terms += this_mod_term 
-        if modterms:
-            #print("before mod = {}".format(total))
-            total *= sum_mod_terms        
-            #print("after mod = {}".format(total))
+            this_mod_term = modterm.calc(val)
+            base_multiplier = (1 / (1 + (2 ** (-1 * this_mod_term))))
+            multiplier = 2 * base_multiplier
+            prod_mod_terms *= multiplier         
+        total += base_term * prod_mod_terms
     return total
 
 
