@@ -4,13 +4,13 @@ import sys
 
 
 def delete_solutions(dir_path, threshold):
-    pattern = re.compile(r'^Best so far - fail rate (\d*.\d*)%, linear error (\d*.\d*)$', re.MULTILINE)
+    pattern = re.compile(r'^Best so far - Linear fail (\d*.\d*), fail rate (\d*.\d*)%$', re.MULTILINE)
     to_delete = []
     fail_rates = {}
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(dir_path) if filename.endswith("details.txt")}
     for job_id in job_ids:
         with open(os.path.join(dir_path, "{}-details.txt".format(job_id))) as details_file:
-            fail_rate = float(pattern.findall(details_file.read())[0][0])
+            fail_rate = float(pattern.findall(details_file.read())[0][1])
             if fail_rate > threshold:
                 to_delete.append((job_id, fail_rate, "under {}".format(threshold)))
             elif fail_rate in fail_rates:
