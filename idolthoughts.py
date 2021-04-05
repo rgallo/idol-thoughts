@@ -563,8 +563,8 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
     # print("Home: {}, Modded MOFO: {}, Unmodded MOFO: {}".format(homeTeam, homeMOFO, noModHomeMOFO))
     awayK9 = k9.calculate(awayPitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data)
     homeK9 = k9.calculate(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
-    homeBatmans = batman.calculate(awayPitcher, awayTeam, homeTeam, team_pid_stat_data, pitcher_stat_data)
-    awayBatmans = batman.calculate(homePitcher, homeTeam, awayTeam, team_pid_stat_data, pitcher_stat_data)
+    # homeBatmans = batman.calculate(awayPitcher, awayTeam, homeTeam, team_pid_stat_data, pitcher_stat_data)
+    # awayBatmans = batman.calculate(homePitcher, homeTeam, awayTeam, team_pid_stat_data, pitcher_stat_data)
     results.append(MatchupData(awayPitcher, awayPitcherId, awayTeam, gameId,
                                float(awayPitcherStats.get("strikeouts_per_9", -1.0)), float(awayPitcherStats.get("earned_run_average", -1.0)),
                                awayEmoji, homeTeam, homeEmoji,
@@ -579,7 +579,8 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
                                homeTIM, homeTIMRank, homeTIMCalc, homeStarStats, game.get("awayBalls", 4),
                                game["awayStrikes"], game["awayBases"], game["homeTeamNickname"],
                                game["awayTeamNickname"], game["homeOdds"], homeMOFO, homeK9, game["weather"]))
-    return results, homeBatmans + awayBatmans
+    # return results, homeBatmans + awayBatmans
+    return results, []
 
 
 def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data, stat_season_number):
@@ -702,11 +703,12 @@ def print_results(day, results, score_adjustments, batman_data):
     if odds_mismatch:
         print("Odds Mismatches")
         print("\n".join(("{} vs {} - Website: {} {:.2f}%, MOFO: {} {:.2f}%".format(result.pitcherteamnickname, result.vsteamnickname, result.vsteamnickname, (1-result.websiteodds)*100.0, result.pitcherteamnickname, result.mofoodds*100.0)) for result in sorted(odds_mismatch, key=lambda result: result.websiteodds)))
-    batman_hits = "\n".join(("{}, {}: {:.2f} hits, {:.2f} at bats").format(row["name"], row["team"], row["hits"], row["abs"]) for row in batman_data["hits"])
-    batman_homers = "\n".join(("{}, {}: {:.2f} homers, {:.2f} at bats").format(row["name"], row["team"], row["homers"], row["abs"]) for row in batman_data["homers"])
-    batman_combined = "\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.2f} at bats, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], row["abs"], ((row["hits"] * 1500) + (row["homers"]*4000)) * get_payout_mult(row)) for row in batman_data["combined"])
-    print("BATMAN:\nHits:\n{}\nHomers:\n{}\nCombined:\n{}".format(batman_hits, batman_homers, batman_combined))
-    print("\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.2f} at bats, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], row["abs"], ((row["hits"] * 1500) + (row["homers"]*4000)) * get_payout_mult(row)) for row in batman_data["york"]))
+    if batman_data["hits"]:
+        batman_hits = "\n".join(("{}, {}: {:.2f} hits, {:.2f} at bats").format(row["name"], row["team"], row["hits"], row["abs"]) for row in batman_data["hits"])
+        batman_homers = "\n".join(("{}, {}: {:.2f} homers, {:.2f} at bats").format(row["name"], row["team"], row["homers"], row["abs"]) for row in batman_data["homers"])
+        batman_combined = "\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.2f} at bats, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], row["abs"], ((row["hits"] * 1500) + (row["homers"]*4000)) * get_payout_mult(row)) for row in batman_data["combined"])
+        print("BATMAN:\nHits:\n{}\nHomers:\n{}\nCombined:\n{}".format(batman_hits, batman_homers, batman_combined))
+        print("\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.2f} at bats, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], row["abs"], ((row["hits"] * 1500) + (row["homers"]*4000)) * get_payout_mult(row)) for row in batman_data["york"]))
 
 
 def load_test_data(testfile):
