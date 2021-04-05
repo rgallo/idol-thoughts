@@ -266,7 +266,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
             pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, defenseMods, batting_mods_by_Id[batter_id], float(factor_bexp) , float(factor_pexp))            
             defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
             baserunners_out = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, defenseMods, batting_mods_by_Id[batter_id]) 
-            hits_hrs_walks_raw = (pitcher_batter - (defense * 0.5))
+            hits_hrs_walks_raw = ((pitcher_batter - (defense * 0.5))) / 100.0
             #catch nan and also 3 atbats per inning as a fail state
             if math.isnan(hits_hrs_walks_raw):                
                 for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
@@ -290,7 +290,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 return team_atbat_data            
             remainder = (outs_pg - current_outs)
             if (not baseline) and (hhw_tally > 1.0):                
-                added_out = logistic_transform(baserunners_out)
+                added_out = logistic_transform((baserunners_out / 100.0))
                 current_outs += added_out
                 hhw_tally -= 1.0            
             current_outs += 1
@@ -317,7 +317,7 @@ def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team
     factor_bexp, factor_pexp, factor_const = special_cases["factors"][:3]
     defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
     pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods, float(factor_bexp), float(factor_pexp))    
-    batman_raw = (pitcher_batter - (defense * 0.5))     
+    batman_raw = (pitcher_batter - (defense * 0.5)) / 100.0
     batman = logistic_transform(batman_raw)    
     batman = batman if (batman > float(factor_const)) else 0.0
     return batman

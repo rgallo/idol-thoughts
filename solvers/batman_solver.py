@@ -39,6 +39,7 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
     games, fail_batman, fail_batman_by, actual, real_val = 0, 100, 100.0, 0, 0
     if special_game_attrs:
         fail_batman, fail_batman_by, actual, real_val = 0, 0, 0, 0
+        return games, fail_batman, fail_batman_by, actual, real_val
     else:                        
         atbats, hits, homers, innings = int(batter_perf_data["at_bats"]), int(batter_perf_data["hits"]), int(batter_perf_data["home_runs"]), int(batter_perf_data["num_innings"])                        
         games, fail_batman, fail_batman_by = 1, 1, 0.0               
@@ -132,10 +133,10 @@ def main():
         games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
-        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (1, 3), (0.07, 0.22)]
+        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (1, 3), (0.07, 0.10)]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (1, 3), (0.02, 0.18)]
+        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (1, 3), (0.02, 0.06)]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST

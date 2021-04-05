@@ -1028,7 +1028,7 @@ def minimize_batman_func(parameters, *data):
         pass_within_two = (pass_within_two / bat_pos_counter) * 100.0
         pass_within_three = (pass_within_three / bat_pos_counter) * 100.0
         pass_within_four = (pass_within_four / bat_pos_counter) * 100.0
-        if (pass_exact > 0.0) or (WORST_ERROR > 1000000):            
+        if (pass_exact > 0.0) or (CURRENT_ITERATION == 1):            
             if pass_exact > BEST_EXACT:
                 debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, zero fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}, pavgerr = {:.4f}, zavgerr = {:.4f}".format(fail_rate, pos_fail_rate, zero_fail_rate, pass_exact, batman_max_err, batman_min_err, pos_avg_error, use_zero_error), debug, "::::::::")
             if batman_max_err >= batman_min_err:                        
@@ -1081,7 +1081,36 @@ def minimize_batman_func(parameters, *data):
         if outputdir:
             write_file(outputdir, run_id, eventofinterest + "details.txt", detailtext)                
         debug_print("Optimizing: {}, iteration #{}".format(eventofinterest, CURRENT_ITERATION), debug, run_id)               
-        debug_print("-" * 20 + "\n", debug, run_id)               
+        debug_print("-" * 20 + "\n", debug, run_id)      
+        if CURRENT_ITERATION == 1:
+            total_batters = 0
+            check_max_hits = 0
+            check_max_homers = 0
+            check_max_atbats = 0
+            #validate batter cache data
+            for season in range(12, 15):
+                for day in range(1, 125):
+                    cache_games = GAME_CACHE.get((season, day))
+                    paired_games = pair_games(cache_games)
+                    for game in paired_games:
+                        performance_data = BATTER_CACHE.get((season, day, game["away"]["game_id"]))
+                        for thisbatter_perf in performance_data:                        
+                            total_batters += 1
+                            hits = int(thisbatter_perf["hits"])
+                            homers = int(thisbatter_perf["home_runs"])
+                            atbats = int(thisbatter_perf["at_bats"])
+                            check_max_hits = hits if (hits > check_max_hits) else check_max_hits
+                            check_max_homers = homers if (homers > check_max_homers) else check_max_homers
+                            check_max_atbats = atbats if (atbats > check_max_atbats) else check_max_atbats
+            print("Maximums in cached data: hits = {}, homers = {}, atbats = {}, batters = {}".format(check_max_hits, check_max_homers, check_max_atbats, total_batters))
+            if eventofinterest == "hits":
+                MAX_INTEREST = check_max_hits
+            elif eventofinterest == "hrs":
+                MAX_INTEREST = check_max_homers
+            else:
+                MAX_INTEREST = check_max_atbats       
+        if abs(batman_min_err) < MAX_INTEREST:
+            WORST_ERROR = max(abs(batman_max_err), abs(batman_min_err))
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):
         now = datetime.datetime.now()        
         debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}, {} rejects since last check-in, {:.2f} seconds".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)
@@ -1091,36 +1120,7 @@ def minimize_batman_func(parameters, *data):
         now = datetime.datetime.now()        
         debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}, {} rejects since last check-in, {:.2f} seconds".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)        
         REJECTS = 0
-        LAST_ITERATION_TIME = now      
-    if CURRENT_ITERATION == 1:
-        total_batters = 0
-        check_max_hits = 0
-        check_max_homers = 0
-        check_max_atbats = 0
-        #validate batter cache data
-        for season in range(12, 15):
-            for day in range(1, 125):
-                cache_games = GAME_CACHE.get((season, day))
-                paired_games = pair_games(cache_games)
-                for game in paired_games:
-                    performance_data = BATTER_CACHE.get((season, day, game["away"]["game_id"]))
-                    for thisbatter_perf in performance_data:                        
-                        total_batters += 1
-                        hits = int(thisbatter_perf["hits"])
-                        homers = int(thisbatter_perf["home_runs"])
-                        atbats = int(thisbatter_perf["at_bats"])
-                        check_max_hits = hits if (hits > check_max_hits) else check_max_hits
-                        check_max_homers = homers if (homers > check_max_homers) else check_max_homers
-                        check_max_atbats = atbats if (atbats > check_max_atbats) else check_max_atbats
-        print("Maximums in cached data: hits = {}, homers = {}, atbats = {}, batters = {}".format(check_max_hits, check_max_homers, check_max_atbats, total_batters))
-        if eventofinterest == "hits":
-            MAX_INTEREST = check_max_hits
-        elif eventofinterest == "hrs":
-            MAX_INTEREST = check_max_homers
-        else:
-            MAX_INTEREST = check_max_atbats       
-        if abs(batman_min_err) < MAX_INTEREST:
-            WORST_ERROR = max(abs(batman_max_err), abs(batman_min_err))
+        LAST_ITERATION_TIME = now          
     CURRENT_ITERATION += 1   
     now = datetime.datetime.now()        
     if ((now - LAST_CHECKTIME).total_seconds()) > 3600:
