@@ -499,7 +499,7 @@ def minimize_func(parameters, *data):
                 write_file(outputdir, run_id, "mods.csv", "identifier,team,name,a,b,c\n" + mods_output)
                 write_file(outputdir, run_id, "ballparkmods.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
                 write_parameters(outputdir, run_id, "solution.json", parameters)
-            debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug, run_id)
+            debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug2, run_id)
             detailtext = "{} games".format(game_counter)
             detailtext += "\n{:.4f}% Unmodded fail rate, Best {:.4f}%".format(unmod_rate, BEST_UNMOD)
             for name in mod_rates:
@@ -715,7 +715,7 @@ def minimize_batman_func(parameters, *data):
                 REJECTS += 1
                 LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
                 break                                             
-            elif (max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR) or (max(abs(batman_max_err), abs(batman_min_err)) >= MAX_INTEREST):
+            elif max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR:
                 reject_solution = True
                 REJECTS += 1
                 LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
@@ -939,7 +939,7 @@ def minimize_batman_func(parameters, *data):
                             REJECTS += 1
                             LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
                             break                                             
-                        elif (max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR) or (max(abs(batman_max_err), abs(batman_min_err)) >= MAX_INTEREST):
+                        elif max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR:
                             reject_solution = True
                             REJECTS += 1
                             LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
@@ -1064,7 +1064,7 @@ def minimize_batman_func(parameters, *data):
             write_file(outputdir, run_id, eventofinterest + "mods.csv", "identifier,team,name,a,b,c\n" + mods_output)
             write_file(outputdir, run_id, eventofinterest + "ballparkmods.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
             write_parameters(outputdir, run_id, eventofinterest + "solution.json", parameters)
-        debug_print("\n" + terms_output + special_case_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug, run_id)   
+        debug_print("\n" + terms_output + special_case_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug2, run_id)   
         detailtext = "::: Pass Rates over {} batters, fail counter {} :::".format(bat_counter, fail_counter)
         detailtext += "\nExact (+/- {:.2f}) = {:.4f}".format(stageexact, pass_exact)
         detailtext += "\n+/- {:.2f} = {:.4f}".format(stageone, pass_within_one)
