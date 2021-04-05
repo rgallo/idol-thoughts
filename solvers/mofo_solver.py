@@ -71,7 +71,7 @@ def get_init_values(init_dir, popsize, is_random, is_worst):
         raise Exception("Population is set to {} and there are only {} solutions, find more solutions or decrease pop size".format(popsize, len(job_ids)))
     for job_id in job_ids:
         with open(os.path.join(init_dir, "{}-solution.json".format(job_id))) as solution_file, open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:
-            results.append((float(pattern.findall(details_file.read())[0][0]), json.load(solution_file)))
+            results.append((float(pattern.findall(details_file.read())[0][1]), json.load(solution_file)))
     if is_random:
         random.shuffle(results)
     else:
