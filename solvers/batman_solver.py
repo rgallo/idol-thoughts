@@ -140,7 +140,7 @@ def main():
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 1), (1, 3), (0.02, 0.12), (0, 0.02), (0, 0.02)]
+        base_bounds = ([(-2, 8), (0, 2), (-2, 4)] * len(stlatlist)) + [(1, 3), (1, 3), (0.02, 0.12), (0, 0.02), (0, 0.02)]
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
     modterms = [modterm for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
