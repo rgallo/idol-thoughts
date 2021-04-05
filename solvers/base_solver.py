@@ -24,6 +24,7 @@ BATTER_CACHE = {}
 BEST_RESULT = 8000000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
+EXACT_FAILS = 0
 BEST_UNEXVAR_ERROR = -100.0
 BEST_EXACT = 0.0
 BEST_FAILCOUNT = 10000000000.0
@@ -590,6 +591,7 @@ def minimize_batman_func(parameters, *data):
     global MAX_INTEREST
     global BASELINE_ERROR
     global REJECTS
+    global EXACT_FAILS
     global LAST_ITERATION_TIME
     global LINE_JUMP_GAMES
     eventofinterest, batter_list, calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept, establish_baseline, debug, debug2, debug3, outputdir = data
@@ -1036,12 +1038,15 @@ def minimize_batman_func(parameters, *data):
                 linear_fail = ((max(abs(batman_max_err), abs(batman_min_err))) * 25.0) + fail_points
         else:
             debug_print("Rejected for insufficient exact. Pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
+            EXACT_FAILS += 1
+            linear_fail = BEST_RESULT + EXACT_FAILS
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact
         BEST_FAIL_RATE = pos_fail_rate
         BEST_UNEXVAR_ERROR = batman_unexvar            
         WORST_ERROR = max(abs(batman_max_err), abs(batman_min_err))
+        EXACT_FAILS = 0
         maxevent = 0    
         if eventofinterest == "abs":
             maxevent = max_atbats
