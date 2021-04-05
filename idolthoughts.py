@@ -737,11 +737,7 @@ def main():
                     message = message.format(total_seconds // 60, "" if total_seconds // 60 == 1 else "s",
                                              "{} seconds ".format(total_seconds % 60) if total_seconds % 60 else "")
                     if args.discord:
-                        is_magic = False
-                        for game in today_schedule:
-                            if not game["finalized"] and "Magic" in (game["awayTeamNickname"], game["homeTeamNickname"]):
-                                is_magic = True
-                        send_discord_message("Sorry!{}".format(" :frog:" if is_magic else ""), message)
+                        send_discord_message("Sorry!", message)
                     else:
                         print(message)
                 first_try = False
@@ -778,7 +774,7 @@ def main():
     if (outcomes or not stat_file_exists or args.forceupdate or ((day == 1 and args.today) or day == 2)) and not args.skipupdate:
         if args.discord:
             message = "Generating new stat file, please stand by.\n\n{}".format("\n".join("`{}`".format(outcome) for outcome in outcomes))
-            send_discord_message("Sorry!", message[:DISCORD_SPLIT_LIMIT])
+            send_discord_message("One sec!", message[:DISCORD_SPLIT_LIMIT])
         else:
             print("Generating new stat file, please stand by.")
         blaseball_stat_csv.generate_file(args.statfile, False, args.archive, False)
