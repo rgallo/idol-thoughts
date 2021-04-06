@@ -170,7 +170,7 @@ def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitch
     home_defense = abs(team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data,
                                     skip_mods=skip_mods))
     numerator = (away_offense - home_defense) - (home_offense - away_defense)
-    denominator = (away_offense - home_defense) + (home_offense - away_defense)    
+    denominator = abs((away_offense - home_defense) + (home_offense - away_defense))
     if not denominator:
         return .5, .5    
     away_formula = numerator / denominator    
