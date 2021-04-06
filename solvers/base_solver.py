@@ -34,13 +34,17 @@ BEST_QUARTER_FAIL = 1.0
 TOTAL_GAME_COUNTER = 0
 MAX_OBSERVED_DIFFERENCE = 0.0
 BEST_UNMOD = 1000000000000.0
+BEST_UNMOD_FAILS = 1000000000000.0
 WORST_ERROR = 1000000000.0
 MAX_INTEREST = 1000000000.0
 BASELINE_ERROR = 1000000000.0
 SEASON_GAMES = 1188
 REJECTS = 0
+BEST_UNMOD_FAILS = 0
+ALL_UNMOD_GAMES = 0
 MOD_BASELINE = False
 BEST_MOD_RATES = {}
+ALL_MOD_GAMES = {}
 LINE_JUMP_GAMES = {}
 HAS_GAMES = {}
 LAST_ITERATION_TIME = datetime.datetime.now()
@@ -232,15 +236,19 @@ def minimize_func(parameters, *data):
     global BEST_EXACT
     global BEST_FAILCOUNT    
     global BEST_UNMOD
+    global BEST_UNMOD_FAILS
     global LAST_CHECKTIME
     global BEST_QUARTER_FAIL
     global TOTAL_GAME_COUNTER
     global MAX_OBSERVED_DIFFERENCE
-    global BEST_MOD_RATES    
+    global BEST_MOD_RATES        
+    global ALL_MOD_GAMES
+    global ALL_UNMOD_GAMES
     global HAS_GAMES
     global WORST_ERROR
     global LAST_ITERATION_TIME
     global SEASON_GAMES    
+    global LINE_JUMP_GAMES
     global REJECTS
     calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
@@ -267,11 +275,134 @@ def minimize_func(parameters, *data):
     mod_fails, mod_games, mod_rates = {}, {}, {}
     multi_mod_fails, multi_mod_games, mvm_fails, mvm_games = 0, 0, 0, 0
     unmod_fails, unmod_games, unmod_rate = 0, 0, 0.0
-    reject_solution, viability_unchecked = False, True
+    reject_solution, viability_unchecked, new_pass = False, True, False
+    line_jumpers = {}
     all_vals = []
     win_loss = []    
+    #let some games jump the line
+    for gameid in LINE_JUMP_GAMES:
+        game = LINE_JUMP_GAMES[gameid]
+        season = int(game["away"]["season"])
+        day = int(game["away"]["day"])
+        pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
+        season_team_attrs = team_attrs.get(str(season), {})
+        season_days = 0                
+        cached_games = GAME_CACHE.get((season, day))                            
+        games = cached_games
+        season_days += 1
+        paired_games = pair_games(games)
+        schedule = get_schedule_from_paired_games(paired_games, season, day)
+        day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
+        cached_stats = STAT_CACHE.get((season, day))
+        team_stat_data, pitcher_stat_data, pitchers = cached_stats                        
+        cached_ballparks = BALLPARK_CACHE.get((season, day))          
+        ballparks = cached_ballparks          
+        ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
+        game_attrs = get_attrs_from_paired_game(season_team_attrs, game)
+        awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]                
+        special_game_attrs = (homeAttrs.union(awayAttrs)) - ALLOWED_IN_BASE    
+        game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods)                        
+        game_counter += game_game_counter
+        fail_counter += game_fail_counter  
+        if game_game_counter > 0:
+            if game_fail_counter > 0:
+                line_jumpers[game["away"]["game_id"]] = game    
+            else:
+                new_pass = True
+        if game_game_counter == 1:
+            all_vals.append(game_away_val)   
+            if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
+                win_loss.append(1)
+                win_loss.append(0)
+            else:
+                win_loss.append(0)
+                win_loss.append(1)
+            all_vals.append(game_home_val)
+            if mod_mode:
+                game_attrs = get_attrs_from_paired_game(season_team_attrs, game)                        
+                awayAttrs = game_attrs["away"]
+                homeAttrs = game_attrs["home"]
+                awayMods, homeMods = 0, 0
+                lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
+                lowerHomeAttrs = [attr.lower() for attr in homeAttrs]
+                for name in lowerAwayAttrs:  
+                    if name.upper() in FORCE_REGEN:
+                        continue
+                    if name not in mod_games:
+                        mod_fails[name] = 0
+                        mod_games[name] = 0
+                    mod_fails[name] += game_fail_counter
+                    mod_games[name] += game_game_counter
+                    awayMods += 1                            
+                if awayMods > 1:
+                    multi_mod_fails += game_fail_counter
+                    multi_mod_games += game_game_counter
+                for name in lowerHomeAttrs:
+                    if name.upper() in FORCE_REGEN:
+                        continue
+                    if name not in mod_games:
+                        mod_fails[name] = 0
+                        mod_games[name] = 0
+                    mod_fails[name] += game_fail_counter
+                    mod_games[name] += game_game_counter
+                    homeMods += 1                            
+                if homeMods > 1:
+                    multi_mod_fails += game_fail_counter
+                    multi_mod_games += game_game_counter
+                if awayMods > 0 and homeMods > 0:
+                    mvm_fails += game_fail_counter
+                    mvm_games += game_game_counter  
+                elif awayMods == 0 and homeMods == 0:
+                    unmod_fails += game_fail_counter  
+                    unmod_games += game_game_counter                                                                     
+        elif game_game_counter == 2:                    
+            k9_max_err = game_away_val if (game_away_val > k9_max_err) else k9_max_err
+            k9_max_err = game_home_val if (game_home_val > k9_max_err) else k9_max_err
+            k9_min_err = game_away_val if (game_away_val < k9_min_err) else k9_min_err
+            k9_min_err = game_home_val if (game_home_val < k9_min_err) else k9_min_err                    
+            if (k9_max_err - k9_min_err) > WORST_ERROR:
+                reject_solution = True
+                #print("Rejecting solution, game away err = {}, game home err = {}, worst error = {}".format(game_away_val, game_home_val, WORST_ERROR))
+                break
+            if abs(game_away_val) <= 4:             
+                pass_within_four += 1
+                if abs(game_away_val) <= 3:                                                
+                    pass_within_three += 1
+                    if abs(game_away_val) <= 2:                                                
+                        pass_within_two += 1
+                        if abs(game_away_val) <= 1:
+                            pass_within_one += 1
+                            if game_away_val == 0:
+                                pass_exact += 1                   
+            if abs(game_home_val) <= 4:  
+                pass_within_four += 1
+                if abs(game_home_val) <= 3:                                                
+                    pass_within_three += 1
+                    if abs(game_home_val) <= 2:                                                
+                        pass_within_two += 1
+                        if abs(game_home_val) <= 1:
+                            pass_within_one += 1
+                            if abs(game_home_val) == 0:
+                                pass_exact += 1         
+        
+    #only reject solutions now if we didn't find at least one new pass from the previous fail set
+    improved_modunmod = True
+    check_fail_rate = 0.0    
+    if CURRENT_ITERATION > 1:
+        current_best_mod_rates = BEST_MOD_RATES.values()
+        for name in mod_fails:
+            check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name])
+            if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
+                improved_modunmod = False
+        check_fail_rate = (unmod_fails / ALL_UNMOD_GAMES)
+        if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
+            improved_modunmod = False
+        if (not new_pass) or (not improved_modunmod):                                      
+            reject_solution = True
+            REJECTS += 1        
+
     for season in reversed(range(12, 15)):
-        if reject_solution:
+        if reject_solution:            
             break
         # if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
         if (season in HAS_GAMES and not HAS_GAMES[season]):
@@ -282,7 +413,7 @@ def minimize_func(parameters, *data):
         season_team_attrs = team_attrs.get(str(season), {})
         season_days = 0        
         for day in range(1, 125):
-            if reject_solution:
+            if reject_solution:                
                 break
             is_cached = False
             cached_games = GAME_CACHE.get((season, day))
@@ -331,6 +462,8 @@ def minimize_func(parameters, *data):
                 ballparks = cached_ballparks                
             good_game_list = []
             for game in paired_games:
+                if game["away"]["game_id"] in LINE_JUMP_GAMES:
+                    continue
                 ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
                 game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods)                
                 if not is_cached and game_game_counter:
@@ -338,14 +471,12 @@ def minimize_func(parameters, *data):
                     HAS_GAMES[season] = True
                 game_counter += game_game_counter
                 fail_counter += game_fail_counter  
-                if season == 14 and day < 100:
-                    season_game_counter += game_game_counter
-                if fail_counter >= BEST_FAILCOUNT and viability_unchecked:
-                    viability_unchecked = False
-                    if game_counter <= SEASON_GAMES:
-                        reject_solution = True
-                        REJECTS += 1
-                        break                
+                if game_fail_counter > 0 and game_game_counter > 0:
+                    line_jumpers[game["away"]["game_id"]] = game                                    
+                if fail_counter > BEST_FAILCOUNT:                                      
+                    reject_solution = True
+                    REJECTS += 1
+                    break                
                 if game_game_counter == 1:
                     all_vals.append(game_away_val)   
                     if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
@@ -370,6 +501,13 @@ def minimize_func(parameters, *data):
                                 mod_games[name] = 0
                             mod_fails[name] += game_fail_counter
                             mod_games[name] += game_game_counter
+                            if CURRENT_ITERATION > 1:
+                                current_best_mod_rates = BEST_MOD_RATES.values()                                
+                                check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name])
+                                if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
+                                    reject_solution = True
+                                    REJECTS += 1     
+                                    break
                             awayMods += 1                            
                         if awayMods > 1:
                             multi_mod_fails += game_fail_counter
@@ -382,6 +520,13 @@ def minimize_func(parameters, *data):
                                 mod_games[name] = 0
                             mod_fails[name] += game_fail_counter
                             mod_games[name] += game_game_counter
+                            if CURRENT_ITERATION > 1:
+                                current_best_mod_rates = BEST_MOD_RATES.values()                                
+                                check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name])
+                                if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
+                                    reject_solution = True
+                                    REJECTS += 1     
+                                    break
                             homeMods += 1                            
                         if homeMods > 1:
                             multi_mod_fails += game_fail_counter
@@ -391,9 +536,13 @@ def minimize_func(parameters, *data):
                             mvm_games += game_game_counter  
                         elif awayMods == 0 and homeMods == 0:
                             unmod_fails += game_fail_counter  
-                            unmod_games += game_game_counter  
-                    if game_counter == SEASON_GAMES:
-                        half_fail_counter = fail_counter                                                
+                            unmod_games += game_game_counter                          
+                            if CURRENT_ITERATION > 1:
+                                check_fail_rate = (unmod_fails / ALL_UNMOD_GAMES)
+                                if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
+                                    reject_solution = True
+                                    REJECTS += 1
+                                    break
                 elif game_game_counter == 2:                    
                     k9_max_err = game_away_val if (game_away_val > k9_max_err) else k9_max_err
                     k9_max_err = game_home_val if (game_home_val > k9_max_err) else k9_max_err
@@ -439,8 +588,9 @@ def minimize_func(parameters, *data):
     # also need to only do this when solving MOFO        
     fail_points, linear_points = 10000000000.0, 10000000000.0    
     max_fail_rate = 0.0
+    max_mod_rates = []
     linear_fail = 90000000000.0
-    calculate_solution = False
+    calculate_solution = True
     if not reject_solution:
         if len(win_loss) > 0:                  
             sorted_win_loss = [x for _,x in sorted(zip(all_vals, win_loss))]
@@ -455,15 +605,19 @@ def minimize_func(parameters, *data):
                     if mod_games[name] > 0:
                         mod_rates[name] = (mod_fails[name] / mod_games[name]) * 100.0
                         max_fail_rate = mod_rates[name] if (mod_rates[name] > max_fail_rate) else max_fail_rate
-                    if name not in BEST_MOD_RATES:
-                        BEST_MOD_RATES[name] = 10000000.0
-                    if mod_rates[name] <= BEST_MOD_RATES[name]:
-                        calculate_solution = True
+                        if name not in BEST_MOD_RATES:
+                            BEST_MOD_RATES[name] = 10000000.0                        
+                        if name not in ALL_MOD_GAMES:
+                            ALL_MOD_GAMES[name] = mod_games[name]
+                        max_mod_rates = BEST_MOD_RATES.values()
+                        if mod_rates[name] > max(BEST_UNMOD, max(max_mod_rates)):
+                            calculate_solution = False
                 if unmod_games > 0:
+                    ALL_UNMOD_GAMES = unmod_games
                     unmod_rate = (unmod_fails / unmod_games) * 100.0
                     max_fail_rate = unmod_rate if (unmod_rate > max_fail_rate) else max_fail_rate                                                          
-                    if unmod_rate <= BEST_UNMOD:
-                        calculate_solution = True
+                    if unmod_rate > max(BEST_UNMOD, max(max_mod_rates)):
+                        calculate_solution = False
 
                 if calculate_solution:                                            
                     fail_points = (fail_rate * 100.0) * max_fail_rate * 250.0
@@ -481,14 +635,17 @@ def minimize_func(parameters, *data):
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail       
         SEASON_GAMES = season_game_counter        
-        BEST_FAILCOUNT = half_fail_counter        
+        BEST_FAILCOUNT = fail_counter        
+        LINE_JUMP_GAMES.clear()
+        LINE_JUMP_GAMES = line_jumpers
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
             BEST_LINEAR_ERROR = linear_error
             if mod_mode:     
                 for name in mod_rates:
-                    BEST_MOD_RATES[name] = mod_rates[name] if (mod_rates[name] < BEST_MOD_RATES[name]) else BEST_MOD_RATES[name]                
+                    BEST_MOD_RATES[name] = mod_rates[name] if (mod_rates[name] < BEST_MOD_RATES[name]) else BEST_MOD_RATES[name]                      
                 BEST_UNMOD = unmod_rate if (unmod_rate < BEST_UNMOD) else BEST_UNMOD
+                BEST_UNMOD_FAILS = unmod_fails if (unmod_fails < BEST_UNMOD_FAILS) else BEST_UNMOD_FAILS
         debug_print("-"*20, debug, run_id)
         if len(win_loss) > 0:
             terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_mofo_list_size)])] * 3)))  
