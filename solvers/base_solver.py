@@ -447,11 +447,9 @@ def minimize_func(parameters, *data):
              #   LAST_DAY_RANGE = 1    
 
         if LAST_SEASON_RANGE == 0:
-            seasonrange = range(12, 15)
-            LAST_SEASON_RANGE = 1
+            seasonrange = range(12, 15)            
         else:
-            seasonrange = reversed(range(12, 15))
-            LAST_SEASON_RANGE = 0 
+            seasonrange = reversed(range(12, 15))            
         #if LAST_DAY_RANGE == 0:
          #   dayrange = range(1, 125)
         #else:
@@ -715,6 +713,7 @@ def minimize_func(parameters, *data):
         LINE_JUMP_GAMES.clear()
         LINE_JUMP_GAMES = line_jumpers  
         MIN_LJG_FAIL_SAVINGS = 0
+        LAST_SEASON_RANGE = 1 if (LAST_SEASON_RANGE == 0) else 0
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
             BEST_LINEAR_ERROR = linear_error
@@ -996,11 +995,9 @@ def minimize_batman_func(parameters, *data):
             #    LAST_DAY_RANGE = 1    
 
         if LAST_SEASON_RANGE == 0:
-            seasonrange = range(12, 15)
-            LAST_SEASON_RANGE = 1
+            seasonrange = range(12, 15)            
         else:
-            seasonrange = reversed(range(12, 15))            
-            LAST_SEASON_RANGE = 0 
+            seasonrange = reversed(range(12, 15))                        
         #if LAST_DAY_RANGE == 0:
          #   dayrange = range(1, 125)
         #else:
@@ -1299,7 +1296,8 @@ def minimize_batman_func(parameters, *data):
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact
         BEST_FAIL_RATE = pos_fail_rate        
-        BEST_UNEXVAR_ERROR = batman_unexvar                    
+        BEST_UNEXVAR_ERROR = batman_unexvar 
+        LAST_SEASON_RANGE = 1 if (LAST_SEASON_RANGE == 0) else 0
         EXACT_FAILS = 0
         maxevent = 0    
         if eventofinterest == "abs":
