@@ -281,6 +281,7 @@ def minimize_func(parameters, *data):
     win_loss = []    
     #let some games jump the line
     for gameid in LINE_JUMP_GAMES:
+        current_best_mod_rates = BEST_MOD_RATES.values()                                
         game = LINE_JUMP_GAMES[gameid]
         season = int(game["away"]["season"])
         day = int(game["away"]["day"])
@@ -332,7 +333,12 @@ def minimize_func(parameters, *data):
                         mod_fails[name] = 0
                         mod_games[name] = 0
                     mod_fails[name] += game_fail_counter
-                    mod_games[name] += game_game_counter
+                    mod_games[name] += game_game_counter                    
+                    check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name])
+                    if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
+                        reject_solution = True
+                        REJECTS += 1     
+                        break
                     awayMods += 1                            
                 if awayMods > 1:
                     multi_mod_fails += game_fail_counter
@@ -345,6 +351,11 @@ def minimize_func(parameters, *data):
                         mod_games[name] = 0
                     mod_fails[name] += game_fail_counter
                     mod_games[name] += game_game_counter
+                    check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name])
+                    if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
+                        reject_solution = True
+                        REJECTS += 1     
+                        break
                     homeMods += 1                            
                 if homeMods > 1:
                     multi_mod_fails += game_fail_counter
@@ -354,7 +365,12 @@ def minimize_func(parameters, *data):
                     mvm_games += game_game_counter  
                 elif awayMods == 0 and homeMods == 0:
                     unmod_fails += game_fail_counter  
-                    unmod_games += game_game_counter                                                                     
+                    unmod_games += game_game_counter
+                    check_fail_rate = (unmod_fails / ALL_UNMOD_GAMES)
+                    if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
+                        reject_solution = True
+                        REJECTS += 1
+                        break
         elif game_game_counter == 2:                    
             k9_max_err = game_away_val if (game_away_val > k9_max_err) else k9_max_err
             k9_max_err = game_home_val if (game_home_val > k9_max_err) else k9_max_err
@@ -385,19 +401,9 @@ def minimize_func(parameters, *data):
                             if abs(game_home_val) == 0:
                                 pass_exact += 1         
         
-    #only reject solutions now if we didn't find at least one new pass from the previous fail set
-    improved_modunmod = True
-    check_fail_rate = 0.0    
-    if CURRENT_ITERATION > 1:
-        current_best_mod_rates = BEST_MOD_RATES.values()
-        for name in mod_fails:
-            check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name])
-            if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
-                improved_modunmod = False
-        check_fail_rate = (unmod_fails / ALL_UNMOD_GAMES)
-        if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
-            improved_modunmod = False
-        if (not new_pass) or (not improved_modunmod):                                      
+    #only reject solutions now if we didn't find at least one new pass from the previous fail set    
+    if CURRENT_ITERATION > 1 and not reject_solution:        
+        if not new_pass:                                      
             reject_solution = True
             REJECTS += 1        
 
