@@ -143,7 +143,7 @@ def compare(byteam, season, mofo_list):
     print ("Total mismatches: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(mismatches, moforight_mismatch, (moforight_mismatch/mismatches) * 100.0, webright_mismatch, (webright_mismatch/mismatches)*100.0))
 
 
-def get_mofo_list(game_list, team_attrs, stat_file_map, season, startday=1, endday=125):
+def get_mofo_list(game_list, team_attrs, stat_file_map, season, startday=1, endday=125, is_early=False):
     mofo_list = []
     season_team_attrs = team_attrs.get(str(season), {})
     pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None    
@@ -159,7 +159,8 @@ def get_mofo_list(game_list, team_attrs, stat_file_map, season, startday=1, endd
         paired_games = pair_games(games)
         schedule = get_schedule_from_paired_games(paired_games, season, day)
         day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
-        stat_filename = stat_file_map.get((season, day))
+        stat_day = max(day-1, 1) if is_early else day
+        stat_filename = stat_file_map.get((season, stat_day))
         if stat_filename:
             last_stat_filename = stat_filename
             pitchers = get_pitcher_id_lookup(stat_filename)
@@ -188,6 +189,7 @@ def webodds_payout(odds, amt):
     else:
         return amt * (3.206 / (1 + ((.443 * (odds - .5)) ** .95)) - 1.206) 
 
+
 def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--statfolder', help="path to stat folder")
@@ -195,7 +197,8 @@ def handle_args():
     parser.add_argument('--season', help="print output")
     parser.add_argument('--byteam', help="show success rates by team", action='store_true')
     parser.add_argument('--start', help="start day")  
-    parser.add_argument('--end', help="end day")  
+    parser.add_argument('--end', help="end day")
+    parser.add_argument('--early', action="store_true", help="use early idol predictions")
     args = parser.parse_args()
     return args
 
@@ -214,7 +217,7 @@ def main():
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     season = int(cmd_args.season)
-    mofo_list = get_mofo_list(game_list, team_attrs, stat_file_map, season, startday, endday)    
+    mofo_list = get_mofo_list(game_list, team_attrs, stat_file_map, season, startday, endday, cmd_args.early)
     compare(byteam, season, mofo_list)
     # print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
 
