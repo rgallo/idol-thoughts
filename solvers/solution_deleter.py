@@ -3,14 +3,25 @@ import re
 import sys
 
 
-def delete_solutions(dir_path, threshold):
-    pattern = re.compile(r'^Best so far - Linear fail (\d*.\d*), fail rate (\d*.\d*)%$', re.MULTILINE)
+def delete_solutions(dir_path, threshold, patternchoice):
+    if not patternchoice == "mofo":
+        pattern = re.compile(r'^max underestimate (-?[\d\.]*), max overestimate (-?[\d\.]*), unexvar (-?[\d\.]*)$', re.MULTILINE)                
+    else:
+        pattern = re.compile(r'^Best so far - Linear fail (\d*.\d*), fail rate (\d*.\d*)%$', re.MULTILINE)
     to_delete = []
     fail_rates = {}
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(dir_path) if filename.endswith("details.txt")}
+    if not patternchoice == "mofo":
+        file_format = "-" + patternchoice + "details.txt"
+    else:
+        file_format = "-details.txt"
     for job_id in job_ids:
-        with open(os.path.join(dir_path, "{}-details.txt".format(job_id))) as details_file:
-            fail_rate = float(pattern.findall(details_file.read())[0][1])
+        with open(os.path.join(dir_path, "{}".format(job_id) + file_format)) as details_file:
+            if not patternchoice == "mofo":
+                underestimate, overestimate, unexvar = pattern.findall(details_file.read())[0]
+                fail_rate = max(abs(float(underestimate)), abs(float(overestimate)))                
+            else:
+                fail_rate = float(pattern.findall(details_file.read())[0][1])                
             if fail_rate > threshold:
                 to_delete.append((job_id, fail_rate, "under {}".format(threshold)))
             elif fail_rate in fail_rates:
@@ -32,4 +43,4 @@ def delete_solutions(dir_path, threshold):
 
 
 if __name__ == "__main__":
-    delete_solutions(sys.argv[1], float(sys.argv[2]))
+    delete_solutions(sys.argv[1], float(sys.argv[2]), sys.argv[3])

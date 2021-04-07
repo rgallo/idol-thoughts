@@ -101,18 +101,19 @@ def handle_args():
 
 
 def get_init_values(init_dir, eventofinterest, popsize, is_random):
-    pattern = re.compile(r'^Exact \(\+/- 0.10\) = ([\d\.]*)$', re.MULTILINE)
+    pattern = re.compile(r'^max underestimate (-?[\d\.]*), max overestimate (-?[\d\.]*), unexvar (-?[\d\.]*)$', re.MULTILINE)
     results = []
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
     if len(job_ids) < popsize:
         raise Exception("Population is set to {} and there are only {} solutions, find more solutions or decrease pop size".format(popsize, len(job_ids)))
     for job_id in job_ids:
         with open(os.path.join(init_dir, "{}-".format(job_id) + eventofinterest + "solution.json")) as solution_file, open(os.path.join(init_dir, "{}-".format(job_id) + eventofinterest + "details.txt")) as details_file:
-            results.append((float(pattern.findall(details_file.read())[0][0]), json.load(solution_file)))
+            underestimate, overestimate, unexvar = pattern.findall(details_file.read())[0]            
+            results.append((max(abs(float(underestimate)), abs(float(overestimate))), json.load(solution_file)))
     if is_random:
         random.shuffle(results)
     else:
-        results.sort(key=lambda x: x[0], reverse=True)
+        results.sort(key=lambda x: x[0], reverse=False)
     return np.array([result[1] for result in results[:popsize]])
 
 
