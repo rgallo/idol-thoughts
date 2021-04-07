@@ -95,10 +95,11 @@ def main():
         team_attrs = json.load(f)
     popsize = 25
     init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst) if cmd_args.init else 'latinhypercube'
+    recombination = 0.7 if (type(init) == str) else 0.4
     args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
-                                    mutation=(0.01, 1.99), recombination=0.7, workers=workers, maxiter=10000,
+                                    mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000,
                                     init=init)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))

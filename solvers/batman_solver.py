@@ -112,7 +112,7 @@ def get_init_values(init_dir, eventofinterest, popsize, is_random):
     if is_random:
         random.shuffle(results)
     else:
-        results.sort(reverse=True, key=lambda x: x[0])
+        results.sort(key=lambda x: x[0], reverse=True)
     return np.array([result[1] for result in results[:popsize]])
 
 
@@ -148,15 +148,16 @@ def main():
     bounds_park_mods = [modterm.bounds for modterm in BATMAN_BALLPARK_TERMS if modterm.playerstat.lower() in stlatlist]
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
     parkterms = [modterm for modterm in BATMAN_BALLPARK_TERMS if modterm.playerstat.lower() in stlatlist]
-    bounds = base_bounds + bounds_team + bounds_park            
+    bounds = base_bounds + bounds_team + bounds_park                
     popsize = 25
     init = get_init_values(cmd_args.init, eventofinterest, popsize, cmd_args.random) if cmd_args.init else 'latinhypercube'
+    recombination = 0.7 if (type(init) == str) else 0.4
     if eventofinterest == "abs":
-        establish_baseline = True
+        establish_baseline = True    
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, modterms, parkterms, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, establish_baseline, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=popsize, tol=0.0001, 
-                                    mutation=(0.01, 1.99), recombination=0.4, workers=workers, maxiter=10000, init=init)
+                                    mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000, init=init)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in
                     zip(BATMAN_STLAT_LIST, zip(*[iter(result.x[:-len(BATMAN_SPECIAL_CASES)])] * 3))))
     print("factors,{},{}".format(result.x[-2], result.x[-1]))

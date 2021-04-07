@@ -44,7 +44,7 @@ ALL_GAMES = 0
 MIN_LJG_FAIL_SAVINGS = 0
 LAST_BEST = 1000000000.0
 LAST_DAY_RANGE = 1
-LAST_SEASON_RANGE = 0
+LAST_SEASON_RANGE = 1
 MOD_BASELINE = False
 BEST_MOD_RATES = {}
 ALL_MOD_GAMES = {}
@@ -863,7 +863,7 @@ def minimize_batman_func(parameters, *data):
     batman_max_err, batman_min_err = 0.0, 100000.0        
     batman_unexvar = 0.0
     good_batter_perf_data, abs_batter_perf_data, good_bats_perf_data = [], [], []                                
-    fail_rate, pos_fail_rate, zero_avg_error, pos_avg_error = 1.0, 1.0, 100.0, 100.0
+    fail_rate, pos_fail_rate, zero_avg_error, pos_avg_error, final_exponent = 1.0, 1.0, 100.0, 100.0, 1.0
     max_err_actual, min_err_actual = "", ""
     reject_solution, viability_unchecked = False, True
     max_atbats, max_hits, max_homers = 0, 0, 0
@@ -943,16 +943,19 @@ def minimize_batman_func(parameters, *data):
                     max_err_actual = actual_result
                 if batman_fail_by < batman_min_err:
                     batman_min_err = batman_fail_by
+                    if CURRENT_ITERATION > 1:
+                        if (real_val == abs(batman_fail_by)) and (real_val > 0) and (not eventofinterest == "abs"):
+                            reject_solution = True
+                            REJECTS += 1                            
+                            break                                             
                     min_err_actual = actual_result            
             if abs(batman_min_err) >= MAX_INTEREST:
                 reject_solution = True
-                REJECTS += 1
-                LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
+                REJECTS += 1                
                 break                                             
             elif max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR:
                 reject_solution = True
-                REJECTS += 1
-                LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
+                REJECTS += 1                
                 break                            
             if eventofinterest == "abs":
                 stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
@@ -1186,6 +1189,12 @@ def minimize_batman_func(parameters, *data):
                                 max_err_actual = actual_result
                             if batman_fail_by < batman_min_err:
                                 batman_min_err = batman_fail_by
+                                if CURRENT_ITERATION > 1:
+                                    if (real_val == abs(batman_fail_by)) and (real_val > 0) and (not eventofinterest == "abs"):
+                                        reject_solution = True
+                                        REJECTS += 1
+                                        LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
+                                        break                                                                                 
                                 min_err_actual = actual_result                 
                         if abs(batman_min_err) >= MAX_INTEREST:
                             reject_solution = True
@@ -1284,10 +1293,10 @@ def minimize_batman_func(parameters, *data):
         if (pass_exact > 0.0) or (CURRENT_ITERATION == 1):            
             if pass_exact > BEST_EXACT:
                 debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, zero fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}, pavgerr = {:.4f}, zavgerr = {:.4f}".format(fail_rate, pos_fail_rate, zero_fail_rate, pass_exact, batman_max_err, batman_min_err, pos_avg_error, use_zero_error), debug, "::::::::")
-            if batman_max_err >= batman_min_err:                        
-                fail_points = (zero_fail_rate * 10.0 * use_zero_error) + (pos_fail_rate * 300.0 * pos_avg_error) + ((100.0 - pass_exact) * 10.0)
-                #print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format(max(abs(batman_max_err), abs(batman_min_err)), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                        
-                linear_fail = ((abs(batman_max_err) + abs(batman_min_err)) * 12.5) + fail_points
+            if batman_max_err >= batman_min_err:                             
+                fail_points = (zero_fail_rate * 100.0 * use_zero_error) + (pos_fail_rate * 100.0 * pos_avg_error) + ((100.0 - pass_exact) * (pos_avg_error + use_zero_error))
+                #print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format(max(abs(batman_max_err), abs(batman_min_err)), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                                                        
+                linear_fail = (max(abs(batman_max_err), abs(batman_min_err)) * 400.0) + fail_points
         else:
             debug_print("Rejected for insufficient exact. Pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
             EXACT_FAILS += 1
