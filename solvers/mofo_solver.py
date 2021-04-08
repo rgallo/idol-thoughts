@@ -86,7 +86,7 @@ def main():
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]
     bounds_park_mods = [modterm.bounds for modterm in BALLPARK_TERMS]
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
-    bounds = ([(-8, 0), (0, 2), (-2, 4)] * 2) + ([(-2, 8), (0, 3), (-2, 4)] * (len(MOFO_STLAT_LIST) - 2)) + bounds_team + bounds_park
+    bounds = ([(-8, 0), (0, 2), (-2, 4)] * 2) + ([(-2, 8), (0, 3), (-2, 4)] * 20) + ([(1, 15), (0, 3), (1, 4)] * 5) + ([(-2, 8), (0, 3), (-2, 4)] * (len(MOFO_STLAT_LIST) - 27)) + bounds_team + bounds_park
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     game_list = base_solver.get_games(cmd_args.gamefile)
