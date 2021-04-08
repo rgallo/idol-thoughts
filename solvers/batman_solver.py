@@ -153,6 +153,7 @@ def main():
     popsize = 25
     init = get_init_values(cmd_args.init, eventofinterest, popsize, cmd_args.random) if cmd_args.init else 'latinhypercube'
     recombination = 0.7 if (type(init) == str) else 0.4
+    recombination = 0.5 if (workers > 2) else recombination
     if eventofinterest == "abs":
         establish_baseline = True    
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, modterms, parkterms, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, establish_baseline, 

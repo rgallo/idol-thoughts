@@ -86,7 +86,7 @@ def main():
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]
     bounds_park_mods = [modterm.bounds for modterm in BALLPARK_TERMS]
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
-    bounds = [(-2, 8), (0, 3), (-2, 4)] * len(MOFO_STLAT_LIST) + bounds_team + bounds_park
+    bounds = ([(-8, 0), (0, 2), (-2, 4)] * 2) + ([(-2, 8), (0, 3), (-2, 4)] * (len(MOFO_STLAT_LIST) - 2)) + bounds_team + bounds_park
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     game_list = base_solver.get_games(cmd_args.gamefile)
@@ -95,7 +95,9 @@ def main():
         team_attrs = json.load(f)
     popsize = 25
     init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst) if cmd_args.init else 'latinhypercube'
-    recombination = 0.7 if (type(init) == str) else 0.4
+    recombination = 0.7
+    #recombination = 0.7 if (type(init) == str) else 0.4
+    #recombination = 0.5 if (workers > 2) else recombination
     args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
