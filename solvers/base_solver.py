@@ -695,7 +695,7 @@ def minimize_func(parameters, *data):
 
                 if calculate_solution:                                            
                     fail_points = ((fail_rate * 100.0) * max_fail_rate) * 2.5                    
-                    linear_points = (fail_points * fail_rate) if (linear_points < (fail_points * fail_rate)) else linear_points
+                    #linear_points = (fail_points * fail_rate) if (linear_points < (fail_points * fail_rate)) else linear_points
                     linear_fail = fail_points + linear_points  
                     #if (linear_fail >= BEST_RESULT) and (fail_rate < BEST_FAIL_RATE):
                      #   print("Failed due to linearity points; {:.4f} in shape, {:.4f} in errors".format(sum(shape), sum(errors)))
