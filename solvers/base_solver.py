@@ -736,9 +736,9 @@ def minimize_func(parameters, *data):
                     all_rates.append(unmod_rate / 100.0)
                     all_rates.append(fail_rate)
                     aggregate_fail_rate = max(all_rates)                    
-                    fail_points = ((aggregate_fail_rate * 1000.0) ** 2.0) * 2.5                                                                                   
+                    fail_points = ((aggregate_fail_rate * 1000.0) ** 2.0)
                     if linear_points <= fail_points:
-                        linear_fail = fail_points + linear_points           
+                        linear_fail = fail_points
                         debug_print("Aggregate fail rate = {:.4f}, fail points = {}, linear points = {}, total = {}, Best = {}".format(aggregate_fail_rate, int(fail_points), int(linear_points), int(linear_fail), int(BEST_RESULT)), debug2, ":::")                        
                     else:
                         linear_fail = BEST_RESULT + aggregate_fail_rate
