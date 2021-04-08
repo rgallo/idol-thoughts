@@ -127,22 +127,25 @@ def main():
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)
     stlatlist = BATMAN_STLAT_LIST
     special_cases = BATMAN_SPECIAL_CASES
-    establish_baseline = False
+    establish_baseline = False    
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     with open("sweptelsewheregames.csv") as f_swelsewhere:
         games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
-        base_bounds = ([(-8, 0), (0, 2), (-2, 4)] * 2) + ([(0, 8), (0, 2), (-2, 4)] * (len(stlatlist) - 2)) + [(1, 3), (1, 3), (0.07, 0.10)]
+        bounds_terms = ([(-8, 0), (0, 2), (-2, 4)] * 2) + ([(1, 9), (0, 3), (1, 4)] * 5) + ([(1, 9), (0, 3), (1, 4)] * 5) + ([(0, 8), (0, 2), (-2, 4)] * (len(stlatlist) - 12))
+        base_bounds = bounds_terms + [(1, 3), (1, 3), (0.07, 0.10)]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        base_bounds = ([(-8, 0), (0, 2), (-2, 4)] * 2) + ([(0, 8), (0, 2), (-2, 4)] * (len(stlatlist) - 2)) + [(1, 3), (1, 3), (0.02, 0.06)]
+        bounds_terms = ([(-8, 0), (0, 2), (-2, 4)] * 2) + ([(1, 9), (0, 3), (1, 4)] * 5) + ([(1, 9), (0, 3), (1, 4)] * 5) + ([(0, 8), (0, 2), (-2, 4)] * (len(stlatlist) - 12))
+        base_bounds = bounds_terms + [(1, 3), (1, 3), (0.02, 0.06)]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        base_bounds = ([(-8, 0), (0, 2), (-2, 4)] * 2) + ([(0, 8), (0, 2), (-2, 4)] * (len(stlatlist) - 2)) + [(1, 3), (1, 3), (0.02, 0.12), (0, 0.02), (0, 0.02)]
+        bounds_terms = ([(-8, 0), (0, 2), (-2, 4)] * 2) + ([(1, 9), (0, 3), (1, 4)] * 5) + ([(1, 9), (0, 3), (1, 4)] * 5) + ([(0, 8), (0, 2), (-2, 4)] * (len(stlatlist) - 12))
+        base_bounds = bounds_terms + [(1, 3), (1, 3), (0.02, 0.12), (0, 0.02), (0, 0.02)]
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
     modterms = [modterm for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]

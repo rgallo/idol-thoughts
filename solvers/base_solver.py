@@ -3,6 +3,7 @@ import csv
 import sys
 import time
 import math
+import statistics
 import datetime
 import json
 import os
@@ -37,18 +38,19 @@ BEST_UNMOD = 1000000000000.0
 WORST_ERROR = 1000000000.0
 MAX_INTEREST = 1000000000.0
 BASELINE_ERROR = 1000000000.0
-SEASON_GAMES = 1188
+PASSED_GAMES = 0.25
 REJECTS = 0
 ALL_UNMOD_GAMES = 0
 ALL_GAMES = 0
-MIN_LJG_FAIL_SAVINGS = 0
+BEST_AGG_FAIL_RATE = 0
 LAST_BEST = 1000000000.0
+PREVIOUS_LAST_BEST = 1000000000.0
 LAST_DAY_RANGE = 1
 LAST_SEASON_RANGE = 1
 MOD_BASELINE = False
+EARLY_REJECT = False
 BEST_MOD_RATES = {}
 ALL_MOD_GAMES = {}
-PREVIOUS_LINE_JUMP_GAMES = {}
 LINE_JUMP_GAMES = {}
 HAS_GAMES = {}
 LAST_ITERATION_TIME = datetime.datetime.now()
@@ -251,14 +253,15 @@ def minimize_func(parameters, *data):
     global HAS_GAMES
     global WORST_ERROR
     global LAST_ITERATION_TIME
-    global SEASON_GAMES    
+    global PASSED_GAMES    
     global LINE_JUMP_GAMES    
-    global PREVIOUS_LINE_JUMP_GAMES
-    global MIN_LJG_FAIL_SAVINGS
+    global PREVIOUS_LAST_BEST
+    global BEST_AGG_FAIL_RATE
     global LAST_BEST
     global LAST_DAY_RANGE
     global LAST_SEASON_RANGE
     global REJECTS
+    global EARLY_REJECT
     calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     special_case_list = special_case_list or []            
@@ -280,21 +283,27 @@ def minimize_func(parameters, *data):
     linear_fail = 100.0
     linear_error, check_fail_rate = 0.0, 0.0
     love_rate, instinct_rate, ono_rate, wip_rate, exk_rate, exb_rate, unmod_rate = 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0
-    k9_max_err, k9_min_err = 0, 0
+    k9_max_err, k9_min_err, ljg_passed = 0, 0, 0
     mod_fails, mod_games, mod_rates = {}, {}, {}
     reorder_keys = {}
-    multi_mod_fails, multi_mod_games, mvm_fails, mvm_games, ljg_evaled, ljg_fail_savings = 0, 0, 0, 0, 0, 0
+    multi_mod_fails, multi_mod_games, mvm_fails, mvm_games, ljg_fail_savings = 0, 0, 0, 0, 0
     unmod_fails, unmod_games, unmod_rate = 0, 0, 0.0
     reject_solution, viability_unchecked, new_pass, addfails = False, True, False, False
     line_jumpers = {}
+    reorder_failsfirst = {}
     all_vals = []
-    win_loss = []    
+    win_loss = []  
+    early_vals = []
     
     #let some games jump the line        
-    fail_threshold = LAST_BEST
-    for gameid in LINE_JUMP_GAMES:        
-        current_best_mod_rates = BEST_MOD_RATES.values()    
-        ljg_evaled += 1
+    if EARLY_REJECT:
+        fail_threshold = LAST_BEST
+    else:
+        fail_threshold = min(LAST_BEST, len(LINE_JUMP_GAMES) * BEST_FAIL_RATE)
+    for gameid in LINE_JUMP_GAMES:   
+        if reject_solution:
+            break
+        current_best_mod_rates = BEST_MOD_RATES.values()            
         game = LINE_JUMP_GAMES[gameid]
         season = int(game["away"]["season"])
         day = int(game["away"]["day"])
@@ -318,19 +327,20 @@ def minimize_func(parameters, *data):
         game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods)                        
         game_counter += game_game_counter
         fail_counter += game_fail_counter  
-        if game_game_counter > 0:
+        if game_game_counter > 0:    
+            reorder_keys[game["away"]["game_id"]] = game                                
             if game_fail_counter > 0:
-                line_jumpers[game["away"]["game_id"]] = game    
+                line_jumpers[game["away"]["game_id"]] = game                
             else:                
                 new_pass = True
-                #trying this to see if I can push games where we passed once before to the end of the dict
-                reorder_keys[game["away"]["game_id"]] = game                                
-        if fail_counter > fail_threshold:                              
-            if not reject_solution:
-                reject_solution = True                        
-                REJECTS += 1                            
-            if (fail_threshold == BEST_FAILCOUNT) or (fail_threshold == LAST_BEST):
-                break
+                ljg_passed += PASSED_GAMES
+                if ljg_passed >= 1.0:
+                    line_jumpers[game["away"]["game_id"]] = game                
+                    ljg_passed -= 1               
+        if fail_counter >= fail_threshold:                                          
+            reject_solution = True                        
+            REJECTS += 1                                        
+            break
         if game_game_counter == 1:
             all_vals.append(game_away_val)   
             if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
@@ -356,10 +366,9 @@ def minimize_func(parameters, *data):
                     mod_fails[name] += game_fail_counter
                     mod_games[name] += game_game_counter                    
                     check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name]) * 100.0
-                    if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):     
-                        if not reject_solution:
-                            reject_solution = True
-                            REJECTS += 1     
+                    if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):                             
+                        reject_solution = True
+                        REJECTS += 1     
                         break
                     awayMods += 1                          
                 if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
@@ -376,10 +385,9 @@ def minimize_func(parameters, *data):
                     mod_fails[name] += game_fail_counter
                     mod_games[name] += game_game_counter
                     check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name]) * 100.0
-                    if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
-                        if not reject_solution:
-                            reject_solution = True
-                            REJECTS += 1     
+                    if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):                        
+                        reject_solution = True
+                        REJECTS += 1     
                         break
                     homeMods += 1  
                 if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
@@ -394,32 +402,28 @@ def minimize_func(parameters, *data):
                     unmod_fails += game_fail_counter  
                     unmod_games += game_game_counter
                     check_fail_rate = (unmod_fails / ALL_UNMOD_GAMES) * 100.0
-                    if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
-                        if not reject_solution:
-                            reject_solution = True
-                            REJECTS += 1
+                    if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):                        
+                        reject_solution = True
+                        REJECTS += 1
                         break    
                 if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
-                    break
-        
-    #only reject solutions now if we didn't find at least one new pass from the previous fail set   
-     
-    if CURRENT_ITERATION > 1 and new_pass and reject_solution:        
-        #only repopulate if we know we're hitting these again before going through more games
-        if len(PREVIOUS_LINE_JUMP_GAMES) > 0:
-            for pgameid in PREVIOUS_LINE_JUMP_GAMES:
-                oldgame = PREVIOUS_LINE_JUMP_GAMES[pgameid]
-                if oldgame["away"]["game_id"] in reorder_keys:                                     
-                    del LINE_JUMP_GAMES[pgameid]                    
-                    LINE_JUMP_GAMES[oldgame["away"]["game_id"]] = oldgame            
-        PREVIOUS_LINE_JUMP_GAMES = reorder_keys
-        reorder_keys.clear()
+                    break                 
+    
     if CURRENT_ITERATION > 1:        
         if not reject_solution:                        
-            LAST_BEST = fail_counter * (1.0 + (BEST_FAIL_RATE / 10.0))            
-            #print("No rejects from within line-jump games, {} games in set, {} games evaluated, {} max fails, {} this run".format(len(LINE_JUMP_GAMES), ljg_evaled, int(fail_threshold), fail_counter))    
-        #else:               
-            #print("Rejected from within line-jump games, {} games in set, {} games evaluated, {} max fails, {} last best".format(len(LINE_JUMP_GAMES), ljg_evaled, int(fail_threshold), int(LAST_BEST)))                    
+            LAST_BEST = fail_counter     
+            EARLY_REJECT = False
+            #print("No rejects from within line-jump games, {} games in set, {} games evaluated, {} max fails, {} this run".format(len(LINE_JUMP_GAMES), game_counter, int(fail_threshold), fail_counter))    
+        else:     
+            #print("Rejected from within line-jump games, {} games in set, {} games evaluated, {} max fails, {} this run, {} last best".format(len(LINE_JUMP_GAMES), game_counter, int(fail_threshold), fail_counter, int(LAST_BEST)))                    
+            if fail_counter >= fail_threshold:
+                EARLY_REJECT = True
+                LAST_BEST = fail_counter
+                #print("Next set should have {} games".format(game_counter))
+                LINE_JUMP_GAMES.clear()
+                LINE_JUMP_GAMES = reorder_keys            
+            else:
+                EARLY_REJECT = False
     seasonrange = reversed(range(12, 15))
     dayrange = range(1, 125)
     if not reject_solution:
@@ -437,6 +441,8 @@ def minimize_func(parameters, *data):
          #   dayrange = range(1, 125)
         #else:
          #   dayrange = reversed(range(1, 125))
+
+        LAST_SEASON_RANGE = 1 if (LAST_SEASON_RANGE == 0) else 0    
 
     for season in seasonrange:
         if reject_solution:            
@@ -508,19 +514,29 @@ def minimize_func(parameters, *data):
                     HAS_GAMES[season] = True
                 game_counter += game_game_counter
                 fail_counter += game_fail_counter  
-                if game_fail_counter > 0 and game_game_counter > 0:
-                    line_jumpers[game["away"]["game_id"]] = game                                    
-                if fail_counter > BEST_FAILCOUNT:                                      
+                if game_game_counter > 0:
+                    if game_fail_counter > 0:
+                        line_jumpers[game["away"]["game_id"]] = game      
+                    else:
+                        ljg_passed += PASSED_GAMES
+                        if ljg_passed >= 1:
+                            line_jumpers[game["away"]["game_id"]] = game                
+                            ljg_passed -= 1
+                if fail_counter >= BEST_FAILCOUNT:                                      
                     reject_solution = True           
-                    #print("Rejecting for fail count reasons; line jumpers = {}, LINE_JUMP_GAMES = {}".format(len(line_jumpers), len(LINE_JUMP_GAMES)))                    
-                    prior_games = len(LINE_JUMP_GAMES)
-                    for gameid in line_jumpers:
-                        newgame = line_jumpers[gameid]                        
-                        if newgame["away"]["game_id"] not in LINE_JUMP_GAMES:
-                            LINE_JUMP_GAMES[newgame["away"]["game_id"]] = newgame  
-                    added_games = len(LINE_JUMP_GAMES) - prior_games
-                    LAST_BEST += added_games if (added_games > 0) else 0
-                    #print("New counts are line jumpers = {}, LINE_JUMP_GAMES = {}".format(len(line_jumpers), len(LINE_JUMP_GAMES)))
+                    #print("Rejecting for fail count reasons")                    
+                    #prior_games = len(LINE_JUMP_GAMES)
+                    #for gameid in line_jumpers:
+                        #newgame = line_jumpers[gameid]                        
+                        #if newgame["away"]["game_id"] not in LINE_JUMP_GAMES:
+                            #LINE_JUMP_GAMES[newgame["away"]["game_id"]] = newgame  
+                    #added_games = len(LINE_JUMP_GAMES) - prior_games
+                    #LAST_BEST += added_games if (added_games > 0) else 0
+                    LINE_JUMP_GAMES.clear()
+                    LINE_JUMP_GAMES = line_jumpers                    
+                    LAST_BEST = BEST_FAILCOUNT
+                    #LINE_JUMP_GAMES[game["away"]["game_id"]] = game
+                    #LAST_BEST += 1
                     REJECTS += 1
                     break                
                 if game_game_counter == 1:
@@ -553,8 +569,10 @@ def minimize_func(parameters, *data):
                                 if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
                                     reject_solution = True 
                                     #print("Rejecting for mod reasons")
-                                    LINE_JUMP_GAMES[game["away"]["game_id"]] = game
-                                    LAST_BEST += 1
+                                    #LINE_JUMP_GAMES[game["away"]["game_id"]] = game
+                                    LINE_JUMP_GAMES.clear()
+                                    LINE_JUMP_GAMES = line_jumpers
+                                    LAST_BEST += (fail_counter - LAST_BEST)
                                     REJECTS += 1     
                                     break
                             awayMods += 1  
@@ -577,8 +595,10 @@ def minimize_func(parameters, *data):
                                 if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
                                     reject_solution = True     
                                     #print("Rejecting for mod reasons")
-                                    LINE_JUMP_GAMES[game["away"]["game_id"]] = game
-                                    LAST_BEST += 1
+                                    #LINE_JUMP_GAMES[game["away"]["game_id"]] = game
+                                    LINE_JUMP_GAMES.clear()
+                                    LINE_JUMP_GAMES = line_jumpers
+                                    LAST_BEST += (fail_counter - LAST_BEST)
                                     REJECTS += 1     
                                     break
                             homeMods += 1      
@@ -594,14 +614,17 @@ def minimize_func(parameters, *data):
                             unmod_fails += game_fail_counter  
                             unmod_games += game_game_counter                          
                             if CURRENT_ITERATION > 1:
+                                current_best_mod_rates = BEST_MOD_RATES.values()
                                 check_fail_rate = (unmod_fails / ALL_UNMOD_GAMES) * 100.0
                                 if check_fail_rate > max(BEST_UNMOD, max(current_best_mod_rates)):
                                     reject_solution = True     
                                     #print("Rejecting for unmod reasons")
-                                    LINE_JUMP_GAMES[game["away"]["game_id"]] = game
-                                    LAST_BEST += 1
+                                    #LINE_JUMP_GAMES[game["away"]["game_id"]] = game
+                                    LINE_JUMP_GAMES.clear()
+                                    LINE_JUMP_GAMES = line_jumpers
+                                    LAST_BEST += (fail_counter - LAST_BEST)
                                     REJECTS += 1
-                                    break
+                                    break                        
                 elif game_game_counter == 2:                    
                     k9_max_err = game_away_val if (game_away_val > k9_max_err) else k9_max_err
                     k9_max_err = game_home_val if (game_home_val > k9_max_err) else k9_max_err
@@ -636,21 +659,34 @@ def minimize_func(parameters, *data):
         if season not in HAS_GAMES:
             HAS_GAMES[season] = False
         season_end = datetime.datetime.now()
-        # debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)        
+        # debug_print("season {} end: {}, run time {}, average day run {}".format(season, season_end, season_end-season_start, (season_end-season_start)/season_days), debug3, run_id)    
+        
     if not reject_solution:
-        fail_rate = fail_counter / game_counter
+        fail_rate = fail_counter / game_counter        
         #print("Fail rate = {:.4f}, Best fail rate = {:.4f}".format(fail_rate, BEST_FAIL_RATE))
+        #LAST_BEST = PREVIOUS_LAST_BEST
     else:
-        fail_rate = 1.0        
-        if CURRENT_ITERATION > 1 and new_pass and (len(reorder_keys) > 0):        
+        fail_rate = 1.0   
+        #if early_reject:
+            #LINE_JUMP_GAMES.clear()
+            #LINE_JUMP_GAMES = line_jumpers
+        #if CURRENT_ITERATION > 1 and new_pass and (len(reorder_keys) > 0):        
             #only push to the end if we've passed the game game twice in a row
-            if len(PREVIOUS_LINE_JUMP_GAMES) > 0:
-                for pgameid in PREVIOUS_LINE_JUMP_GAMES:
-                    oldgame = PREVIOUS_LINE_JUMP_GAMES[pgameid]
-                    if oldgame["away"]["game_id"] in reorder_keys:                                     
-                        del LINE_JUMP_GAMES[pgameid]                    
-                        LINE_JUMP_GAMES[oldgame["away"]["game_id"]] = oldgame            
-            PREVIOUS_LINE_JUMP_GAMES = reorder_keys        
+            #if len(PREVIOUS_LINE_JUMP_GAMES) > 0:
+                #for pgameid in PREVIOUS_LINE_JUMP_GAMES:
+                    #oldgame = PREVIOUS_LINE_JUMP_GAMES[pgameid]
+                    #if oldgame["away"]["game_id"] in reorder_keys:                                     
+                        #del LINE_JUMP_GAMES[pgameid]                    
+                        #LINE_JUMP_GAMES[oldgame["away"]["game_id"]] = oldgame            
+                #PREVIOUS_LINE_JUMP_GAMES.clear()
+            #PREVIOUS_LINE_JUMP_GAMES = reorder_keys 
+        #reorder_failsfirst = line_jumpers
+        #for gameid in LINE_JUMP_GAMES:
+            #game = LINE_JUMP_GAMES[gameid]
+            #if game["away"]["game_id"] not in reorder_failsfirst:
+                #reorder_failsfirst[game["away"]["game_id"]] = game
+        #LINE_JUMP_GAMES.clear()
+        #LINE_JUMP_GAMES = reorder_failsfirst
     if len(win_loss) == 0:
         TOTAL_GAME_COUNTER = game_counter if (game_counter > TOTAL_GAME_COUNTER) else TOTAL_GAME_COUNTER                
     # need to sort win_loss to match up with what will be the sorted set of vals
@@ -693,10 +729,21 @@ def minimize_func(parameters, *data):
                         print("Failed for unmod rate reasons; shouldn't be seeing this if everything is working properly")
                         calculate_solution = False                        
 
-                if calculate_solution:                                            
-                    fail_points = (fail_rate * 100.0) * max_fail_rate * 250.0                    
-                    #linear_points = (fail_points * fail_rate) if (linear_points < (fail_points * fail_rate)) else linear_points
-                    linear_fail = fail_points + linear_points  
+                if calculate_solution:                                           
+                    all_rates = []
+                    for name in mod_rates:
+                        all_rates.append(mod_rates[name] / 100.0) 
+                    all_rates.append(unmod_rate / 100.0)
+                    all_rates.append(fail_rate)
+                    aggregate_fail_rate = max(all_rates)                    
+                    fail_points = ((aggregate_fail_rate * 1000.0) ** 2.0) * 2.5                                                                                   
+                    if linear_points <= fail_points:
+                        linear_fail = fail_points + linear_points           
+                        debug_print("Aggregate fail rate = {:.4f}, fail points = {}, linear points = {}, total = {}, Best = {}".format(aggregate_fail_rate, int(fail_points), int(linear_points), int(linear_fail), int(BEST_RESULT)), debug2, ":::")                        
+                    else:
+                        linear_fail = BEST_RESULT + aggregate_fail_rate
+                        debug_print("Did not meet linearity requirement to calculate. Aggregate fail rate = {:.4f}, fail points = {}, linear points = {}".format(aggregate_fail_rate, int(fail_points), int(linear_points)), debug2, ":::")                        
+                    
                     #if (linear_fail >= BEST_RESULT) and (fail_rate < BEST_FAIL_RATE):
                      #   print("Failed due to linearity points; {:.4f} in shape, {:.4f} in errors".format(sum(shape), sum(errors)))
                     #elif (linear_fail < BEST_RESULT):
@@ -713,15 +760,16 @@ def minimize_func(parameters, *data):
             linear_fail = (k9_max_err - k9_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
     if linear_fail < BEST_RESULT:
         BEST_RESULT = linear_fail           
-        ALL_GAMES = game_counter
-        BEST_FAILCOUNT = fail_counter  
-        LAST_BEST = BEST_FAILCOUNT
-        LINE_JUMP_GAMES.clear()
-        LINE_JUMP_GAMES = line_jumpers          
-        LAST_SEASON_RANGE = 1 if (LAST_SEASON_RANGE == 0) else 0
+        ALL_GAMES = game_counter        
+        LINE_JUMP_GAMES.clear()        
+        LINE_JUMP_GAMES = line_jumpers                  
         if len(win_loss) > 0:
             BEST_FAIL_RATE = fail_rate
-            MIN_LJG_FAIL_SAVINGS = (BEST_FAILCOUNT * (1.0 - BEST_FAIL_RATE))
+            BEST_AGG_FAIL_RATE = aggregate_fail_rate
+            BEST_FAILCOUNT = (game_counter / 2) if (linear_points > fail_points) else fail_counter
+            LAST_BEST = (game_counter / 2) if (linear_points > fail_points) else fail_counter
+            PREVIOUS_LAST_BEST = LAST_BEST
+            PASSED_GAMES = (BEST_AGG_FAIL_RATE / 2.0)
             BEST_LINEAR_ERROR = linear_points
             if mod_mode:     
                 for name in mod_rates:
@@ -793,7 +841,7 @@ def minimize_func(parameters, *data):
                 debug_print("min error {}, max error {}".format(k9_min_err, k9_max_err), debug, run_id)
                 debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + special_case_output, debug, run_id)      
                 WORST_ERROR = (k9_max_err - k9_min_err)
-        debug_print("-" * 20 + "\n", debug, run_id)        
+        debug_print("-" * 20 + "\n", debug, run_id)            
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0)):
         if len(win_loss) > 0:
             now = datetime.datetime.now()
@@ -1213,11 +1261,8 @@ def minimize_batman_func(parameters, *data):
                             reject_solution = True
                             REJECTS += 1
                             LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
-                            break
-                        elif (not eventofinterest == "abs") and (max(abs(batman_max_err), abs(batman_min_err)) >= (WORST_ERROR * 0.9)):
-                            #experimenting with adding games to the jump for being close to the worst error
-                            LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
-                        elif (eventofinterest == "abs") and (max(abs(batman_max_err), abs(batman_min_err)) >= (WORST_ERROR - 1.0)):
+                            break                                                  
+                        elif (eventofinterest == "abs") and (max(abs(batman_max_err), abs(batman_min_err)) >= (WORST_ERROR - 0.5)):
                             #experimenting with adding games to the jump for being close to the worst error
                             LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
                         if eventofinterest == "abs":
