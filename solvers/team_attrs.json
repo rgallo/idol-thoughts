@@ -177,6 +177,12 @@
       "EXTRA_STRIKE",
       "TRAVELING"
     ],
+    "Boston Flowers": [
+      "GROWTH"
+    ],
+    "Philly Pies": [
+      "AFFINITY_FOR_CROWS"
+    ],
     "Chicago Firefighters": [
       "LATE_TO_PARTY"
     ]
@@ -193,6 +199,35 @@
     ],
     "Yellowstone Magic": [
       "O_NO"
+    ],
+    "Boston Flowers": [
+      "GROWTH"
+    ],
+    "Philly Pies": [
+      "AFFINITY_FOR_CROWS"
+    ],
+    "Charleston Shoe Thieves": [
+      "TRAVELING"
+    ]
+  },
+  "15": {
+    "Hellmouth Sunbeams": [
+      "BASE_INSTINCTS"
+    ],
+    "Canada Moist Talkers": [
+      "HIGH_PRESSURE"
+    ],
+    "San Francisco Lovers": [
+      "LOVE"
+    ],
+    "Yellowstone Magic": [
+      "O_NO"
+    ],
+    "Boston Flowers": [
+      "GROWTH"
+    ],
+    "Philly Pies": [
+      "AFFINITY_FOR_CROWS"
     ],
     "Charleston Shoe Thieves": [
       "TRAVELING"

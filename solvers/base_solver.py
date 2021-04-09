@@ -424,7 +424,7 @@ def minimize_func(parameters, *data):
                 LINE_JUMP_GAMES = reorder_keys            
             else:
                 EARLY_REJECT = False
-    seasonrange = reversed(range(12, 15))
+    seasonrange = reversed(range(12, 16))
     dayrange = range(1, 125)
     if not reject_solution:
         #if LAST_SEASON_RANGE == 0:
@@ -434,9 +434,9 @@ def minimize_func(parameters, *data):
              #   LAST_DAY_RANGE = 1    
 
         if LAST_SEASON_RANGE == 0:
-            seasonrange = range(12, 15)            
+            seasonrange = range(12, 16)            
         else:
-            seasonrange = reversed(range(12, 15))            
+            seasonrange = reversed(range(12, 16))            
         #if LAST_DAY_RANGE == 0:
          #   dayrange = range(1, 125)
         #else:
