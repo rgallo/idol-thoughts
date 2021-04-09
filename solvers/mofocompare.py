@@ -2,11 +2,13 @@ import argparse
 import json
 import collections
 import requests
+import os
 from dotenv import load_dotenv
 import sys
 sys.path.append("..")
 
 import mofo
+import helpers
 from idolthoughts import load_stat_data
 
 from solvers import base_solver
@@ -143,10 +145,17 @@ def compare(byteam, season, mofo_list):
     print ("Total mismatches: {}, MOFO correct: {} ({:.2f}%), Web correct: {} ({:.2f}%)".format(mismatches, moforight_mismatch, (moforight_mismatch/mismatches) * 100.0, webright_mismatch, (webright_mismatch/mismatches)*100.0))
 
 
-def get_mofo_list(game_list, team_attrs, stat_file_map, season, startday=1, endday=125, is_early=False):
+def get_mofo_list(game_list, team_attrs, stat_file_map, ballpark_file_map, season, startday=1, endday=125, is_early=False):
     mofo_list = []
     season_team_attrs = team_attrs.get(str(season), {})
+    stats_regened = False
     pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None    
+    terms_url = os.getenv("MOFO_TERMS")
+    terms, _ = helpers.load_terms(terms_url)
+    mods_url = os.getenv("MOFO_MODS")
+    mods = helpers.load_mods(mods_url)        
+    ballpark_mods_url = os.getenv("MOFO_BALLPARK_TERMS")
+    ballpark_mods = helpers.load_bp_terms(ballpark_mods_url)  
     for day in range(startday, endday):
         games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
         if not len(games) > 0:
@@ -165,19 +174,39 @@ def get_mofo_list(game_list, team_attrs, stat_file_map, season, startday=1, endd
             last_stat_filename = stat_filename
             pitchers = get_pitcher_id_lookup(stat_filename)
             team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)
+            stats_regened = False
         elif should_regen(day_mods):
             pitchers = get_pitcher_id_lookup(last_stat_filename)
             team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
+            stats_regened = True
+        elif stats_regened:
+            pitchers = get_pitcher_id_lookup(last_stat_filename)
+            team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
+            stats_regened = False
+          
+        ballpark_filename = ballpark_file_map.get((season, day))        
+        if ballpark_filename:
+            with open(ballpark_filename) as f:
+                ballparks = json.load(f)
+        else:
+            if ballparks is None:  # this should use the previous value of ballparks by default, use default if not
+                print("!!!!!!catching ballparks is none!!!!!")
+                ballparks = collections.defaultdict(lambda: collections.defaultdict(lambda: 0.5))
+            
         for game in paired_games:
             away_game, home_game = game["away"], game["home"]            
             awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
             homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
+            homeTeamId = helpers.get_team_id(homeTeam)
+            ballpark = ballparks.get(homeTeamId, collections.defaultdict(lambda: 0.5))
             #print("{} at {}".format(awayTeam, homeTeam))
             #if len(season_team_attrs.get(awayTeam, []) + season_team_attrs.get(homeTeam, [])) > 0:
                 #continue
-            away_odds, home_odds = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data,
-                                                  pitcher_stat_data, season_team_attrs.get(awayTeam, []),
-                                                  season_team_attrs.get(homeTeam, []), day, away_game["weather"])            
+            away_mods, home_mods = mofo.get_mods(mods, season_team_attrs.get(awayTeam, []), season_team_attrs.get(homeTeam, []), 
+                                                 awayTeam, homeTeam, awayPitcher, homePitcher, away_game["weather"], ballpark, 
+                                                 ballpark_mods, team_stat_data, pitcher_stat_data)            
+            away_odds, home_odds = mofo.get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data,
+                                                  pitcher_stat_data, terms, away_mods, home_mods)               
             mofo_list.append([homeTeam, game["away"]["game_id"], away_odds*100.0, int(game["away"]["weather"]), float(game["away"]["opposing_team_rbi"]), float(game["home"]["opposing_team_rbi"])])
     return mofo_list
 
@@ -194,6 +223,7 @@ def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--statfolder', help="path to stat folder")
     parser.add_argument('--gamefile', help="path to game file")
+    parser.add_argument('--ballparks', help="path to ballparks folder")
     parser.add_argument('--season', help="print output")
     parser.add_argument('--byteam', help="show success rates by team", action='store_true')
     parser.add_argument('--start', help="start day")  
@@ -208,6 +238,7 @@ def main():
     load_dotenv(dotenv_path="../.env")
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     game_list = base_solver.get_games(cmd_args.gamefile)
+    ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     byteam = cmd_args.byteam
     startday, endday = 1, 125
     if cmd_args.start:
@@ -217,7 +248,7 @@ def main():
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     season = int(cmd_args.season)
-    mofo_list = get_mofo_list(game_list, team_attrs, stat_file_map, season, startday, endday, cmd_args.early)
+    mofo_list = get_mofo_list(game_list, team_attrs, stat_file_map, ballpark_file_map, season, startday, endday, cmd_args.early)
     compare(byteam, season, mofo_list)
     # print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
 

@@ -116,7 +116,7 @@ BATMAN_MOD_TERMS = [
     BatmanModTerm("HIGH_PRESSURE", "same", "MaxContinuation",[[0, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("HIGH_PRESSURE", "same", "MaxGroundFriction",[[0, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("HIGH_PRESSURE", "same", "MaxIndulgence",[[0, 5], [0, 1], [1, 1.5]]),
-    BatmanModTerm("BASE_INSTINCTS", "opp", "Ruthlessness",[-5, 5], [0, 1], [1, 1.5]]),
+    BatmanModTerm("BASE_INSTINCTS", "opp", "Ruthlessness",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("BASE_INSTINCTS", "opp", "Unthwackability",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("BASE_INSTINCTS", "opp", "Overpowerment",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("BASE_INSTINCTS", "opp", "Shakespearianism",[[-5, 5], [0, 1], [1, 1.5]]),

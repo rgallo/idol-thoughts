@@ -18,8 +18,8 @@ BALLPARK_CACHE = {}
 GAME_CACHE = {}
 BATTER_CACHE = {}
 
-MIN_SEASON = 12
-MAX_SEASON = 15
+MIN_SEASON = 14
+MAX_SEASON = 14
 
 BEST_RESULT = 8000000000000.0
 BEST_FAIL_RATE = 1.0
@@ -287,7 +287,7 @@ def minimize_func(parameters, *data):
     reorder_keys = {}
     multi_mod_fails, multi_mod_games, mvm_fails, mvm_games, ljg_fail_savings = 0, 0, 0, 0, 0
     unmod_fails, unmod_games, unmod_rate = 0, 0, 0.0
-    reject_solution, viability_unchecked, new_pass, addfails = False, True, False, False
+    reject_solution, viability_unchecked, new_pass, addfails, stats_regened = False, True, False, False, False
     line_jumpers = {}
     reorder_failsfirst = {}
     all_vals = []
@@ -425,7 +425,7 @@ def minimize_func(parameters, *data):
                 EARLY_REJECT = False
 
     seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
-    dayrange = range(1, 125)
+    dayrange = range(1, 51)
     if not reject_solution:
         #if LAST_SEASON_RANGE == 0:
             #if LAST_DAY_RANGE == 1:
@@ -482,9 +482,15 @@ def minimize_func(parameters, *data):
                     last_stat_filename = stat_filename
                     pitchers = get_pitcher_id_lookup(stat_filename)
                     team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)
+                    stats_regened = False
                 elif should_regen(day_mods):
                     pitchers = get_pitcher_id_lookup(last_stat_filename)
                     team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
+                    stats_regened = True
+                elif stats_regened:
+                    pitchers = get_pitcher_id_lookup(last_stat_filename)
+                    team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
+                    stats_regened = False
                 STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)
             if not pitchers:
                 raise Exception("No stat file found")
@@ -734,7 +740,11 @@ def minimize_func(parameters, *data):
                         all_rates.append(mod_rates[name] / 100.0) 
                     all_rates.append(unmod_rate / 100.0)
                     all_rates.append(fail_rate)
-                    aggregate_fail_rate = max(all_rates)                    
+                    aggregate_fail_rate = max(all_rates)         
+                    if (MAX_SEASON - MIN_SEASON) > 1:
+                        aggregate_fail_rate = max(all_rates)         
+                    else: 
+                        aggregate_fail_rate = fail_rate
                     fail_points = ((aggregate_fail_rate * 1000.0) ** 2.0)
                     if linear_points <= fail_points:
                         linear_fail = fail_points
@@ -920,7 +930,7 @@ def minimize_batman_func(parameters, *data):
     good_batter_perf_data, abs_batter_perf_data, good_bats_perf_data = [], [], []                                
     fail_rate, pos_fail_rate, zero_avg_error, pos_avg_error, final_exponent = 1.0, 1.0, 100.0, 100.0, 1.0
     max_err_actual, min_err_actual = "", ""
-    reject_solution, viability_unchecked = False, True
+    reject_solution, viability_unchecked, stats_regened = False, True, False
     max_atbats, max_hits, max_homers = 0, 0, 0
     atbats_team_stat_data = {}    
     #let some games jump the line
@@ -1101,9 +1111,15 @@ def minimize_batman_func(parameters, *data):
                     last_stat_filename = stat_filename
                     players = get_player_id_lookup(stat_filename)
                     team_stat_data, pitcher_stat_data = load_stat_data_pid(stat_filename, schedule, day, season_team_attrs)                                                            
+                    stats_regened = False
                 elif should_regen(day_mods):
                     players = get_player_id_lookup(stat_filename)
                     team_stat_data, pitcher_stat_data = load_stat_data_pid(stat_filename, schedule, day, season_team_attrs)
+                    stats_regened = True
+                elif stats_regened:
+                    players = get_player_id_lookup(stat_filename)
+                    team_stat_data, pitcher_stat_data = load_stat_data_pid(stat_filename, schedule, day, season_team_attrs)
+                    stats_regened = False
                 STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, players)
             if not players:
                 raise Exception("No stat file found")
