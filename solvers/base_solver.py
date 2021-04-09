@@ -2,25 +2,24 @@ import collections
 import csv
 import sys
 import time
-import math
-import statistics
 import datetime
 import json
 import os
 import re
 import uuid
-import copy
 from glob import glob
 
 from helpers import StlatTerm, ParkTerm, get_weather_idx
 from idolthoughts import load_stat_data, load_stat_data_pid
-from mofo import get_mods
 from batman import get_team_atbats, get_batman_mods
 
 STAT_CACHE = {}
 BALLPARK_CACHE = {}
 GAME_CACHE = {}
 BATTER_CACHE = {}
+
+MIN_SEASON = 12
+MAX_SEASON = 15
 
 BEST_RESULT = 8000000000000.0
 BEST_FAIL_RATE = 1.0
@@ -424,7 +423,7 @@ def minimize_func(parameters, *data):
                 LINE_JUMP_GAMES = reorder_keys            
             else:
                 EARLY_REJECT = False
-    seasonrange = reversed(range(12, 15))
+    seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
     dayrange = range(1, 125)
     if not reject_solution:
         #if LAST_SEASON_RANGE == 0:
@@ -434,9 +433,9 @@ def minimize_func(parameters, *data):
              #   LAST_DAY_RANGE = 1    
 
         if LAST_SEASON_RANGE == 0:
-            seasonrange = range(12, 15)            
+            seasonrange = range(MIN_SEASON, MAX_SEASON + 1)
         else:
-            seasonrange = reversed(range(12, 15))            
+            seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
         #if LAST_DAY_RANGE == 0:
          #   dayrange = range(1, 125)
         #else:
@@ -1043,7 +1042,7 @@ def minimize_batman_func(parameters, *data):
                         batman_unexvar += batman_fail_by ** 2.0                                    
                     zero_counter += bat_bat_counter
 
-    seasonrange = reversed(range(12, 15))
+    seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
     dayrange = range(1, 125)
 
     if not reject_solution:
@@ -1054,9 +1053,9 @@ def minimize_batman_func(parameters, *data):
             #    LAST_DAY_RANGE = 1    
 
         if LAST_SEASON_RANGE == 0:
-            seasonrange = range(12, 15)            
+            seasonrange = range(MIN_SEASON, MAX_SEASON + 1)
         else:
-            seasonrange = reversed(range(12, 15))                        
+            seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
         #if LAST_DAY_RANGE == 0:
          #   dayrange = range(1, 125)
         #else:
@@ -1410,7 +1409,7 @@ def minimize_batman_func(parameters, *data):
             check_max_homers = 0
             check_max_atbats = 0
             #validate batter cache data
-            for season in range(12, 15):
+            for season in range(MIN_SEASON, MAX_SEASON + 1):
                 for day in range(1, 125):
                     cache_games = GAME_CACHE.get((season, day))
                     paired_games = pair_games(cache_games)
