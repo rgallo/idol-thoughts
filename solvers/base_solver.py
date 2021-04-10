@@ -233,19 +233,19 @@ def ev_calculate(ev_set):
         payout = round(webodds_payout(winning_webodds, 1000.0))        
         mismatch = (winning_mofoodds > 0.5) and (winning_webodds < 0.5)
         dadbet = (round(webodds_payout(dadbet_webodds, 1000.0)) * dadbet_mofoodds) > (round(webodds_payout((1.0 - dadbet_webodds), 1000.0)) * (1.0 - dadbet_mofoodds))
-        if dadbet and (dadbet_mofoodds == winning_mofoodds):
-            net_payout += payout
-            dadbets += payout
-        elif dadbet:
-            net_payout -= 1000.0
+        if dadbet:
+            if dadbet_mofoodds == winning_mofoodds:
+                net_payout += payout
+                dadbets += payout                        
             dadbets -= 1000.0
-        elif mismatch and gameid["favorite_won"]:
-            net_payout += payout
-            mismatches += payout
         elif mismatch:
-            mismatches -= 1000.0
+            if gameid["favorite_won"]:
+                net_payout += payout
+                mismatches += payout            
+            mismatches -= 1000.0            
         elif gameid["favorite_won"]:
-            net_payout += payout
+            net_payout += payout        
+        net_payout -= 1000.0
     ev = net_payout / 1000.0
     mismatches = mismatches / 1000.0
     dadbets = dadbets / 1000.0
@@ -810,7 +810,7 @@ def minimize_func(parameters, *data):
                         debug_print("Did not meet linearity requirement to calculate. Aggregate fail rate = {:.4f}, fail points = {}, linear points = {}".format(aggregate_fail_rate, int(fail_points), int(linear_points)), debug2, ":::")                        
                     #Remember to negate ev is when we can pass it through and make better results when EV is bigger
                     ev, mismatches, dadbets = ev_calculate(ev_set)                    
-                    debug_print("Net EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(ev, mismatches, dadbets), debug, "::::::::  ")                        
+                    debug_print("Net EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(ev, mismatches, dadbets), debug2, "::::::::  ")                        
                     
         elif game_counter == TOTAL_GAME_COUNTER and TOTAL_GAME_COUNTER > 0:        
             pass_exact = (pass_exact / game_counter) * 100.0
@@ -860,6 +860,7 @@ def minimize_func(parameters, *data):
                 detailtext += "\n{:.4f}% mod vs mod fail rate, {} games".format((mvm_fails / mvm_games) * 100.0, mvm_games)            
             detailtext += "\nBest so far - Linear fail {:.4f}, fail rate {:.4f}%".format(linear_fail, fail_rate * 100.0)
             detailtext += "\nMax linear error {:.4f}% ({:.4f} actual, {:.4f} calculated), Min linear error {:.4f}%".format(max_linear_error, max_error_ratio, max_error_value, min_linear_error)
+            detailtext += "\nNet EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(ev, mismatches, dadbets)                        
             debug_print(detailtext, debug, run_id)
             if outputdir:
                 write_file(outputdir, run_id, "details.txt", detailtext)
