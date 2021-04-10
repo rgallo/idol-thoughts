@@ -10,6 +10,7 @@ def delete_solutions(dir_path, threshold, patternchoice):
         pattern = re.compile(r'^Best so far - Linear fail (\d*.\d*), fail rate (\d*.\d*)%$', re.MULTILINE)
     to_delete = []
     fail_rates = {}
+    unexvars = {}
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(dir_path) if filename.endswith("details.txt")}
     if not patternchoice == "mofo":
         file_format = "-" + patternchoice + "details.txt"
@@ -25,9 +26,15 @@ def delete_solutions(dir_path, threshold, patternchoice):
             if fail_rate > threshold:
                 to_delete.append((job_id, fail_rate, "under {}".format(threshold)))
             elif fail_rate in fail_rates:
-                to_delete.append((job_id, fail_rate, "duplicate of {}".format(fail_rates[fail_rate])))
+                if not patternchoice == "mofo":
+                    if unexvar in unexvars:
+                        to_delete.append((job_id, fail_rate, "duplicate of {}".format(fail_rates[fail_rate])))
+                else:
+                    to_delete.append((job_id, fail_rate, "duplicate of {}".format(fail_rates[fail_rate])))
             else:
                 fail_rates[fail_rate] = job_id
+                if not patternchoice == "mofo":
+                    unexvars[unexvar] = job_id
     if to_delete:
         for job_id, fail_rate, reason in to_delete:
             print("{}: Fail rate {}, {}".format(job_id, fail_rate, reason))

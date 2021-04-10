@@ -18,8 +18,8 @@ BALLPARK_CACHE = {}
 GAME_CACHE = {}
 BATTER_CACHE = {}
 
-MIN_SEASON = 14
-MAX_SEASON = 14
+MIN_SEASON = 15
+MAX_SEASON = 15
 
 BEST_RESULT = 8000000000000.0
 BEST_FAIL_RATE = 1.0
@@ -219,6 +219,45 @@ def calc_linear_unex_error(vals, wins_losses, games):
         idx += 1
     return error, max_error, min_error, max_error_val, max_error_ratio, major_errors, error_shape
 
+def ev_calculate(ev_set):
+    net_payout, dadbets, mismatches = 0.0, 0.0, 0.0
+    for game in ev_set:
+        gameid = ev_set[game]
+        if gameid["favorite_won"]:
+            winning_mofoodds = max(gameid["mofoodds"], 1.0 - gameid["mofoodds"])            
+        else:
+            winning_mofoodds = min(gameid["mofoodds"], 1.0 - gameid["mofoodds"])                    
+        winning_webodds = gameid["webodds"] if (winning_mofoodds == gameid["mofoodds"]) else (1.0 - gameid["webodds"])
+        dadbet_mofoodds = min(gameid["mofoodds"], 1.0 - gameid["mofoodds"])
+        dadbet_webodds = gameid["webodds"] if (dadbet_mofoodds == gameid["mofoodds"]) else (1.0 - gameid["webodds"])
+        payout = round(webodds_payout(winning_webodds, 1000.0))        
+        mismatch = (winning_mofoodds > 0.5) and (winning_webodds < 0.5)
+        dadbet = (round(webodds_payout(dadbet_webodds, 1000.0)) * dadbet_mofoodds) > (round(webodds_payout((1.0 - dadbet_webodds), 1000.0)) * (1.0 - dadbet_mofoodds))
+        if dadbet and (dadbet_mofoodds == winning_mofoodds):
+            net_payout += payout
+            dadbets += payout
+        elif dadbet:
+            net_payout -= 1000.0
+            dadbets -= 1000.0
+        elif mismatch and gameid["favorite_won"]:
+            net_payout += payout
+            mismatches += payout
+        elif mismatch:
+            mismatches -= 1000.0
+        elif gameid["favorite_won"]:
+            net_payout += payout
+    ev = net_payout / 1000.0
+    mismatches = mismatches / 1000.0
+    dadbets = dadbets / 1000.0
+    return ev, mismatches, dadbets
+
+def webodds_payout(odds, amt):
+    if odds == .5:
+        return 2 * amt
+    if odds < .5:
+        return amt * (2 + (.0015 * ((100 * (.5 - odds)) ** 2.2)))
+    else:
+        return amt * (3.206 / (1 + ((.443 * (odds - .5)) ** .95)) - 1.206)
 
 def write_file(outputdir, run_id, filename, content):
     with open(os.path.join(outputdir, "{}-{}".format(run_id, filename)), "w") as f:
@@ -285,13 +324,11 @@ def minimize_func(parameters, *data):
     linear_error, check_fail_rate = 0.0, 0.0
     love_rate, instinct_rate, ono_rate, wip_rate, exk_rate, exb_rate, unmod_rate = 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0
     k9_max_err, k9_min_err, ljg_passed = 0, 0, 0
-    mod_fails, mod_games, mod_rates = {}, {}, {}
-    reorder_keys = {}
+    mod_fails, mod_games, mod_rates = {}, {}, {}    
     multi_mod_fails, multi_mod_games, mvm_fails, mvm_games, ljg_fail_savings = 0, 0, 0, 0, 0
     unmod_fails, unmod_games, unmod_rate = 0, 0, 0.0
     reject_solution, viability_unchecked, new_pass, addfails, stats_regened = False, True, False, False, False
-    line_jumpers = {}
-    reorder_failsfirst = {}
+    line_jumpers, reorder_failsfirst, reorder_keys, ev_set = {}, {}, {}, {}
     all_vals = []
     win_loss = []  
     early_vals = []
@@ -342,12 +379,17 @@ def minimize_func(parameters, *data):
             reject_solution = True                        
             REJECTS += 1                                        
             break
-        if game_game_counter == 1:
+        if game_game_counter == 1:   
+            ev_set[game["away"]["game_id"]] = {}
+            ev_set[game["away"]["game_id"]]["mofoodds"] = game_away_val
+            ev_set[game["away"]["game_id"]]["webodds"] = float(game["away"]["webodds"])
             all_vals.append(game_away_val)   
             if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
+                ev_set[game["away"]["game_id"]]["favorite_won"] = True
                 win_loss.append(1)
-                win_loss.append(0)
+                win_loss.append(0)                
             else:
+                ev_set[game["away"]["game_id"]]["favorite_won"] = False
                 win_loss.append(0)
                 win_loss.append(1)
             all_vals.append(game_home_val)
@@ -554,11 +596,16 @@ def minimize_func(parameters, *data):
                     REJECTS += 1
                     break                
                 if game_game_counter == 1:
+                    ev_set[game["away"]["game_id"]] = {}
+                    ev_set[game["away"]["game_id"]]["mofoodds"] = game_away_val
+                    ev_set[game["away"]["game_id"]]["webodds"] = float(game["away"]["webodds"])
                     all_vals.append(game_away_val)   
                     if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
+                        ev_set[game["away"]["game_id"]]["favorite_won"] = True
                         win_loss.append(1)
-                        win_loss.append(0)
+                        win_loss.append(0)                
                     else:
+                        ev_set[game["away"]["game_id"]]["favorite_won"] = False
                         win_loss.append(0)
                         win_loss.append(1)
                     all_vals.append(game_home_val)
@@ -761,11 +808,10 @@ def minimize_func(parameters, *data):
                     else:
                         linear_fail = BEST_RESULT + aggregate_fail_rate
                         debug_print("Did not meet linearity requirement to calculate. Aggregate fail rate = {:.4f}, fail points = {}, linear points = {}".format(aggregate_fail_rate, int(fail_points), int(linear_points)), debug2, ":::")                        
+                    #Remember to negate ev is when we can pass it through and make better results when EV is bigger
+                    ev, mismatches, dadbets = ev_calculate(ev_set)                    
+                    debug_print("Net EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(ev, mismatches, dadbets), debug, "::::::::  ")                        
                     
-                    #if (linear_fail >= BEST_RESULT) and (fail_rate < BEST_FAIL_RATE):
-                     #   print("Failed due to linearity points; {:.4f} in shape, {:.4f} in errors".format(sum(shape), sum(errors)))
-                    #elif (linear_fail < BEST_RESULT):
-                     #   print("PASSING; {:.4f} in shape, {:.4f} in errors".format(sum(shape), sum(errors)))
         elif game_counter == TOTAL_GAME_COUNTER and TOTAL_GAME_COUNTER > 0:        
             pass_exact = (pass_exact / game_counter) * 100.0
             pass_within_one = (pass_within_one / game_counter) * 100.0
