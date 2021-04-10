@@ -185,6 +185,13 @@ def get_mofo_list(game_list, team_attrs, stat_file_map, ballpark_file_map, seaso
             stats_regened = False
           
         ballpark_filename = ballpark_file_map.get((season, day))        
+        if not ballpark_filename:
+            for backday in reversed(range(1, day)):
+                ballpark_filename = ballpark_file_map.get((season, backday))
+                if ballpark_filename:
+                    break
+            if not ballpark_filename:
+                ballpark_filename = ballpark_file_map.get((season-1, 73))
         if ballpark_filename:
             with open(ballpark_filename) as f:
                 ballparks = json.load(f)

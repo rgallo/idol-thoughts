@@ -261,8 +261,10 @@ def minimize_func(parameters, *data):
     global LAST_SEASON_RANGE
     global REJECTS
     global EARLY_REJECT
-    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, debug, debug2, debug3, outputdir = data
+    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
+    if number_to_beat is not None:
+        BEST_RESULT = number_to_beat if (number_to_beat < BEST_RESULT) else BEST_RESULT
     special_case_list = special_case_list or []            
     park_mod_list_size = len(ballpark_list) * 3
     team_mod_list_size = len(mod_list) * 3
@@ -425,7 +427,7 @@ def minimize_func(parameters, *data):
                 EARLY_REJECT = False
 
     seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
-    dayrange = range(1, 51)
+    dayrange = range(50, 100)
     if not reject_solution:
         #if LAST_SEASON_RANGE == 0:
             #if LAST_DAY_RANGE == 1:
@@ -499,9 +501,16 @@ def minimize_func(parameters, *data):
                 ballpark_filename = ballpark_file_map.get((season, day))
                 if CURRENT_ITERATION > 1:
                     print("Ballparks not cached, season {}, day {}".format(season, day))
+                if (CURRENT_ITERATION == 1) and not ballpark_filename:
+                    for backday in reversed(range(1, day)):
+                        ballpark_filename = ballpark_file_map.get((season, backday))
+                        if ballpark_filename:
+                            break
+                    if not ballpark_filename:
+                        ballpark_filename = ballpark_file_map.get((season-1, 73))
                 if ballpark_filename:
                     with open(ballpark_filename) as f:
-                        ballparks = json.load(f)
+                        ballparks = json.load(f)                
                 else:
                     if ballparks is None:  # this should use the previous value of ballparks by default, use default if not
                         ballparks = collections.defaultdict(lambda: collections.defaultdict(lambda: 0.5))
@@ -741,12 +750,12 @@ def minimize_func(parameters, *data):
                     all_rates.append(unmod_rate / 100.0)
                     all_rates.append(fail_rate)
                     aggregate_fail_rate = max(all_rates)         
-                    if (MAX_SEASON - MIN_SEASON) > 1:
+                    if game_counter > 800:
                         aggregate_fail_rate = max(all_rates)         
                     else: 
                         aggregate_fail_rate = fail_rate
                     fail_points = ((aggregate_fail_rate * 1000.0) ** 2.0)
-                    if linear_points <= fail_points:
+                    if linear_points <= fail_points and (fail_rate <= BEST_FAIL_RATE):
                         linear_fail = fail_points
                         debug_print("Aggregate fail rate = {:.4f}, fail points = {}, linear points = {}, total = {}, Best = {}".format(aggregate_fail_rate, int(fail_points), int(linear_points), int(linear_fail), int(BEST_RESULT)), debug2, ":::")                        
                     else:
@@ -1018,7 +1027,7 @@ def minimize_batman_func(parameters, *data):
                 reject_solution = True
                 REJECTS += 1                
                 break                                             
-            elif max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR:
+            elif (max(abs(batman_max_err), abs(batman_min_err)) > WORST_ERROR):
                 reject_solution = True
                 REJECTS += 1                
                 break                            
@@ -1128,6 +1137,13 @@ def minimize_batman_func(parameters, *data):
                 ballpark_filename = ballpark_file_map.get((season, day))
                 if CURRENT_ITERATION > 1:
                     print("Ballparks not cached, season {}, day {}".format(season, day))
+                if (CURRENT_ITERATION == 1) and not ballpark_filename:
+                    for backday in reversed(range(1, day)):
+                        ballpark_filename = ballpark_file_map.get((season, backday))
+                        if ballpark_filename:
+                            break
+                    if not ballpark_filename:
+                        ballpark_filename = ballpark_file_map.get((season-1, 73))
                 if ballpark_filename:
                     with open(ballpark_filename) as f:
                         ballparks = json.load(f)
@@ -1365,7 +1381,7 @@ def minimize_batman_func(parameters, *data):
         pass_within_three = (pass_within_three / bat_pos_counter) * 100.0
         pass_within_four = (pass_within_four / bat_pos_counter) * 100.0
         if (pass_exact > 0.0) or (CURRENT_ITERATION == 1):            
-            if pass_exact > BEST_EXACT:
+            if pass_exact >= BEST_EXACT:
                 debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, zero fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}, pavgerr = {:.4f}, zavgerr = {:.4f}".format(fail_rate, pos_fail_rate, zero_fail_rate, pass_exact, batman_max_err, batman_min_err, pos_avg_error, use_zero_error), debug, "::::::::")
             if batman_max_err >= batman_min_err:                             
                 fail_points = (zero_fail_rate * 100.0 * use_zero_error) + (pos_fail_rate * 100.0 * pos_avg_error) + ((100.0 - pass_exact) * (pos_avg_error + use_zero_error))
@@ -1448,6 +1464,11 @@ def minimize_batman_func(parameters, *data):
                 MAX_INTEREST = check_max_atbats       
         if abs(batman_min_err) < MAX_INTEREST:
             WORST_ERROR = max(abs(batman_max_err), abs(batman_min_err))
+        else:
+            WORST_ERROR = max(abs(batman_max_err), abs(batman_min_err)) + (MAX_INTEREST * 2)
+            linear_fail = ((max(abs(batman_max_err), abs(batman_min_err)) + (MAX_INTEREST * 2)) * 400.0) + fail_points
+            BEST_RESULT = linear_fail
+        WORST_ERROR = max(WORST_ERROR, 1.0)
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):
         now = datetime.datetime.now()        
         debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}, {} rejects since last check-in, {:.2f} seconds".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)

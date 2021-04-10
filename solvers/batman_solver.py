@@ -134,17 +134,17 @@ def main():
         games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
-        bounds_terms = ([(-8, 0), (0, 2), (0, 4)] * 2) + ([(1, 9), (0, 3), (0, 4)] * 5) + ([(1, 9), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 2), (0, 4)] * (len(stlatlist) - 12))
+        bounds_terms = ([(-8, 0), (0, 3), (0, 4)] * 2) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 3), (0, 4)] * (len(stlatlist) - 12))
         base_bounds = bounds_terms + [(1, 3), (1, 3), (0.07, 0.10)]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        bounds_terms = ([(-8, 0), (0, 2), (0, 4)] * 2) + ([(1, 9), (0, 3), (0, 4)] * 5) + ([(1, 9), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 2), (0, 4)] * (len(stlatlist) - 12))
+        bounds_terms = ([(-8, 0), (0, 3), (0, 4)] * 2) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 3), (0, 4)] * (len(stlatlist) - 12))
         base_bounds = bounds_terms + [(1, 3), (1, 3), (0.02, 0.06)]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        bounds_terms = ([(-8, 0), (0, 2), (0, 4)] * 2) + ([(1, 9), (0, 3), (0, 4)] * 5) + ([(1, 9), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 2), (0, 4)] * (len(stlatlist) - 12))
+        bounds_terms = ([(-8, 0), (0, 3), (0, 4)] * 2) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 3), (0, 4)] * (len(stlatlist) - 12))
         base_bounds = bounds_terms + [(1, 3), (1, 3), (0.02, 0.12), (0, 0.02), (0, 0.02)]
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
@@ -155,8 +155,9 @@ def main():
     bounds = base_bounds + bounds_team + bounds_park                
     popsize = 25
     init = get_init_values(cmd_args.init, eventofinterest, popsize, cmd_args.random) if cmd_args.init else 'latinhypercube'
-    recombination = 0.7 if (type(init) == str) else 0.4
-    recombination = 0.5 if (workers > 2) else recombination
+    recombination = 0.7
+    #recombination = 0.7 if (type(init) == str) else 0.4
+    #recombination = 0.5 if (workers > 2) else recombination
     if eventofinterest == "abs":
         establish_baseline = True    
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, modterms, parkterms, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, establish_baseline, 

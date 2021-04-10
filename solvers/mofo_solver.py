@@ -8,8 +8,10 @@ import numpy as np
 from scipy.optimize import differential_evolution
 import datetime
 import sys
+from dotenv import load_dotenv
 
 sys.path.append("..")
+import requests
 from solvers import base_solver
 from solvers.mofo_ballpark_terms import BALLPARK_TERMS
 from solvers.mofo_mod_terms import MOFO_MOD_TERMS
@@ -29,11 +31,11 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     awayMods, homeMods = [], []
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
     special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
-    if special_game_attrs:
+    if special_game_attrs:        
         return 0, 0, 0, 0
     away_game, home_game = game["away"], game["home"]
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])
-    if away_rbi == home_rbi:
+    if away_rbi == home_rbi:        
         return 0, 0, 0, 0
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
@@ -91,16 +93,37 @@ def main():
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     game_list = base_solver.get_games(cmd_args.gamefile)
-    workers = int(cmd_args.workers)
     with open('team_attrs.json') as f:
-        team_attrs = json.load(f)
-    popsize = 25
+        team_attrs = json.load(f) 
+   
+    #establish our baseline    
+    if not cmd_args.init:
+        number_to_beat = None
+    else:
+        load_dotenv(dotenv_path="../.env")
+        github_token = os.getenv("GITHUB_TOKEN")
+        params = []
+        for url_prop in ("MOFO_TERMS", "MOFO_MODS", "MOFO_BALLPARK_TERMS"):
+            url = os.getenv(url_prop)      
+            terms = requests.get(url, headers={"Authorization": "token {}".format(github_token)}).text
+            params.extend(",".join([",".join(line.split(",")[-3:]) for line in terms.split("\n")[1:] if line]).split(","))   
+        baseline_parameters = [float(val) for val in params]
+        try:
+            number_to_beat = base_solver.minimize_func(baseline_parameters, get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS,
+                                                     BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
+                                                     team_attrs, None, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
+        except:
+            number_to_beat = None        
+
+    #solver time
+    workers = int(cmd_args.workers)        
+    popsize = 25    
     init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst) if cmd_args.init else 'latinhypercube'
     recombination = 0.7
     #recombination = 0.7 if (type(init) == str) else 0.4
     recombination = 0.5 if (workers > 2) else recombination
     args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
-            game_list, team_attrs, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
+            game_list, team_attrs, number_to_beat, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
                                     mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000,
                                     init=init)
