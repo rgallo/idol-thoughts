@@ -223,15 +223,19 @@ def ev_calculate(ev_set):
     net_payout, dadbets, mismatches = 0.0, 0.0, 0.0
     for game in ev_set:
         gameid = ev_set[game]
+        #set winning mofoodds equal to the mofo odds for whichever team actually won the game (max odds if favorite; min odds otherwise)
         if gameid["favorite_won"]:
             winning_mofoodds = max(gameid["mofoodds"], 1.0 - gameid["mofoodds"])            
         else:
-            winning_mofoodds = min(gameid["mofoodds"], 1.0 - gameid["mofoodds"])                    
+            winning_mofoodds = min(gameid["mofoodds"], 1.0 - gameid["mofoodds"])     
+        #set winning webodds; we store webodds and mofoodds for the away team, so if winning mofoodds is the away odds we also want the away webodds
         winning_webodds = gameid["webodds"] if (winning_mofoodds == gameid["mofoodds"]) else (1.0 - gameid["webodds"])
+        #dadbets only exist for the mofo underdog
         dadbet_mofoodds = min(gameid["mofoodds"], 1.0 - gameid["mofoodds"])
+        #webodss for dadbets need to match, just as above, so get the matching webodds
         dadbet_webodds = gameid["webodds"] if (dadbet_mofoodds == gameid["mofoodds"]) else (1.0 - gameid["webodds"])
         payout = round(webodds_payout(winning_webodds, 1000.0))        
-        mismatch = (winning_mofoodds > 0.5) and (winning_webodds < 0.5)
+        mismatch = ((winning_mofoodds > 0.5) and (winning_webodds < 0.5)) or ((winning_mofoodds < 0.5) and (winning_webodds > 0.5))
         dadbet = (round(webodds_payout(dadbet_webodds, 1000.0)) * dadbet_mofoodds) > (round(webodds_payout((1.0 - dadbet_webodds), 1000.0)) * (1.0 - dadbet_mofoodds))
         if dadbet:
             if dadbet_mofoodds == winning_mofoodds:
@@ -300,7 +304,7 @@ def minimize_func(parameters, *data):
     global LAST_SEASON_RANGE
     global REJECTS
     global EARLY_REJECT
-    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, debug, debug2, debug3, outputdir = data
+    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     if number_to_beat is not None:
         BEST_RESULT = number_to_beat if (number_to_beat < BEST_RESULT) else BEST_RESULT
@@ -761,11 +765,14 @@ def minimize_func(parameters, *data):
         print("Somehow ended up with fewer games. Games = {}, all games = {}".format(game_counter, ALL_GAMES))
         reject_solution = True
     if not reject_solution:
-        if len(win_loss) > 0:                  
+        if len(win_loss) > 0:        
+            #Remember to negate ev is when we can pass it through and make better results when EV is bigger
+            ev, mismatches, dadbets = ev_calculate(ev_set)                    
+            debug_print("Net EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(ev, mismatches, dadbets), debug2, "::::::::  ")                        
             sorted_win_loss = [x for _,x in sorted(zip(all_vals, win_loss))]
             all_vals.sort()
             linear_error, max_linear_error, min_linear_error, max_error_value, max_error_ratio, errors, shape = calc_linear_unex_error(all_vals, sorted_win_loss, game_counter)
-            linear_points = (linear_error + ((max_linear_error + max(max_error_ratio, max_error_value)) ** 2) + ((min_linear_error * 10000) ** 2) + (sum(errors) ** 2) + (sum(shape) ** 2)) * 2.5
+            linear_points = (linear_error + ((max_linear_error + max(max_error_ratio, max_error_value)) ** 2) + ((min_linear_error * 10000) ** 2) + (sum(errors) ** 2) + (sum(shape) ** 2)) * 2.5                                     
             if not mod_mode:
                 fail_points = ((fail_rate * 1000.0) ** 2) * 2.5        
                 linear_fail = fail_points + linear_points
@@ -807,11 +814,9 @@ def minimize_func(parameters, *data):
                         debug_print("Aggregate fail rate = {:.4f}, fail points = {}, linear points = {}, total = {}, Best = {}".format(aggregate_fail_rate, int(fail_points), int(linear_points), int(linear_fail), int(BEST_RESULT)), debug2, ":::")                        
                     else:
                         linear_fail = BEST_RESULT + aggregate_fail_rate
-                        debug_print("Did not meet linearity requirement to calculate. Aggregate fail rate = {:.4f}, fail points = {}, linear points = {}".format(aggregate_fail_rate, int(fail_points), int(linear_points)), debug2, ":::")                        
-                    #Remember to negate ev is when we can pass it through and make better results when EV is bigger
-                    ev, mismatches, dadbets = ev_calculate(ev_set)                    
-                    debug_print("Net EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(ev, mismatches, dadbets), debug2, "::::::::  ")                        
-                    
+                        debug_print("Did not meet linearity requirement to calculate. Aggregate fail rate = {:.4f}, fail points = {}, linear points = {}".format(aggregate_fail_rate, int(fail_points), int(linear_points)), debug2, ":::")                                                    
+                    if solve_for_ev:
+                        linear_fail = -ev            
         elif game_counter == TOTAL_GAME_COUNTER and TOTAL_GAME_COUNTER > 0:        
             pass_exact = (pass_exact / game_counter) * 100.0
             pass_within_one = (pass_within_one / game_counter) * 100.0

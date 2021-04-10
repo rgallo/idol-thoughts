@@ -52,13 +52,14 @@ def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--statfolder', help="path to stat folder")
     parser.add_argument('--ballparks', help="path to ballparks folder")
-    parser.add_argument('--gamefile', help="path to game file")
+    parser.add_argument('--gamefile', help="path to game file")    
     parser.add_argument('--debug', help="print output", action='store_true')
     parser.add_argument('--debug2', help="print output", action='store_true')
     parser.add_argument('--debug3', help="print output", action='store_true')
     parser.add_argument('--output', required=False, help="file output directory")
     parser.add_argument('--workers', default="1", help="number of workers to use")
     parser.add_argument('--init', required=False, help="directory to use for init")
+    parser.add_argument('--ev', help="solve for best ev instead of fail rate", action="store_true")
     parser.add_argument('--random', help="use random files instead of top", action='store_true')
     parser.add_argument('--worst', help="use worst files instead of top", action='store_true')
     args = parser.parse_args()
@@ -93,6 +94,7 @@ def main():
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     game_list = base_solver.get_games(cmd_args.gamefile)
+    solve_for_ev = cmd_args.ev
     with open('team_attrs.json') as f:
         team_attrs = json.load(f) 
    
@@ -123,7 +125,7 @@ def main():
     #recombination = 0.7 if (type(init) == str) else 0.4
     recombination = 0.5 if (workers > 2) else recombination
     args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
-            game_list, team_attrs, number_to_beat, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
+            game_list, team_attrs, number_to_beat, solve_for_ev, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
                                     mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000,
                                     init=init)
