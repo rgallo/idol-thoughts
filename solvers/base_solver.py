@@ -1098,9 +1098,10 @@ def minimize_batman_func(parameters, *data):
     if CURRENT_ITERATION == 1 and establish_baseline:   
         baseline = True
         if eventofinterest == "abs":
-            baseline_parameters = ([0, 0, 1] * len(stlat_list)) + [1, 1, 0, 0, 0, 0, 0, 0, 0] + ([0, 0, 1] * len(mod_list)) + ([0, 0, 1] * len(ballpark_list))            
-        else:
-            baseline_parameters = ([0, 0, 1] * len(stlat_list)) + [1, 1, 0, 0] + ([0, 0, 1] * len(mod_list)) + ([0, 0, 1] * len(ballpark_list))
+            baseline_parameters = ([0, 0, 1] * len(stlat_list)) + [1, 1, 1, 1, 1, 0, 0, 0, 0] + ([0, 0, 1] * len(mod_list)) + ([0, 0, 1] * len(ballpark_list))            
+        else:            
+            print("Establishing baseline for not-at-bats")
+            baseline_parameters = ([0, 0, 1] * 2) + ([1, 0, 1] * 5) + ([0, 0, 1] * 5) + ([0, 0, 1] * (len(stlat_list) - 12)) + [1, 1, 1, 0] + ([0, 0, 1] * len(mod_list)) + ([0, 0, 1] * len(ballpark_list))
         terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(baseline_parameters[:base_batman_list_size])] * 3))}        
         for mod, (a, b, c) in zip(mod_list, zip(*[iter(baseline_parameters[(base_batman_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
             mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)                     
@@ -1117,7 +1118,7 @@ def minimize_batman_func(parameters, *data):
         special_cases = parameters[base_batman_list_size:-(team_mod_list_size + park_mod_list_size)]
     bat_counter, fail_counter, zero_counter, bat_pos_counter, fail_pos_counter, fail_zero_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
     zero_fail_counter, pos_fail_counter = 0.0, 0.0
-    batman_max_err, batman_min_err = 0.0, 100000.0        
+    batman_max_err, batman_min_err = 0.0, 0.0        
     batman_unexvar = 0.0
     good_batter_perf_data, abs_batter_perf_data, good_bats_perf_data = [], [], []                                
     fail_rate, pos_fail_rate, zero_avg_error, pos_avg_error, final_exponent = 1.0, 1.0, 100.0, 100.0, 1.0
@@ -1197,7 +1198,7 @@ def minimize_batman_func(parameters, *data):
              #   print("failed by {:.4f}, actual {}, batman hrs per atbat value {:.4f}, actual hrs per atbat value = {:.4f}".format(batman_fail_by, real_val, (batman_fail_by + real_val) / (int(batter_perf["at_bats"])), real_val / (int(batter_perf["at_bats"]))))
 
             if bat_bat_counter > 0:               
-                if batman_fail_by >= 0:
+                if batman_fail_by > 0:
                     pos_fail_games[game["away"]["game_id"]] = game                           
                 elif batman_fail_by < 0:
                     neg_fail_games[game["away"]["game_id"]] = game                     
@@ -1207,10 +1208,15 @@ def minimize_batman_func(parameters, *data):
                 if batman_fail_by < batman_min_err:
                     batman_min_err = batman_fail_by                                                                                                                 
                     min_err_actual = actual_result                                          
-            if max(abs(batman_max_err), abs(batman_min_err)) > LAST_BEST:
+            if max(abs(batman_max_err), abs(batman_min_err)) >= LAST_BEST:
                 reject_solution = True
                 REJECTS += 1                
-                break                                                            
+                break     
+            if (real_val > 0) and (batman_fail_by < 0) and (abs(batman_fail_by) == real_val):
+                #capture all cases where we set a nonzero real value to 0 and fail them
+                reject_solution = True
+                REJECTS += 1          
+                break
             if eventofinterest == "abs":
                 stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
             elif eventofinterest == "hrs":
@@ -1249,19 +1255,19 @@ def minimize_batman_func(parameters, *data):
     seasonrange = reversed(range(14, 15))
     dayrange = range(1, 125)
 
-    if not reject_solution:
+    #if not reject_solution:
         #if LAST_SEASON_RANGE == 0:
          #   if LAST_DAY_RANGE == 1:
           #      LAST_DAY_RANGE = 0
            # else:
             #    LAST_DAY_RANGE = 1    
 
-        if LAST_SEASON_RANGE == 0:
+        #if LAST_SEASON_RANGE == 0:
             #seasonrange = range(MIN_SEASON, MAX_SEASON + 1)
-            seasonrange = range(14, 15)
-        else:
+            #seasonrange = range(14, 15)
+        #else:
             #seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
-            seasonrange = reversed(range(14, 15))
+            #seasonrange = reversed(range(14, 15))
         #if LAST_DAY_RANGE == 0:
          #   dayrange = range(1, 125)
         #else:
@@ -1458,7 +1464,7 @@ def minimize_batman_func(parameters, *data):
                          #   print("failed by {:.4f}, actual {}, batman hrs per atbat value {:.4f}, actual hrs per atbat value = {:.4f}".format(batman_fail_by, real_val, (batman_fail_by + real_val) / (int(batter_perf["at_bats"])), real_val / (int(batter_perf["at_bats"]))))                        
 
                         if bat_bat_counter > 0:
-                            if batman_fail_by >= 0:
+                            if batman_fail_by > 0:
                                 pos_fail_games[game["away"]["game_id"]] = game                           
                             elif batman_fail_by < 0:
                                 neg_fail_games[game["away"]["game_id"]] = game                     
@@ -1489,7 +1495,14 @@ def minimize_batman_func(parameters, *data):
                                 #else:
                                     #LAST_BEST = abs(batman_min_err)
                                     #LINE_JUMP_GAMES = neg_fail_games
-                                break                           
+                                break      
+                        if (real_val > 0) and (batman_fail_by < 0) and (abs(batman_fail_by) == real_val):
+                            #capture all cases where we set a nonzero real value to 0 and fail them
+                            reject_solution = True
+                            #add any of these games to the line jump to catch them sooner
+                            LINE_JUMP_GAMES[game["away"]["game_id"]] = game                     
+                            REJECTS += 1          
+                            break
                         #if (eventofinterest == "abs") and ((abs(batman_max_err) + abs(batman_min_err)) >= (WORST_ERROR - 0.5)) and not reject_solution:
                             #experimenting with adding games to the jump for being close to the worst error
                             #LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
