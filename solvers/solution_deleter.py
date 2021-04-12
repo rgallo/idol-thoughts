@@ -7,7 +7,7 @@ def delete_solutions(dir_path, threshold, patternchoice):
     if not patternchoice == "mofo":
         pattern = re.compile(r'^max underestimate (-?[\d\.]*), max overestimate (-?[\d\.]*), unexvar (-?[\d\.]*)$', re.MULTILINE)                
     else:
-        pattern = re.compile(r'^Best so far - Linear fail (\d*.\d*), fail rate (\d*.\d*)%$', re.MULTILINE)
+        pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*), fail rate ([-\.\d]*)%$', re.MULTILINE)
     to_delete = []
     fail_rates = {}
     unexvars = {}

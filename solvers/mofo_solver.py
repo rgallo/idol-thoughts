@@ -67,7 +67,7 @@ def handle_args():
 
 
 def get_init_values(init_dir, popsize, is_random, is_worst):
-    pattern = re.compile(r'^Best so far - Linear fail (\d*.\d*), fail rate (\d*.\d*)%$', re.MULTILINE)
+    pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*), fail rate ([-\.\d]*)%$', re.MULTILINE)
     results = []
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
     if len(job_ids) < popsize:
@@ -102,6 +102,7 @@ def main():
     if not cmd_args.init:
         number_to_beat = None
     else:
+        print("Using initial values. Checking master for number to beat.")
         load_dotenv(dotenv_path="../.env")
         github_token = os.getenv("GITHUB_TOKEN")
         params = []
@@ -113,10 +114,12 @@ def main():
         try:
             number_to_beat = base_solver.minimize_func(baseline_parameters, get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS,
                                                      BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
-                                                     team_attrs, None, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
-        except:
+                                                     team_attrs, None, solve_for_ev, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)            
+        except Exception as e:
+            print(e)
             number_to_beat = None        
 
+    print("Number to beat = {}".format(number_to_beat))
     #solver time
     workers = int(cmd_args.workers)        
     popsize = 25    
@@ -133,7 +136,7 @@ def main():
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS,
                                                  BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
-                                                 team_attrs, False, False, False, cmd_args.output)
+                                                 team_attrs, None, False, False, False, cmd_args.output)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())
 

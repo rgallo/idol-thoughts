@@ -232,7 +232,7 @@ def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pi
     return terms, special_cases, awayMods, homeMods
 
 def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3, baseline=False):    
-    factor_bexp, factor_pexp, factor_const, reverberation, repeating = special_cases["factors"][:5]
+    factor_bexp, factor_pexp, factor_bdef, factor_roff, factor_rdef, factor_bcut, factor_rcut, reverberation, repeating = special_cases["factors"][:9]    
     team_atbat_data = {} 
     batting_mods_by_Id = {}
     atbats, hhw_tally = 0.0, 0.0
@@ -263,17 +263,27 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 break                
             if batter_id not in team_atbat_data:
                 team_atbat_data[batter_id] = 0.0            
-            pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter_id, battingteam, defenseMods, batting_mods_by_Id[batter_id], float(factor_bexp) , float(factor_pexp))            
             defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
-            baserunners_out = calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter_id, defenseMods, batting_mods_by_Id[batter_id]) 
-            hits_hrs_walks_raw = ((pitcher_batter - (defense * 0.5))) / 100.0
+            pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)
+            pitcher_exp = float(factor_pexp) if pitcher_raw > 0 else 1.0
+            batter_raw = calc_batter(terms, team_pid_stat_data, batter_id, battingteam, batting_mods_by_Id[batter_id])
+            batter_exp = float(factor_bexp) if batter_raw > 0 else 1.0    
+            if ((batter_raw ** batter_exp) + (pitcher_raw ** pitcher_exp) + (defense * float(factor_bdef))) == 0:
+                hits_hrs_walks_raw = -10000000.0
+            else:                
+                hits_hrs_walks_raw = ((batter_raw ** batter_exp) - (pitcher_raw ** pitcher_exp) - (defense * float(factor_bdef))) / (((batter_raw ** batter_exp) + (pitcher_raw ** pitcher_exp) + (defense * float(factor_bdef))) ** 0.5)
+            offense = calc_offense(terms, battingteam, team_pid_stat_data, batter_id, batting_mods_by_Id[batter_id])
+            if ((defense * float(factor_rdef)) + (offense * float(factor_roff))) == 0:
+                baserunners_out = -10000000.0
+            else:
+                baserunners_out = ((defense * float(factor_rdef)) - (offense * float(factor_roff))) / (((defense * float(factor_rdef)) + (offense * float(factor_roff))) ** 0.5)
             #catch nan and also 3 atbats per inning as a fail state
             if math.isnan(hits_hrs_walks_raw):                
                 for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
                     team_atbat_data[bat_id] = -10000.0
                 return team_atbat_data                          
-            hits_hrs_walks = logistic_transform(hits_hrs_walks_raw)            
-            hits_hrs_walks = hits_hrs_walks if (hits_hrs_walks > float(factor_const)) else 0.0
+            hits_hrs_walks = logistic_transform(hits_hrs_walks_raw)
+            hits_hrs_walks = hits_hrs_walks if (hits_hrs_walks > float(factor_bcut)) else 0.0
             outs_pg += hits_hrs_walks if not baseline else 0.0
             hhw_tally += hits_hrs_walks if not baseline else 0.0
             team_atbat_data[batter_id] += 1.0                      
@@ -290,7 +300,8 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 return team_atbat_data            
             remainder = (outs_pg - current_outs)
             if (not baseline) and (hhw_tally > 1.0):                
-                added_out = logistic_transform((baserunners_out / 100.0))
+                added_out = (logistic_transform(baserunners_out) ** 2.0) - 0.25
+                added_out = added_out if (added_out > float(factor_rcut)) else 0.0
                 current_outs += added_out
                 hhw_tally -= 1.0            
             current_outs += 1
@@ -314,11 +325,17 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
 
 
 def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases):                     
-    factor_bexp, factor_pexp, factor_const = special_cases["factors"][:3]
+    factor_bexp, factor_pexp, factor_defense, factor_const = special_cases["factors"][:4]
     defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
-    pitcher_batter = calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, defenseMods, battingMods, float(factor_bexp), float(factor_pexp))    
-    batman_raw = (pitcher_batter - (defense * 0.5)) / 100.0
-    batman = logistic_transform(batman_raw)    
+    pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)
+    pitcher_exp = float(factor_pexp) if pitcher_raw > 0 else 1.0
+    batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingMods)
+    batter_exp = float(factor_bexp) if batter_raw > 0 else 1.0    
+    if ((batter_raw ** batter_exp) + (pitcher_raw ** pitcher_exp) + (defense * float(factor_defense))) == 0:
+        batman_raw = -10000000.0
+    else:
+        batman_raw = ((batter_raw ** batter_exp) - (pitcher_raw ** pitcher_exp) - (defense * float(factor_defense))) / (((batter_raw ** batter_exp) + (pitcher_raw ** pitcher_exp) + (defense * float(factor_defense))) ** 0.5)
+    batman = logistic_transform(batman_raw)
     batman = batman if (batman > float(factor_const)) else 0.0
     return batman
 
