@@ -827,7 +827,7 @@ def main():
             send_discord_message("One sec!", message[:DISCORD_SPLIT_LIMIT])
         else:
             print("Generating new stat file, please stand by.")
-        blaseball_stat_csv.generate_file(args.statfile, False, args.archive)
+        blaseball_stat_csv.generate_file(args.statfile, False, args.archive, True)
     team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, game_schedule, day)
     team_pid_stat_data, _ = load_stat_data_pid(args.statfile, game_schedule, day)
     if args.lineupfile:
