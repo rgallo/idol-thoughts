@@ -18,12 +18,14 @@ BALLPARK_CACHE = {}
 GAME_CACHE = {}
 BATTER_CACHE = {}
 
-MIN_SEASON = 15
-MAX_SEASON = 15
+MIN_SEASON = 14
+MAX_SEASON = 16
 
 BEST_RESULT = 8000000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
+MIN_DAY = 1
+MAX_DAY = 100
 EXACT_FAILS = 0
 BEST_UNEXVAR_ERROR = -100.0
 BEST_EXACT = 0.0
@@ -313,6 +315,8 @@ def minimize_func(parameters, *data):
     global LAST_SEASON_RANGE
     global REJECTS
     global EARLY_REJECT
+    global MIN_DAY
+    global MAX_DAY
     calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)
     if number_to_beat is not None:
@@ -514,7 +518,7 @@ def minimize_func(parameters, *data):
                 EARLY_REJECT = False
 
     seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
-    dayrange = range(1, 125)
+    dayrange = range(MIN_DAY, MAX_DAY)
     days_to_solve = 50            
     #if not reject_solution:
         #if LAST_SEASON_RANGE == 0:
@@ -543,7 +547,35 @@ def minimize_func(parameters, *data):
         debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
         pitchers, team_stat_data, pitcher_stat_data, last_stat_filename, ballparks = (None, ) * 5
         season_team_attrs = team_attrs.get(str(season), {})
-        season_days = 0        
+        season_days = 0       
+        if (CURRENT_ITERATION == 1) and (season == MAX_SEASON):
+            for day in dayrange:                
+                games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
+                if not games:
+                    if day == 1:
+                        MAX_DAY = 0
+                    break
+                else:
+                    MAX_DAY = day
+                    season_days += 1
+            if not MAX_DAY == 0:
+                MIN_DAY = (MAX_DAY - (days_to_solve - 1)) if ((MAX_DAY - (days_to_solve - 1)) > 0) else 1        
+        if season == MAX_SEASON:
+            if MAX_DAY == 0:                
+                continue
+            else:
+                dayrange = range(MIN_DAY, MAX_DAY + 1)
+        elif season == (MAX_SEASON - 1):
+            if MAX_DAY == 0:
+                dayrange = range((100 - days_to_solve), 100)
+            elif MAX_DAY >= days_to_solve:
+                continue
+            else:                
+                previous_season_start_day = 100 - (days_to_solve - ((MAX_DAY + 1) - MIN_DAY))
+                dayrange = range(previous_season_start_day, 100)
+        else:
+            continue
+            
         for day in dayrange:            
             if reject_solution:                
                 break
@@ -558,8 +590,7 @@ def minimize_func(parameters, *data):
                 games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
                 if not games:
                     GAME_CACHE[(season, day)] = []                    
-                    continue                
-            season_days += 1
+                    continue                            
             paired_games = pair_games(games)
             schedule = get_schedule_from_paired_games(paired_games, season, day)
             day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)            
@@ -1214,7 +1245,8 @@ def minimize_batman_func(parameters, *data):
         #LINE_JUMP_GAMES.clear()
         #LINE_JUMP_GAMES = games_to_keep            
 
-    seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
+    #seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
+    seasonrange = reversed(range(14, 15))
     dayrange = range(1, 125)
 
     if not reject_solution:
@@ -1225,9 +1257,11 @@ def minimize_batman_func(parameters, *data):
             #    LAST_DAY_RANGE = 1    
 
         if LAST_SEASON_RANGE == 0:
-            seasonrange = range(MIN_SEASON, MAX_SEASON + 1)
+            #seasonrange = range(MIN_SEASON, MAX_SEASON + 1)
+            seasonrange = range(14, 15)
         else:
-            seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
+            #seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
+            seasonrange = reversed(range(14, 15))
         #if LAST_DAY_RANGE == 0:
          #   dayrange = range(1, 125)
         #else:
@@ -1456,9 +1490,9 @@ def minimize_batman_func(parameters, *data):
                                     #LAST_BEST = abs(batman_min_err)
                                     #LINE_JUMP_GAMES = neg_fail_games
                                 break                           
-                        if (eventofinterest == "abs") and ((abs(batman_max_err) + abs(batman_min_err)) >= (WORST_ERROR - 0.5)) and not reject_solution:
+                        #if (eventofinterest == "abs") and ((abs(batman_max_err) + abs(batman_min_err)) >= (WORST_ERROR - 0.5)) and not reject_solution:
                             #experimenting with adding games to the jump for being close to the worst error
-                            LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
+                            #LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
                         if eventofinterest == "abs":
                             stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
                         elif eventofinterest == "hrs":
@@ -1607,7 +1641,8 @@ def minimize_batman_func(parameters, *data):
             check_max_homers = 0
             check_max_atbats = 0
             #validate batter cache data
-            for season in range(MIN_SEASON, MAX_SEASON + 1):
+            #for season in range(MIN_SEASON, MAX_SEASON + 1):
+            for season in range(14, 15):
                 for day in range(1, 125):
                     cache_games = GAME_CACHE.get((season, day))
                     paired_games = pair_games(cache_games)
@@ -1633,12 +1668,13 @@ def minimize_batman_func(parameters, *data):
         else:
             WORST_ERROR = abs(batman_max_err) + abs(batman_min_err)                    
         WORST_ERROR = max(WORST_ERROR, 2.0)
-        if (batman_max_err > abs(batman_min_err)):
-            LAST_BEST = batman_max_err  
-            LINE_JUMP_GAMES = pos_fail_games
-        else: 
-            LAST_BEST = abs(batman_min_err)
-            LINE_JUMP_GAMES = neg_fail_games        
+        if CURRENT_ITERATION > 1:
+            if (batman_max_err > abs(batman_min_err)):
+                LAST_BEST = batman_max_err  
+                LINE_JUMP_GAMES = pos_fail_games
+            else: 
+                LAST_BEST = abs(batman_min_err)
+                LINE_JUMP_GAMES = neg_fail_games        
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):
         now = datetime.datetime.now()        
         debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}, {} rejects since last check-in, {:.2f} seconds".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)
