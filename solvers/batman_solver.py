@@ -134,17 +134,17 @@ def main():
         games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
-        bounds_terms = ([(-2, 0), (0, 1), (0, 2.5)] * 2) + ([(2, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
+        bounds_terms = ([(-8, 0), (0, 1), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
         base_bounds = bounds_terms + [(1, 3), (1, 3), (0, 2), (0, 0.1)]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        bounds_terms = ([(-2, 0), (0, 1), (0, 2.5)] * 2) + ([(2, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
+        bounds_terms = ([(-8, 0), (0, 1), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
         base_bounds = bounds_terms + [(1, 3), (1, 3), (0, 2), (0, 0.1)]
     else:
         eventofinterest = "abs"
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        bounds_terms = ([(-2, 0), (0, 1), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
+        bounds_terms = ([(-8, 0), (0, 1), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
         base_bounds = bounds_terms + [(1, 3), (1, 3), (0, 2), (0, 2), (0, 2), (0, 0.1), (0, 0.1), (0, 0.02), (0, 0.02)]
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    

@@ -25,7 +25,7 @@ BEST_RESULT = 8000000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
 MIN_DAY = 1
-MAX_DAY = 100
+MAX_DAY = 101
 EXACT_FAILS = 0
 BEST_UNEXVAR_ERROR = -100.0
 BEST_EXACT = 0.0
@@ -56,7 +56,7 @@ LINE_JUMP_GAMES = {}
 HAS_GAMES = {}
 LAST_ITERATION_TIME = datetime.datetime.now()
 
-ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
+ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20"}
 ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 
@@ -518,7 +518,7 @@ def minimize_func(parameters, *data):
                 EARLY_REJECT = False
 
     seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
-    dayrange = range(MIN_DAY, MAX_DAY)
+    dayrange = range(MIN_DAY, MAX_DAY + 1)
     days_to_solve = 50            
     #if not reject_solution:
         #if LAST_SEASON_RANGE == 0:
@@ -556,7 +556,7 @@ def minimize_func(parameters, *data):
                         MAX_DAY = 0
                     break
                 else:
-                    MAX_DAY = day
+                    MAX_DAY = day - 1
                     season_days += 1
             if not MAX_DAY == 0:
                 MIN_DAY = (MAX_DAY - (days_to_solve - 1)) if ((MAX_DAY - (days_to_solve - 1)) > 0) else 1        
@@ -970,11 +970,18 @@ def minimize_func(parameters, *data):
         debug_print("-"*20, debug, run_id)
         if len(win_loss) > 0:
             terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_mofo_list_size)])] * 3)))  
-            mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
+            #need to set unused mods to 0, 0, 1
+            mods_output = "identifier,team,name,a,b,c"
+            for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
+                if mod.attr.lower() in mod_games:
+                    mods_output += "\n{},{},{},{},{},{}".format(mod.attr, mod.team, mod.stat, a, b, c)            
+                else:
+                    mods_output += "\n{},{},{},{},{},{}".format(mod.attr, mod.team, mod.stat, 0, 0, 1)
+            #mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
             ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-(park_mod_list_size):])] * 3)))
             if outputdir:
                 write_file(outputdir, run_id, "terms.csv", "name,a,b,c\n" + terms_output)
-                write_file(outputdir, run_id, "mods.csv", "identifier,team,name,a,b,c\n" + mods_output)
+                write_file(outputdir, run_id, "mods.csv",  mods_output)
                 write_file(outputdir, run_id, "ballparkmods.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
                 write_parameters(outputdir, run_id, "solution.json", parameters)
             debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug2, run_id)
@@ -1074,6 +1081,7 @@ def minimize_batman_func(parameters, *data):
     global BEST_QUARTER_FAIL    
     global MAX_OBSERVED_DIFFERENCE    
     global HAS_GAMES
+    global ALL_GAMES
     global WORST_ERROR
     global LAST_BEST
     global MAX_INTEREST
@@ -1101,7 +1109,7 @@ def minimize_batman_func(parameters, *data):
             baseline_parameters = ([0, 0, 1] * len(stlat_list)) + [1, 1, 1, 1, 1, 0, 0, 0, 0] + ([0, 0, 1] * len(mod_list)) + ([0, 0, 1] * len(ballpark_list))            
         else:            
             print("Establishing baseline for not-at-bats")
-            baseline_parameters = ([0, 0, 1] * 2) + ([1, 0, 1] * 5) + ([0, 0, 1] * 5) + ([0, 0, 1] * (len(stlat_list) - 12)) + [1, 1, 1, 0] + ([0, 0, 1] * len(mod_list)) + ([0, 0, 1] * len(ballpark_list))
+            baseline_parameters = ([0, 0, 1] * 2) + ([5, 0, 1] * 5) + ([0, 0, 1] * 5) + ([0, 0, 1] * (len(stlat_list) - 12)) + [1, 1, 1, 0] + ([0, 0, 1] * len(mod_list)) + ([0, 0, 1] * len(ballpark_list))
         terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(baseline_parameters[:base_batman_list_size])] * 3))}        
         for mod, (a, b, c) in zip(mod_list, zip(*[iter(baseline_parameters[(base_batman_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
             mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)                     
@@ -1127,7 +1135,7 @@ def minimize_batman_func(parameters, *data):
     max_atbats, max_hits, max_homers = 0, 0, 0
     atbats_team_stat_data = {}    
     games_to_keep = {}
-    rejection_threshold = (WORST_ERROR == MAX_INTEREST)
+    rejection_threshold = (WORST_ERROR == MAX_INTEREST)    
     #let some games jump the line
     for gameid in LINE_JUMP_GAMES:
         game = LINE_JUMP_GAMES[gameid]
@@ -1212,11 +1220,12 @@ def minimize_batman_func(parameters, *data):
                 reject_solution = True
                 REJECTS += 1                
                 break     
-            if (real_val > 0) and (batman_fail_by < 0) and (abs(batman_fail_by) == real_val):
-                #capture all cases where we set a nonzero real value to 0 and fail them
-                reject_solution = True
-                REJECTS += 1          
-                break
+            if (real_val == MAX_INTEREST) and (batman_fail_by < 0) and (abs(batman_fail_by) == MAX_INTEREST):
+                #capture all cases where we set our maximum positive value to 0 and fail them
+                if not (eventofinterest == "abs"):
+                    reject_solution = True
+                    REJECTS += 1          
+                    break
             if eventofinterest == "abs":
                 stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
             elif eventofinterest == "hrs":
@@ -1247,8 +1256,10 @@ def minimize_batman_func(parameters, *data):
                         batman_unexvar += batman_fail_by ** 2.0                                    
                     zero_counter += bat_bat_counter
 
-    #if reject_solution and rejection_threshold:
-        #LINE_JUMP_GAMES.clear()
+    if reject_solution:
+        if bat_counter == ALL_GAMES:
+            #all of our games ended up here, meaning we're not checking against our worst error properly
+            LINE_JUMP_GAMES.clear()
         #LINE_JUMP_GAMES = games_to_keep            
 
     #seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
@@ -1473,36 +1484,26 @@ def minimize_batman_func(parameters, *data):
                                 max_err_actual = actual_result                    
                             if batman_fail_by < batman_min_err:
                                 batman_min_err = batman_fail_by                                                                                                                 
-                                min_err_actual = actual_result                           
-                        if not rejection_threshold:
-                            if (abs(batman_max_err) + abs(batman_min_err)) > WORST_ERROR:
-                                reject_solution = True
-                                REJECTS += 1                
-                                #if batman_max_err > abs(batman_min_err):
-                                    #LAST_BEST = batman_max_err
-                                    #LINE_JUMP_GAMES = pos_fail_games
-                                #else:
-                                    #LAST_BEST = abs(batman_min_err)
-                                    #LINE_JUMP_GAMES = neg_fail_games
-                                break                                                  
-                        else:                            
-                            if (abs(batman_max_err) + abs(batman_min_err)) >= WORST_ERROR:
-                                reject_solution = True
-                                REJECTS += 1                
-                                #if batman_max_err > abs(batman_min_err):
-                                    #LAST_BEST = batman_max_err
-                                    #LINE_JUMP_GAMES = pos_fail_games
-                                #else:
-                                    #LAST_BEST = abs(batman_min_err)
-                                    #LINE_JUMP_GAMES = neg_fail_games
-                                break      
-                        if (real_val > 0) and (batman_fail_by < 0) and (abs(batman_fail_by) == real_val):
-                            #capture all cases where we set a nonzero real value to 0 and fail them
+                                min_err_actual = actual_result                                                   
+                        if (abs(batman_max_err) + abs(batman_min_err)) >= WORST_ERROR:
                             reject_solution = True
-                            #add any of these games to the line jump to catch them sooner
-                            LINE_JUMP_GAMES[game["away"]["game_id"]] = game                     
-                            REJECTS += 1          
-                            break
+                            REJECTS += 1                
+                            #if batman_max_err > abs(batman_min_err):
+                                #LAST_BEST = batman_max_err
+                                #LINE_JUMP_GAMES = pos_fail_games
+                            #else:
+                                #LAST_BEST = abs(batman_min_err)
+                                #LINE_JUMP_GAMES = neg_fail_games
+                            break      
+                        
+                        if (real_val == MAX_INTEREST) and (batman_fail_by < 0) and (abs(batman_fail_by) == MAX_INTEREST) and (CURRENT_ITERATION > 1):
+                            #capture all cases where we set a nonzero real value to outside our threshold and fail them if hits or hrs                            
+                            if not (eventofinterest == "abs"):
+                                reject_solution = True
+                                #add any of these games to the line jump to catch them sooner
+                                LINE_JUMP_GAMES[game["away"]["game_id"]] = game                     
+                                REJECTS += 1          
+                                break
                         #if (eventofinterest == "abs") and ((abs(batman_max_err) + abs(batman_min_err)) >= (WORST_ERROR - 0.5)) and not reject_solution:
                             #experimenting with adding games to the jump for being close to the worst error
                             #LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
@@ -1594,7 +1595,7 @@ def minimize_batman_func(parameters, *data):
         if pass_exact >= BEST_EXACT:
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, zero fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}, pavgerr = {:.4f}, zavgerr = {:.4f}".format(fail_rate, pos_fail_rate, zero_fail_rate, pass_exact, batman_max_err, batman_min_err, pos_avg_error, use_zero_error), debug, "::::::::")
         if batman_max_err >= batman_min_err:                             
-            fail_points = ((zero_fail_rate * 100.0) ** use_zero_error) + ((pos_fail_rate * 100.0) ** pos_avg_error) + ((100.0 - pass_exact) ** (pos_avg_error + use_zero_error))
+            fail_points = ((zero_fail_rate * 100.0) * use_zero_error) + ((pos_fail_rate * 100.0) * pos_avg_error) + ((100.0 - pass_exact) * (max(pos_avg_error, use_zero_error)))
             #print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format(max(abs(batman_max_err), abs(batman_min_err)), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                                                                        
             if CURRENT_ITERATION == 1 and eventofinterest == "abs":
                 linear_fail = (max(abs(batman_max_err), abs(batman_min_err)) * 4000.0) + fail_points
@@ -1608,7 +1609,8 @@ def minimize_batman_func(parameters, *data):
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact
         BEST_FAIL_RATE = pos_fail_rate        
-        BEST_UNEXVAR_ERROR = batman_unexvar 
+        BEST_UNEXVAR_ERROR = batman_unexvar         
+        ALL_GAMES = bat_counter
         LAST_SEASON_RANGE = 1 if (LAST_SEASON_RANGE == 0) else 0        
         EXACT_FAILS = 0
         maxevent = 0    
@@ -1687,7 +1689,11 @@ def minimize_batman_func(parameters, *data):
                 LINE_JUMP_GAMES = pos_fail_games
             else: 
                 LAST_BEST = abs(batman_min_err)
-                LINE_JUMP_GAMES = neg_fail_games        
+                LINE_JUMP_GAMES = neg_fail_games       
+        #if line jump games contains the entire set, we need to evaluate it the "right" way    
+        if (batman_max_err == 0) or (batman_min_err == 0):
+            print("Clearing line jump, since all games would be in it")
+            LINE_JUMP_GAMES.clear()
     if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 50000 == 0)):
         now = datetime.datetime.now()        
         debug_print("Error Span - {:.4f}, fail rate = {:.2f}, pass exact = {:.4f}, optimizing: {}, iteration # {}, {} rejects since last check-in, {:.2f} seconds".format(WORST_ERROR, (BEST_FAIL_RATE * 100), BEST_EXACT, eventofinterest, CURRENT_ITERATION, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)
