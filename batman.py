@@ -241,16 +241,15 @@ def calc_batman_scaled(positive_term, subtract_term, cutoff):
         batman_raw = numerator / denominator
         if math.isnan(batman_raw):            
             return 1
-    if batman_raw <= 0:
+    if batman_raw <= cutoff:
         batman = 0
     else:
-        batman_raw -= positive_term / (2 * denominator)        
-        batman = logistic_transform(batman_raw / 2)        
-    batman = batman if (batman > cutoff) else 0
+        batman_raw -= subtract_term / ((positive_term - subtract_term) ** 2)
+        batman = logistic_transform(batman_raw)            
     return batman
 
 def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3, baseline=False):    
-    factor_bexp, factor_pexp, factor_bdef, factor_roff, factor_rdef, factor_bcut, factor_rcut, reverberation, repeating = special_cases["factors"][:9]    
+    factor_bexp, factor_pitch, factor_bdef, factor_roff, factor_rdef, factor_bcut, factor_rcut, reverberation, repeating = special_cases["factors"][:9]    
     team_atbat_data = {} 
     batting_mods_by_Id = {}
     atbats, hhw_tally = 0.0, 0.0
@@ -270,6 +269,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
     active_batters = len(ordered_active_batters)
     outs_pg = innings * outs_pi           
     previous_outs_pg = outs_pg
+    prev_batter_id = ""
     current_outs = 0
     while current_outs < outs_pg:                        
         guaranteed_hhw = 0
@@ -277,22 +277,22 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
             #if we have any remainder, it should go to the next batter, as they either will have gotten an extra atbat or not depending
             if current_outs >= outs_pg:      
                 if (remainder > 0.0) and (outs_pg > innings * outs_pi):
-                    team_atbat_data[batter_id] += remainder
+                    team_atbat_data[batter_id] += (remainder / 2)
+                    team_atbat_data[prev_batter_id] -= (remainder / 2)
                     remainder = 0.0
                 break                
             if batter_id not in team_atbat_data:
                 team_atbat_data[batter_id] = 0.0            
             defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
-            pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)
-            pitcher_exp = float(factor_pexp) if pitcher_raw > 0 else 1.0
+            pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)            
             batter_raw = calc_batter(terms, team_pid_stat_data, batter_id, battingteam, batting_mods_by_Id[batter_id])
             batter_exp = float(factor_bexp) if batter_raw > 0 else 1.0    
             batting = batter_raw ** batter_exp
-            pitching_defense = (pitcher_raw ** pitcher_exp) + (defense * float(factor_bdef))
+            pitching_defense = (pitcher_raw * float(factor_pitch)) + (defense * float(factor_bdef))
             hits_hrs_walks = calc_batman_scaled(batting, pitching_defense, float(factor_bcut))                        
 
             offense = calc_offense(terms, battingteam, team_pid_stat_data, batter_id, batting_mods_by_Id[batter_id]) 
-            running = offense * float(factor_roff)
+            running = offense ** float(factor_roff)
             running_defense = defense * float(factor_rdef)            
             baserunners_out = calc_batman_scaled(running_defense, running, float(factor_rcut))                        
 
@@ -316,6 +316,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 current_outs += added_out
                 hhw_tally -= 1.0            
             current_outs += 1
+            prev_batter_id = batter_id
         #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup        
         if guaranteed_hhw >= active_batters:
             for line_order, (bat_id, curr_batt) in enumerate(ordered_active_batters):
@@ -329,23 +330,23 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
     for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
         if batter_id not in team_atbat_data:
             team_atbat_data[batter_id] = 0.0    
-        if (remainder > 0.0) and (outs_pg > innings * outs_pi):
-            team_atbat_data[batter_id] += remainder
-            remainder = 0.0
+        if (lineup_order == 0) and (remainder > 0.0) and (outs_pg > innings * outs_pi):            
+            team_atbat_data[batter_id] += (remainder / 2)            
+        if (lineup_order == active_batters - 1) and (remainder > 0.0) and (outs_pg > innings * outs_pi):
+            team_atbat_data[batter_id] -= (remainder / 2)            
     return team_atbat_data
 
 
 def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases):         
-    factor_bexp, factor_pexp, factor_defense, factor_const = special_cases["factors"][:4]
+    factor_bexp, factor_pitch, factor_defense, factor_alldef, factor_const = special_cases["factors"][:5]
     defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
-    pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)
-    pitcher_exp = float(factor_pexp) if pitcher_raw > 0 else 1.0
+    pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)    
     batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingMods)
     batter_exp = float(factor_bexp) if batter_raw > 0 else 1.0    
     batter = batter_raw ** batter_exp
-    pitcher_defense = (pitcher_raw ** pitcher_exp) - (defense * float(factor_defense))
-    batman = calc_batman_scaled(batter, pitcher_defense, float(factor_const))
-    
+    pitcher_defense = ((pitcher_raw * float(factor_pitch)) - (defense * float(factor_defense))) * float(factor_alldef)    
+    batman = calc_batman_scaled(batter, pitcher_defense, float(factor_const))    
+    #print("Batter = {:.4f}, pitcher_defense = {:.4f}, batman = {:.4f}".format(batter, pitcher_defense, batman))
     return batman
 
 

@@ -27,7 +27,7 @@ BATMAN_ABS_STLAT_LIST = ("tragicness", "patheticism", "thwackability", "divinity
                  "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness",
                  "maxlaserlikeness", "maxbasethirst", "maxcontinuation", "maxgroundfriction", "maxindulgence")
 
-BATMAN_SPECIAL_CASES = ("battingexponent", "pitchingexponent", "battingdefense", "cutoff")
+BATMAN_SPECIAL_CASES = ("battingexponent", "pitchingfactor", "battingdefense", "alldefense", "cutoff")
 
 BATMAN_ABS_SPECIAL_CASES = ("battingexponent", "pitchingexponent", "battingdefense", "runningoffense", "runningdefense", "battingcutoff", "runningcutoff", "reverberation", "repeating")
 
@@ -134,18 +134,19 @@ def main():
         games_swept_elsewhere = parse_games(f_swelsewhere.read())    
     if cmd_args.hits:
         eventofinterest = "hits"            
-        bounds_terms = ([(-8, 0), (0, 1), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
-        base_bounds = bounds_terms + [(1, 3), (1, 3), (0, 2), (0, 0.1)]
+        bounds_terms = ([(-8, 0), (0, 2), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
+        base_bounds = bounds_terms + [(1.5, 3), (0, 2), (0, 2), (0, 1), (0, 0.1)]
     elif cmd_args.homers:
         eventofinterest = "hrs"        
-        bounds_terms = ([(-8, 0), (0, 1), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
-        base_bounds = bounds_terms + [(1, 3), (1, 3), (0, 2), (0, 0.1)]
+        bounds_terms = ([(-8, 0), (0, 2), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
+        base_bounds = bounds_terms + [(1.5, 3), (0, 2), (0, 2), (0, 1), (0, 0.1)]
     else:
         eventofinterest = "abs"
+        establish_baseline = True
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
-        bounds_terms = ([(-8, 0), (0, 1), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
-        base_bounds = bounds_terms + [(1, 3), (1, 3), (0, 2), (0, 2), (0, 2), (0, 0.1), (0, 0.1), (0, 0.02), (0, 0.02)]
+        bounds_terms = ([(-8, 0), (0, 2), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
+        base_bounds = bounds_terms + [(1.5, 3), (0, 2), (0, 2), (1.5, 3), (0, 2), (0, 0.1), (0, 0.1), (0, 0.02), (0, 0.02)]
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
     modterms = [modterm for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
@@ -155,10 +156,9 @@ def main():
     bounds = base_bounds + bounds_team + bounds_park                
     popsize = 25
     init = get_init_values(cmd_args.init, eventofinterest, popsize, cmd_args.random) if cmd_args.init else 'latinhypercube'
-    recombination = 0.4
+    recombination = 0.7
     #recombination = 0.7 if (type(init) == str) else 0.4
-    #recombination = 0.5 if (workers > 2) else recombination    
-    establish_baseline = True    
+    #recombination = 0.5 if (workers > 2) else recombination        
     args = (eventofinterest, batter_list, get_batman_results, stlatlist, special_cases, modterms, parkterms, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept_elsewhere, establish_baseline, 
             cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=popsize, tol=0.0001, 
