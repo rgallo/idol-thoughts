@@ -78,7 +78,7 @@ def get_player_id_lookup(filename):
 
 def get_games(filename):
     with open(filename) as f:
-        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
+        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True) if row]
     return filedata
 
 def get_batters(filename):
