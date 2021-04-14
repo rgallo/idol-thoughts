@@ -10,6 +10,7 @@ import re
 
 sys.path.append("..")
 from solvers import base_solver
+from solvers.batman_hits_terms import BATMAN_HITS_TERMS
 from solvers.batman_ballpark_terms import BATMAN_BALLPARK_TERMS
 from solvers.batman_mod_terms import BATMAN_MOD_TERMS
 from batman import get_batman
@@ -27,7 +28,9 @@ BATMAN_ABS_STLAT_LIST = ("tragicness", "patheticism", "thwackability", "divinity
                  "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness",
                  "maxlaserlikeness", "maxbasethirst", "maxcontinuation", "maxgroundfriction", "maxindulgence")
 
-BATMAN_SPECIAL_CASES = ("battingexponent", "pitchingfactor", "battingdefense", "alldefense", "cutoff")
+BATMAN_HITS_SPECIAL_CASES = ("cutoff")
+
+BATMAN_HRS_SPECIAL_CASES = ("battingexponent", "pitchingfactor", "battingdefense", "alldefense", "cutoff")
 
 BATMAN_ABS_SPECIAL_CASES = ("battingexponent", "pitchingexponent", "battingdefense", "runningoffense", "runningdefense", "battingcutoff", "runningcutoff", "reverberation", "repeating")
 
@@ -54,23 +57,23 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
             try:                
                 batman = get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_stat_data, pitcher_stat_data, terms, pitchingmods, battingmods, {"factors": special_cases})            
             except ValueError:
-                batman = -10000      
+                batman = -1      
             if math.isnan(batman):
-                batman = -10000            
+                batman = -1            
             if eventofinterest == "hits":            
                 if (hits - 0.5) < (batman * atbats) < (hits + 0.5):                
                     fail_batman -= 1
                 fail_batman_by = (batman * atbats) - hits
                 batman_val = (batman * atbats)
                 real_val = hits
-                actual = "{} hits, batman {:.4f}".format(hits, (batman * atbats))
+                actual = "{} hits, batman {:.4f}".format(hits, (batman * atbats))                
             elif eventofinterest == "hrs":
                 if (homers - 0.5) < (batman * atbats) < (homers + 0.5):
                     fail_batman -= 1
                 fail_batman_by = (batman * atbats) - homers
                 batman_val = (batman * atbats)
                 real_val = homers
-                actual = "{} hrs, batman {:.4f}".format(homers, (batman * atbats))        
+                actual = "{} hrs, batman {:.4f}".format(homers, (batman * atbats))                   
     return games, fail_batman, fail_batman_by, actual, real_val
 
 def parse_games(data):
@@ -125,28 +128,34 @@ def main():
     workers = int(cmd_args.workers)
     batter_list = base_solver.get_batters(cmd_args.batterfile)    
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)
-    stlatlist = BATMAN_STLAT_LIST
-    special_cases = BATMAN_SPECIAL_CASES
+    stlatlist = BATMAN_STLAT_LIST    
     establish_baseline = False    
     with open('team_attrs.json') as f:
         team_attrs = json.load(f)
     with open("sweptelsewheregames.csv") as f_swelsewhere:
-        games_swept_elsewhere = parse_games(f_swelsewhere.read())    
+        games_swept_elsewhere = parse_games(f_swelsewhere.read())            
     if cmd_args.hits:
-        eventofinterest = "hits"            
-        bounds_terms = ([(-8, 0), (0, 2), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
-        base_bounds = bounds_terms + [(1.5, 3), (0, 2), (0, 2), (0, 1), (0, 0.1)]
+        eventofinterest = "hits" 
+        establish_baseline = True
+        stlatlist = [stlatterm.stat.lower() for stlatterm in BATMAN_HITS_TERMS]          
+        bounds_terms_base = [stlatterm.bounds for stlatterm in BATMAN_HITS_TERMS]        
+        bounds_terms = [item for sublist in bounds_terms_base for item in sublist]    
+        special_cases = BATMAN_HITS_SPECIAL_CASES        
+        base_bounds = bounds_terms + [[0, 0.1]]
+        print("Base bounds = {}".format(base_bounds))
     elif cmd_args.homers:
-        eventofinterest = "hrs"        
-        bounds_terms = ([(-8, 0), (0, 2), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
-        base_bounds = bounds_terms + [(1.5, 3), (0, 2), (0, 2), (0, 1), (0, 0.1)]
+        eventofinterest = "hrs"  
+        establish_baseline = True
+        special_cases = BATMAN_HRS_SPECIAL_CASES
+        bounds_terms = ([(-2, 0), (0, 2), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
+        base_bounds = bounds_terms + [(1, 3), (0, 3), (0, 2), (0, 2), (0, 0.1)]
     else:
         eventofinterest = "abs"
         establish_baseline = True
         stlatlist = BATMAN_ABS_STLAT_LIST
         special_cases = BATMAN_ABS_SPECIAL_CASES
         bounds_terms = ([(-8, 0), (0, 2), (0, 2.5)] * 2) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 10), (0, 3), (0, 2.5)] * 5) + ([(0, 8), (0, 3), (0, 2.5)] * (len(stlatlist) - 12))
-        base_bounds = bounds_terms + [(1.5, 3), (0, 2), (0, 2), (1.5, 3), (0, 2), (0, 0.1), (0, 0.1), (0, 0.02), (0, 0.02)]
+        base_bounds = bounds_terms + [(1.5, 3), (0, 3), (0, 2), (1.5, 3), (0, 2), (0, 0.1), (0, 0.1), (0, 0.02), (0, 0.02)]
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
     modterms = [modterm for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]

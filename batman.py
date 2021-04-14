@@ -19,15 +19,7 @@ def calc_team(terms, termset, mods, skip_mods=False):
             modterms = (mods or {}).get(termname, [])              
             multiplier *= math.prod(modterms)                      
         total += term.calc(val) * multiplier        
-    return total
-            
-def calc_pitcher_batter(terms, pitcher, pitcher_stat_data, team_pid_stat_data, batter, battingteam, pitchingmods, battingmods, factor_bexp, factor_pexp):
-    pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, pitchingmods)
-    pitcher_exp = factor_pexp if pitcher_raw > 0 else 1.0
-    batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingmods)
-    batter_exp = factor_bexp if batter_raw > 0 else 1.0
-    pitcher_batter = (batter_raw ** batter_exp) - (pitcher_raw ** pitcher_exp)
-    return pitcher_batter
+    return total          
 
 def calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, mods):
     pitcher_data = pitcher_stat_data[pitcher]        
@@ -234,18 +226,30 @@ def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pi
 def calc_batman_scaled(positive_term, subtract_term, cutoff):
     denominator, numerator, batman_raw, batman = 0.0, 0.0, 0.0, 0.0
     if (positive_term + subtract_term) <= 0:
-        batman_raw = -10000000.0
-    else:        
-        denominator = (positive_term + subtract_term) ** 0.5
-        numerator = positive_term - subtract_term
-        batman_raw = numerator / denominator
-        if math.isnan(batman_raw):            
-            return 1
-    if batman_raw <= cutoff:
-        batman = 0
-    else:
-        batman_raw -= subtract_term / ((positive_term - subtract_term) ** 2)
-        batman = logistic_transform(batman_raw)            
+        return 0    
+    denominator = (positive_term + subtract_term) ** 0.5
+    numerator = positive_term - subtract_term
+    batman_raw = numerator / denominator
+    if math.isnan(batman_raw):            
+        return 1       
+    batman_raw -= (subtract_term ** 2) / positive_term
+    batman = logistic_transform(batman_raw)            
+    if batman <= cutoff:
+        return 0
+    return batman
+
+def calc_batman_intelligent(numerator, denominator, positive_term, negative_term, cutoff):
+    batman_raw, batman = 0.0, 0.0
+    if numerator <= 0 or denominator <= 0:
+        return 0    
+    denominator = denominator ** 0.5    
+    batman_raw = numerator / denominator
+    if math.isnan(batman_raw):            
+        return 1       
+    batman_raw -= (subtract_term ** 2) / positive_term
+    batman = logistic_transform(batman_raw)            
+    if batman <= cutoff:
+        return 0
     return batman
 
 def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3, baseline=False):    
@@ -285,10 +289,11 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 team_atbat_data[batter_id] = 0.0            
             defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
             pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)            
+            pitcher_exp = float(factor_pitch) if pitcher_raw > 0 else 1.0
             batter_raw = calc_batter(terms, team_pid_stat_data, batter_id, battingteam, batting_mods_by_Id[batter_id])
             batter_exp = float(factor_bexp) if batter_raw > 0 else 1.0    
             batting = batter_raw ** batter_exp
-            pitching_defense = (pitcher_raw * float(factor_pitch)) + (defense * float(factor_bdef))
+            pitching_defense = (pitcher_raw ** pitcher_exp) + (defense * float(factor_bdef))
             hits_hrs_walks = calc_batman_scaled(batting, pitching_defense, float(factor_bcut))                        
 
             offense = calc_offense(terms, battingteam, team_pid_stat_data, batter_id, batting_mods_by_Id[batter_id]) 
@@ -336,16 +341,41 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
             team_atbat_data[batter_id] -= (remainder / 2)            
     return team_atbat_data
 
+def calc_hits(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, factor_const):
+    team_omniscience = 0
+    pitcher_data = pitcher_stat_data[pitcher]            
+    batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]  
+    batter_data = batter_list_dict[0]
+    ruth = calc_team(terms, (("ruthlessness", pitcher_data["ruthlessness"]),), defenseMods, False)    
+    moxie = calc_team(terms, (("moxie", batter_data["moxie"]),), battingMods, False)        
+    thwack = calc_team(terms, (("thwackability", batter_data["thwackability"]),), battingMods, False)        
+    unthwack = calc_team(terms, (("unthwackability", pitcher_data["unthwackability"]),), defenseMods, False)    
+    other_pitch = calc_team(terms, (("overpowerment", pitcher_data["overpowerment"]), ("coldness", pitcher_data["coldness"])), defenseMods, False)    
+    other_bat = calc_team(terms, (("patheticism", batter_data["patheticism"]), ("divinity", batter_data["divinity"]), ("musclitude", batter_data["musclitude"]), ("martyrdom", batter_data["martyrdom"])), battingMods, False)
+    for playerid, stlats in team_pid_stat_data[pitchingteam].items():
+        team_omniscience += calc_team(terms, (("omniscience", stlats["omniscience"]),), defenseMods, False)            
+
+    numerator = (ruth - moxie) + (thwack - unthwack) + other_bat - other_pitch - team_omniscience
+    denominator = (ruth + moxie) + (thwack + unthwack) + other_bat + other_pitch + team_omniscience
+    positive_term = ruth + thwack + other_bat
+    negative_term = moxie + unthwack + other_pitch + team_omniscience
+    hitsperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
+
+    return hitsperatbat
 
 def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases):         
     factor_bexp, factor_pitch, factor_defense, factor_alldef, factor_const = special_cases["factors"][:5]
-    defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
-    pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)    
-    batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingMods)
-    batter_exp = float(factor_bexp) if batter_raw > 0 else 1.0    
-    batter = batter_raw ** batter_exp
-    pitcher_defense = ((pitcher_raw * float(factor_pitch)) - (defense * float(factor_defense))) * float(factor_alldef)    
-    batman = calc_batman_scaled(batter, pitcher_defense, float(factor_const))    
+    if eventofinterest == "hits":
+        batman = calc_hits(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, factor_const)
+    else:
+        defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
+        pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)  
+        pitcher_exp = float(factor_pitch) if pitcher_raw > 0 else 1.0
+        batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingMods)
+        batter_exp = float(factor_bexp) if batter_raw > 0 else 1.0    
+        batter = batter_raw ** batter_exp
+        pitcher_defense = ((pitcher_raw ** pitcher_exp) - (defense * float(factor_defense))) * float(factor_alldef)    
+        batman = calc_batman_scaled(batter, pitcher_defense, float(factor_const))    
     #print("Batter = {:.4f}, pitcher_defense = {:.4f}, batman = {:.4f}".format(batter, pitcher_defense, batman))
     return batman
 

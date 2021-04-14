@@ -114,7 +114,7 @@ def main():
         try:
             number_to_beat = base_solver.minimize_func(baseline_parameters, get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS,
                                                      BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
-                                                     team_attrs, None, solve_for_ev, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)            
+                                                     team_attrs, None, solve_for_ev, False, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)            
         except Exception as e:
             print(e)
             number_to_beat = None        
@@ -128,7 +128,7 @@ def main():
     #recombination = 0.7 if (type(init) == str) else 0.4
     recombination = 0.5 if (workers > 2) else recombination
     args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
-            game_list, team_attrs, number_to_beat, solve_for_ev, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
+            game_list, team_attrs, number_to_beat, solve_for_ev, False, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
                                     mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000,
                                     init=init)
@@ -136,7 +136,7 @@ def main():
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS,
                                                  BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
-                                                 team_attrs, None, False, False, False, cmd_args.output)
+                                                 team_attrs, solve_for_ev, None, True, False, False, False, cmd_args.output)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())
 
