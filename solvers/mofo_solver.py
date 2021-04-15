@@ -136,7 +136,23 @@ def main():
                                                                                    zip(*[iter(result.x)] * 3))))
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS,
                                                  BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
-                                                 team_attrs, solve_for_ev, None, True, False, False, False, cmd_args.output)
+                                                 team_attrs, None, solve_for_ev, True, cmd_args.debug, False, False, cmd_args.output)
+    #screw it, final file output stuff in here to try and make sure it actually happens
+    park_mod_list_size = len(BALLPARK_TERMS) * 3
+    team_mod_list_size = len(MOFO_MOD_TERMS) * 3
+    special_cases_count = 0
+    base_mofo_list_size = len(MOFO_STLAT_LIST) * 3
+    terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST, zip(*[iter(result.x[:(base_mofo_list_size)])] * 3)))  
+    #need to set unused mods to 0, 0, 1
+    mods_output = "identifier,team,name,a,b,c"
+    for mod, (a, b, c) in zip(MOFO_MOD_TERMS, zip(*[iter(result.x[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
+        mods_output += "\n{},{},{},{},{},{}".format(mod.attr, mod.team, mod.stat, a, b, c)        
+    #mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
+    ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(BALLPARK_TERMS, zip(*[iter(result.x[-(park_mod_list_size):])] * 3)))
+    outputdir = cmd_args.output
+    base_solver.write_final(outputdir, "MOFOCoefficients.csv", "name,a,b,c\n" + terms_output)
+    base_solver.write_final(outputdir, "MOFOTeamModsCorrection.csv",  mods_output)
+    base_solver.write_final(outputdir, "MOFOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())
 

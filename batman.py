@@ -3,6 +3,7 @@ from __future__ import print_function
 
 import os
 import math
+import statistics
 import helpers
 import collections
 import copy
@@ -17,90 +18,27 @@ def calc_team(terms, termset, mods, skip_mods=False):
         multiplier = 1.0 
         if not skip_mods:            
             modterms = (mods or {}).get(termname, [])              
-            multiplier *= math.prod(modterms)                      
+            if len(modterms) > 0:
+                multiplier = statistics.harmonic_mean(modterms)                      
         total += term.calc(val) * multiplier        
     return total          
-
-def calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, mods):
-    pitcher_data = pitcher_stat_data[pitcher]        
-    termset = (
-        ("unthwackability", pitcher_data["unthwackability"]),
-        ("ruthlessness", pitcher_data["ruthlessness"]),
-        ("overpowerment", pitcher_data["overpowerment"]),
-        ("shakespearianism", pitcher_data["shakespearianism"]),
-        ("coldness", pitcher_data["coldness"]))        
-    return calc_team(terms, termset, mods, False)
-
-def calc_batter(terms, team_pid_stat_data, batter, battingteam, mods):    
-    batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]
-    batter_data = batter_list_dict[0]    
-    termset = (        
-        ("tragicness", batter_data["tragicness"]),
-        ("patheticism", batter_data["patheticism"]),
-        ("thwackability", batter_data["thwackability"]),
-        ("divinity", batter_data["divinity"]),
-        ("moxie", batter_data["moxie"]),
-        ("musclitude", batter_data["musclitude"]),
-        ("martyrdom", batter_data["martyrdom"]))
-    return calc_team(terms, termset, mods, False)
-
-def calc_everythingelse(terms, pitchingteam, battingteam, team_pid_stat_data, batter, pitchingmods, battingmods):    
-    offense = calc_offense(terms, battingteam, team_pid_stat_data, batter, battingmods)
-    defense = calc_defense(terms, pitchingteam, team_pid_stat_data, pitchingmods)
-    everything_else = defense - offense
-    return everything_else
-
-def calc_offense(terms, battingteam, team_pid_stat_data, batter, mods):    
-    batting_team_data = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if (player_id != batter and not stlats.get("shelled", False))]
-    termset = (            
-        ("meanlaserlikeness", geomean([row["laserlikeness"] for row in batting_team_data])),
-        ("meanbasethirst", geomean([row["baseThirst"] for row in batting_team_data])),
-        ("meancontinuation", geomean([row["continuation"] for row in batting_team_data])),
-        ("meangroundfriction", geomean([row["groundFriction"] for row in batting_team_data])),
-        ("meanindulgence", geomean([row["indulgence"] for row in batting_team_data])),                    
-        ("maxlaserlikeness", max([row["laserlikeness"] for row in batting_team_data])),
-        ("maxbasethirst", max([row["baseThirst"] for row in batting_team_data])),
-        ("maxcontinuation", max([row["continuation"] for row in batting_team_data])),
-        ("maxgroundfriction", max([row["groundFriction"] for row in batting_team_data])),
-        ("maxindulgence", max([row["indulgence"] for row in batting_team_data])))
-    offense = (calc_team(terms, termset, mods, False))
-    return offense
-
-def calc_defense(terms, pitchingteam, team_pid_stat_data, mods):
-    pitching_team_data = [stlats for player_id, stlats in team_pid_stat_data[pitchingteam].items()]    
-    termset = (
-        ("meanomniscience", geomean([row["omniscience"] for row in pitching_team_data])),
-        ("meantenaciousness", geomean([row["tenaciousness"] for row in pitching_team_data])),
-        ("meanwatchfulness", geomean([row["watchfulness"] for row in pitching_team_data])),
-        ("meananticapitalism", geomean([row["anticapitalism"] for row in pitching_team_data])),
-        ("meanchasiness", geomean([row["chasiness"] for row in pitching_team_data])),                
-        ("maxomniscience", max([row["omniscience"] for row in pitching_team_data])),
-        ("maxtenaciousness", max([row["tenaciousness"] for row in pitching_team_data])),
-        ("maxwatchfulness", max([row["watchfulness"] for row in pitching_team_data])),
-        ("maxanticapitalism", max([row["anticapitalism"] for row in pitching_team_data])),
-        ("maxchasiness", max([row["chasiness"] for row in pitching_team_data])))  
-    defense = (calc_team(terms, termset, mods, False))
-    return defense
 
 def calc_stlatmod(name, pitcher_data, batter_data, team_data, stlatterm):    
     if name in helpers.PITCHING_STLATS:
         value = pitcher_data[name]
     elif name in helpers.BATTING_STLATS:        
         value = batter_data[name]    
-    elif "mean" in name:        
-        stlatname = name[4:]        
-        if stlatname == "basethirst":
+    else:         
+        if name == "basethirst":
             stlatname = "baseThirst"
-        if stlatname == "groundfriction":
-            stlatname = "groundFriction"        
-        value = geomean([row[stlatname] for row in team_data])
-    else:
-        stlatname = name[3:]
-        if stlatname == "basethirst":
-            stlatname = "baseThirst"
-        if stlatname == "groundfriction":
+        elif name == "groundfriction":
             stlatname = "groundFriction"
-        value = max([row[stlatname] for row in team_data])
+        else:
+            stlatname = name
+        if stlatname in helpers.BASERUNNING_STLATS:
+            value = batter_data[stlatname]    
+        if stlatname in helpers.DEFENSE_STLATS:
+            value = geomean([row[stlatname] for row in team_data])
     normalized_value = stlatterm.calc(value)
     base_multiplier = logistic_transform(normalized_value)
     multiplier = 2.0 * base_multiplier
@@ -110,24 +48,16 @@ def valid_stlat(name, teamisbatting):
     if name in helpers.PITCHING_STLATS:
         return True
     elif name in helpers.BATTING_STLATS and teamisbatting:        
-        return True
+        return True      
     else:
-        if "mean" in name:        
-            stlatname = name[4:]        
-            if stlatname == "basethirst":
-                stlatname = "baseThirst"
-            if stlatname == "groundfriction":
-                stlatname = "groundFriction"                
-            if (stlatname in helpers.DEFENSE_STLATS) or ((stlatname in helpers.BASERUNNING_STLATS) and teamisbatting):
-                return True
-        elif "max" in name:
-            stlatname = name[3:]
-            if stlatname == "basethirst":
-                stlatname = "baseThirst"
-            if stlatname == "groundfriction":
-                stlatname = "groundFriction"
-            if (stlatname in helpers.DEFENSE_STLATS) or ((stlatname in helpers.BASERUNNING_STLATS) and teamisbatting):
-                return True    
+        if name == "basethirst":
+            stlatname = "baseThirst"
+        elif name == "groundfriction":
+            stlatname = "groundFriction"
+        else:
+            stlatname = name
+        if (stlatname in helpers.DEFENSE_STLATS) or ((stlatname in helpers.BASERUNNING_STLATS) and teamisbatting):
+            return True        
     return False
 
 def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data):    
@@ -137,8 +67,8 @@ def get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
     bird_weather = helpers.get_weather_idx("Birds")    
     flood_weather = helpers.get_weather_idx("Flooding")    
     batter_list_dict = [stlats for player_id, stlats in team_stat_data[battingteam].items() if player_id == batter]
-    batter_data = batter_list_dict[0]
-    batting_team_data = [stlats for player_id, stlats in team_stat_data[battingteam].items() if (player_id != batter and not stlats.get("shelled", False))]
+    batter_data = batter_list_dict[0]    
+    batting_team_data = [stlats for player_id, stlats in team_stat_data[battingteam].items() if (not stlats.get("shelled", False))]
     pitching_team_data = [stlats for player_id, stlats in team_stat_data[pitchingteam].items()]
     if battingteam == homeTeam:        
         home_team_data = batting_team_data
@@ -223,53 +153,39 @@ def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pi
 
     return terms, special_cases, awayMods, homeMods
 
-def calc_batman_scaled(positive_term, subtract_term, cutoff):
-    denominator, numerator, batman_raw, batman = 0.0, 0.0, 0.0, 0.0
-    if (positive_term + subtract_term) <= 0:
-        return 0    
-    denominator = (positive_term + subtract_term) ** 0.5
-    numerator = positive_term - subtract_term
-    batman_raw = numerator / denominator
-    if math.isnan(batman_raw):            
-        return 1       
-    batman_raw -= (subtract_term ** 2) / positive_term
-    batman = logistic_transform(batman_raw)            
-    if batman <= cutoff:
-        return 0
-    return batman
-
 def calc_batman_intelligent(numerator, denominator, positive_term, negative_term, cutoff):
     batman_raw, batman = 0.0, 0.0
-    if numerator <= 0 or denominator <= 0:
+    if numerator <= 0 or denominator < 0:
         return 0    
+    if denominator == 0:
+        return 1       
     denominator = denominator ** 0.5    
     batman_raw = numerator / denominator
     if math.isnan(batman_raw):            
         return 1       
-    batman_raw -= (subtract_term ** 2) / positive_term
+    batman_raw -= (negative_term ** 2) / positive_term
     batman = logistic_transform(batman_raw)            
     if batman <= cutoff:
         return 0
     return batman
 
 def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3, baseline=False):    
-    factor_bexp, factor_pitch, factor_bdef, factor_roff, factor_rdef, factor_bcut, factor_rcut, reverberation, repeating = special_cases["factors"][:9]    
+    factor_hitcut, factor_hrscut, factor_walkcut, factor_attempt, factor_runout, reverberation, repeating = special_cases["factors"][:7]    
     team_atbat_data = {} 
-    batting_mods_by_Id = {}
-    atbats, hhw_tally = 0.0, 0.0
-    batters = team_pid_stat_data.get(battingteam)            
-    batting, pitching_defense, running, running_defense = 0.0, 0.0, 0.0, 0.0
-    hits_hrs_walks, hits_hrs_walks_raw, remainder = 0.0, 0.0, 0.0 
+    batting_mods_by_Id = {}    
+    atbats = 0.0
+    batters = team_pid_stat_data.get(battingteam)                
+    hits, hrs, walks, hits_hrs_walks, remainder = 0.0, 0.0, 0.0, 0.0, 0.0
     ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"], reverse=flip_lineup)    
     #need to create a dict of mods to pass into the calculations based on the active batter
     for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
-        defenseMods, offenseMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
+        defenseMods, battingMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
         awayMods, homeMods = get_batman_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter_id, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data)
         if homeTeam == battingteam:
             battingMods, defenseMods = homeMods, awayMods
         else:
             battingMods, defenseMods = awayMods, homeMods
-        batting_mods_by_Id[batter_id] = offenseMods
+        batting_mods_by_Id[batter_id] = battingMods
     active_batters = len(ordered_active_batters)
     outs_pg = innings * outs_pi           
     previous_outs_pg = outs_pg
@@ -286,23 +202,24 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                     remainder = 0.0
                 break                
             if batter_id not in team_atbat_data:
-                team_atbat_data[batter_id] = 0.0            
-            defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
-            pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)            
-            pitcher_exp = float(factor_pitch) if pitcher_raw > 0 else 1.0
-            batter_raw = calc_batter(terms, team_pid_stat_data, batter_id, battingteam, batting_mods_by_Id[batter_id])
-            batter_exp = float(factor_bexp) if batter_raw > 0 else 1.0    
-            batting = batter_raw ** batter_exp
-            pitching_defense = (pitcher_raw ** pitcher_exp) + (defense * float(factor_bdef))
-            hits_hrs_walks = calc_batman_scaled(batting, pitching_defense, float(factor_bcut))                        
-
-            offense = calc_offense(terms, battingteam, team_pid_stat_data, batter_id, batting_mods_by_Id[batter_id]) 
-            running = offense ** float(factor_roff)
-            running_defense = defense * float(factor_rdef)            
-            baserunners_out = calc_batman_scaled(running_defense, running, float(factor_rcut))                        
-
+                team_atbat_data[batter_id] = 0.0                        
+            hits = calc_hits(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_hitcut)
+            hrs = calc_hrs(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_hrscut)
+            walks = calc_walks(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_walkcut)
+            hits_hrs_walks = hits + hrs + walks
+            if hits_hrs_walks >= 1:
+                hits_hrs_walks == 1        
+            
+            if not baseline:
+                if (hits + walks) >= 1:
+                    steal_attempt = calc_steal_attempt(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_attempt)    
+                    if steal_attempt > 0:
+                        baserunners_out = calc_runner_out(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_runout) 
+                        added_out = baserunners_out * steal_attempt
+                        current_outs += added_out                
+           
             outs_pg += hits_hrs_walks if not baseline else 0.0
-            hhw_tally += hits_hrs_walks if not baseline else 0.0
+            
             team_atbat_data[batter_id] += 1.0                      
             if team_pid_stat_data[battingteam][batter_id]["reverberating"] and not baseline:                        
                 team_atbat_data[batter_id] += reverberation
@@ -316,10 +233,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 #print("Unrealistic number of atbats caught, {} in {} innings".format(team_atbat_data[batter_id], innings))
                 return team_atbat_data            
             remainder = (outs_pg - current_outs)
-            if (not baseline) and (hhw_tally > 1.0):                
-                added_out = baserunners_out                
-                current_outs += added_out
-                hhw_tally -= 1.0            
+            
             current_outs += 1
             prev_batter_id = batter_id
         #need to check if we added an out for each batter in the lineup; basically flooring this to always have at least one out through the lineup        
@@ -341,8 +255,57 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
             team_atbat_data[batter_id] -= (remainder / 2)            
     return team_atbat_data
 
+def calc_steal_attempt(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, factor_const):    
+    crimes, cops = 0.0, 0.0
+    pitcher_data = pitcher_stat_data[pitcher]            
+    batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]  
+    batter_data = batter_list_dict[0]
+    for playerid, stlats in team_pid_stat_data[pitchingteam].items():
+        cops += calc_team(terms, (("watchfulness", stlats["watchfulness"]), ("tenaciousness", stlats["tenaciousness"])), defenseMods, False)                        
+    crimes = calc_team(terms, (("basethirst", batter_data["baseThirst"]), ("laserlikeness", batter_data["laserlikeness"])), battingMods, False)            
+
+    numerator = crimes - cops
+    denominator = cops
+    positive_term = crimes
+    negative_term = cops
+    walksperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
+
+    return walksperatbat
+
+def calc_runner_out(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, factor_const):    
+    crimes, cops = 0.0, 0.0
+    pitcher_data = pitcher_stat_data[pitcher]            
+    batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]  
+    batter_data = batter_list_dict[0]
+    for playerid, stlats in team_pid_stat_data[pitchingteam].items():
+        cops += calc_team(terms, (("anticapitalism", stlats["anticapitalism"]),), defenseMods, False)                        
+    crimes = calc_team(terms, (("laserlikeness", batter_data["laserlikeness"]),), battingMods, False)            
+
+    numerator = cops - crimes
+    denominator = crimes
+    positive_term = cops
+    negative_term = crimes
+    walksperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
+
+    return walksperatbat
+
+def calc_walks(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, factor_const):    
+    pitcher_data = pitcher_stat_data[pitcher]            
+    batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]  
+    batter_data = batter_list_dict[0]
+    ruth = calc_team(terms, (("ruthlessness", pitcher_data["ruthlessness"]),), defenseMods, False)    
+    moxie = calc_team(terms, (("moxie", batter_data["moxie"]),), battingMods, False)            
+
+    numerator = moxie
+    denominator = ruth
+    positive_term = moxie
+    negative_term = ruth
+    walksperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
+
+    return walksperatbat
+
 def calc_hits(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, factor_const):
-    team_omniscience = 0
+    team_omniscience, ballcount = 0.0, 0.0
     pitcher_data = pitcher_stat_data[pitcher]            
     batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]  
     batter_data = batter_list_dict[0]
@@ -355,28 +318,46 @@ def calc_hits(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pi
     for playerid, stlats in team_pid_stat_data[pitchingteam].items():
         team_omniscience += calc_team(terms, (("omniscience", stlats["omniscience"]),), defenseMods, False)            
 
-    numerator = (ruth - moxie) + (thwack - unthwack) + other_bat - other_pitch - team_omniscience
-    denominator = (ruth + moxie) + (thwack + unthwack) + other_bat + other_pitch + team_omniscience
-    positive_term = ruth + thwack + other_bat
-    negative_term = moxie + unthwack + other_pitch + team_omniscience
+    if ruth > 0.0:
+        ballcount = (moxie / ruth)
+    numerator = (thwack - unthwack) + other_bat - ballcount - ruth - other_pitch - team_omniscience
+    denominator = unthwack + ballcount + ruth + other_pitch + team_omniscience
+    positive_term = thwack + other_bat
+    negative_term = unthwack + ballcount + ruth + other_pitch + team_omniscience
     hitsperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
 
     return hitsperatbat
 
-def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases):         
-    factor_bexp, factor_pitch, factor_defense, factor_alldef, factor_const = special_cases["factors"][:5]
-    if eventofinterest == "hits":
+def calc_hrs(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, factor_const):    
+    ballcount = 0.0
+    pitcher_data = pitcher_stat_data[pitcher]            
+    batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]  
+    batter_data = batter_list_dict[0]
+    ruth = calc_team(terms, (("ruthlessness", pitcher_data["ruthlessness"]),), defenseMods, False)    
+    moxie = calc_team(terms, (("moxie", batter_data["moxie"]),), battingMods, False)        
+    thwack = calc_team(terms, (("thwackability", batter_data["thwackability"]),), battingMods, False)        
+    unthwack = calc_team(terms, (("unthwackability", pitcher_data["unthwackability"]),), defenseMods, False)   
+    divinity = calc_team(terms, (("divinity", batter_data["divinity"]),), battingMods, False)        
+    overpower = calc_team(terms, (("overpowerment", pitcher_data["overpowerment"]),), defenseMods, False)    
+    other_pitch = calc_team(terms, (("coldness", pitcher_data["coldness"]),), defenseMods, False)    
+    other_bat = calc_team(terms, (("patheticism", batter_data["patheticism"]), ("musclitude", batter_data["musclitude"]), ("martyrdom", batter_data["martyrdom"])), battingMods, False)   
+    
+    if ruth > 0.0:
+        ballcount = (moxie / ruth)
+    numerator = (divinity - overpower) + (thwack - unthwack) + other_bat - ballcount - ruth - other_pitch
+    denominator = overpower + unthwack + ballcount + ruth + other_pitch
+    positive_term = divinity + thwack + other_bat
+    negative_term = overpower + unthwack + ballcount + ruth + other_pitch
+    hrsperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
+
+    return hrsperatbat
+
+def get_batman(eventofinterest, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, special_cases):             
+    factor_const = special_cases["factors"][0]
+    if eventofinterest == "hits":        
         batman = calc_hits(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, factor_const)
     else:
-        defense = calc_defense(terms, pitchingteam, team_pid_stat_data, defenseMods)
-        pitcher_raw = calc_pitcher(terms, pitcher, pitcher_stat_data, team_pid_stat_data, defenseMods)  
-        pitcher_exp = float(factor_pitch) if pitcher_raw > 0 else 1.0
-        batter_raw = calc_batter(terms, team_pid_stat_data, batter, battingteam, battingMods)
-        batter_exp = float(factor_bexp) if batter_raw > 0 else 1.0    
-        batter = batter_raw ** batter_exp
-        pitcher_defense = ((pitcher_raw ** pitcher_exp) - (defense * float(factor_defense))) * float(factor_alldef)    
-        batman = calc_batman_scaled(batter, pitcher_defense, float(factor_const))    
-    #print("Batter = {:.4f}, pitcher_defense = {:.4f}, batman = {:.4f}".format(batter, pitcher_defense, batman))
+        batman = calc_hrs(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, battingMods, factor_const)    
     return batman
 
 
