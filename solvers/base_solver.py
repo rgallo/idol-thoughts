@@ -1174,8 +1174,7 @@ def minimize_batman_func(parameters, *data):
     max_atbats, max_hits, max_homers = 0, 0, 0
     atbats_team_stat_data = {}    
     games_to_keep = {}
-    rejection_threshold = LAST_BEST > 1.0
-    inter_line_jumpers = LINE_JUMP_GAMES
+    rejection_threshold = LAST_BEST >= MAX_INTEREST    
     #let some games jump the line    
     for gameid in LINE_JUMP_GAMES:
         game = LINE_JUMP_GAMES[gameid]
@@ -1284,17 +1283,23 @@ def minimize_batman_func(parameters, *data):
                                     pass_exact += 1     
                 unexvar_threshold = stageone if (eventofinterest == "abs") else stagetwo
                 pos_fail_counter, fail_pos_counter, bat_pos_counter, zero_fail_counter, fail_zero_counter, zero_counter, batman_unexvar, under_unexvar, over_unexvar = calc_unexvar(real_val, batman_fail_by, unexvar_threshold, pos_fail_counter, fail_pos_counter, bat_fail_counter, eventofinterest, batman_unexvar, under_unexvar, over_unexvar, bat_pos_counter, bat_bat_counter, zero_fail_counter, fail_zero_counter, zero_counter)                                                         
-                
+                                
                 if (batman_unexvar >= BEST_UNEXVAR_ERROR):                    
                     #print("Rejecting based on unexvar condition; batman unexvar = {}, best = {}".format(batman_unexvar, max(LAST_MAX, LAST_MIN)))
                     reject_solution = True
                     REJECTS += 1                                                                            
                     break     
-                if rejection_threshold:                    
-                    if max(batman_max_err, abs(batman_min_err)) > LAST_BEST:
-                        reject_solution = True
-                        REJECTS += 1                                                                            
-                        break                         
+                if rejection_threshold:        
+                    if LAST_MIN == MAX_INTEREST:
+                        if abs(batman_min_err) >= LAST_MIN:
+                            reject_solution = True
+                            REJECTS += 1                                                                            
+                            break                 
+                    else:
+                        if max(batman_max_err, abs(batman_min_err)) >= LAST_BEST:
+                            reject_solution = True
+                            REJECTS += 1                                                                            
+                            break                         
                 else:                    
                     if max(batman_max_err, abs(batman_min_err)) > LAST_BEST:
                         reject_solution = True
@@ -1577,18 +1582,26 @@ def minimize_batman_func(parameters, *data):
                                 batman_min_err = batman_fail_by                                                                                                                 
                                 min_err_actual = actual_result                         
 
-                            if CURRENT_ITERATION > 1:                                
-                                if (batman_unexvar >= BEST_UNEXVAR_ERROR):                   
+                            if CURRENT_ITERATION > 1:                                                   
+                                if (batman_unexvar >= BEST_UNEXVAR_ERROR):                                                       
                                     inter_line_jumpers[game["away"]["game_id"]] = game
                                     reject_solution = True
                                     REJECTS += 1                                                                            
-                                    break                  
+                                    break        
+                                                             
                                 if rejection_threshold:                    
-                                    if max(batman_max_err, abs(batman_min_err)) > LAST_BEST:
-                                        LINE_JUMP_GAMES[game["away"]["game_id"]] = game                                           
-                                        reject_solution = True
-                                        REJECTS += 1                                                                            
-                                        break                         
+                                    if LAST_MIN == MAX_INTEREST:
+                                        if abs(batman_min_err) >= LAST_MIN:
+                                            LINE_JUMP_GAMES[game["away"]["game_id"]] = game                                           
+                                            reject_solution = True
+                                            REJECTS += 1                                                                            
+                                            break                 
+                                    else:
+                                        if max(batman_max_err, abs(batman_min_err)) >= LAST_BEST:
+                                            LINE_JUMP_GAMES[game["away"]["game_id"]] = game                                           
+                                            reject_solution = True
+                                            REJECTS += 1                                                                            
+                                            break                         
                                 else:                    
                                     if max(batman_max_err, abs(batman_min_err)) > LAST_BEST:
                                         LINE_JUMP_GAMES[game["away"]["game_id"]] = game                                           
@@ -1645,6 +1658,7 @@ def minimize_batman_func(parameters, *data):
     linear_fail = 9000000000000.0
     fail_points = 9000000000000.0          
     if reject_solution and (batman_unexvar > BEST_UNEXVAR_ERROR):
+        LINE_JUMP_GAMES = inter_line_jumpers
         linear_fail = batman_unexvar * (ALL_GAMES / bat_counter) * 100.0
     elif not reject_solution:       
         linear_fail = batman_unexvar
@@ -1744,7 +1758,7 @@ def minimize_batman_func(parameters, *data):
             elif eventofinterest == "hrs":
                 MAX_INTEREST = check_max_homers
             else:
-                MAX_INTEREST = check_max_atbats          
+                MAX_INTEREST = abs(batman_min_err)
             ALL_GAMES = total_batters
             batman_unexvar *= (total_batters / bat_counter)
             over_unexvar *= (total_batters / bat_counter)
@@ -1754,12 +1768,14 @@ def minimize_batman_func(parameters, *data):
         #WORST_ERROR = abs(batman_max_err) + abs(batman_min_err)  
         if pass_within_four == 0:
             batman_max_err = MAX_INTEREST * 2           
+        LAST_MIN = abs(batman_min_err) if (abs(batman_min_err) < LAST_MIN) else LAST_MIN
         LAST_BEST = max(batman_max_err, abs(batman_min_err), 1.0)        
         BEST_UNEXVAR_ERROR = batman_unexvar         
         WORST_ERROR = pos_avg_error + zero_avg_error
         if CURRENT_ITERATION > 1:
             LINE_JUMP_GAMES.clear()
-            LINE_JUMP_GAMES = line_jumpers
+            if not LAST_MIN == MAX_INTEREST:
+                LINE_JUMP_GAMES = line_jumpers
         #WORST_ERROR = max(WORST_ERROR, 2.0)
         #LAST_BEST = max(batman_max_err, abs(batman_min_err))        
         
