@@ -155,14 +155,16 @@ def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pi
 
 def calc_batman_intelligent(numerator, denominator, positive_term, negative_term, cutoff):
     batman_raw, batman = 0.0, 0.0
-    if numerator <= 0 or denominator < 0:
+    if (numerator <= 0) or (positive_term <= 0) or (denominator < 0):
         return 0    
     if denominator == 0:
         return 1       
-    denominator = denominator ** 0.5    
+    #experimenting with not square rooting the denominator
+    #denominator = denominator ** 0.5
     batman_raw = numerator / denominator
     if math.isnan(batman_raw):            
         return 1       
+    #if we're not squaring the denominator, we need this to be smaller
     batman_raw -= (negative_term ** 2) / positive_term
     batman = logistic_transform(batman_raw)            
     if batman <= cutoff:
@@ -296,7 +298,7 @@ def calc_walks(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, p
     ruth = calc_team(terms, (("ruthlessness", pitcher_data["ruthlessness"]),), defenseMods, False)    
     moxie = calc_team(terms, (("moxie", batter_data["moxie"]),), battingMods, False)            
 
-    numerator = moxie
+    numerator = moxie - ruth
     denominator = ruth
     positive_term = moxie
     negative_term = ruth

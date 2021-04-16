@@ -163,7 +163,7 @@ def main():
     result = differential_evolution(base_solver.minimize_batman_func, bounds, args=args, popsize=popsize, tol=0.0001, 
                                     mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000, init=init)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in
-                    zip(BATMAN_STLAT_LIST, zip(*[iter(result.x[:-len(BATMAN_SPECIAL_CASES)])] * 3))))
+                    zip(stlatlist, zip(*[iter(result.x[:-len(special_cases)])] * 3))))
     print("factors,{},{}".format(result.x[-2], result.x[-1]))
     result_fail_rate = base_solver.minimize_batman_func(result.x, eventofinterest, batter_list, get_batman_results, BATMAN_STLAT_LIST, BATMAN_SPECIAL_CASES,
                                                     [], stat_file_map, game_list, team_attrs,
