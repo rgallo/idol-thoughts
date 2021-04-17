@@ -131,7 +131,7 @@ def logistic_transform(value):
 
 def logistic_transform_bten(value):
     try:
-       transformed_value = (1.0 / (1.0 + (10.0 ** (-1.0 * value))))
+       transformed_value = (1.0 / (1.0 + (100.0 ** (-1.0 * value))))
     except OverflowError:
        transformed_value = 1.0
     return transformed_value
