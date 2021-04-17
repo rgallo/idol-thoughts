@@ -57,7 +57,7 @@ def get_batman_results(eventofinterest, batter_perf_data, season_team_attrs, tea
                 real_val = hits
                 actual = "{} hits, batman {:.4f}".format(hits, (batman * atbats))                
             elif eventofinterest == "hrs":
-                if (homers - 0.5) < (batman * atbats) < (homers + 0.5):
+                if (homers - 0.3) < (batman * atbats) < (homers + 0.3):
                     fail_batman -= 1
                 fail_batman_by = (batman * atbats) - homers
                 batman_val = (batman * atbats)

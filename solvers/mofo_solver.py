@@ -122,7 +122,7 @@ def main():
     print("Number to beat = {}".format(number_to_beat))
     #solver time
     workers = int(cmd_args.workers)        
-    popsize = 25    
+    popsize = 27    
     init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst) if cmd_args.init else 'latinhypercube'
     recombination = 0.7
     #recombination = 0.7 if (type(init) == str) else 0.4

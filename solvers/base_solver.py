@@ -179,23 +179,21 @@ def debug_print(s, debug, run_id):
 def calc_unexvar(real_val, batman_fail_by, unexvar_threshold, pos_fail_counter, fail_pos_counter, bat_fail_counter, eventofinterest, batman_unexvar, under_unexvar, over_unexvar, bat_pos_counter, bat_bat_counter, zero_fail_counter, fail_zero_counter, zero_counter):
     #experiment with no longer ridiculously weighting fails to avoid slamming to zero
     if real_val > 0:          
-        if abs(batman_fail_by) > unexvar_threshold:                                
-            pos_fail_counter += abs(batman_fail_by)
-            fail_pos_counter += bat_fail_counter                                           
+        pos_fail_counter += abs(batman_fail_by)
+        fail_pos_counter += bat_fail_counter                                           
         bat_pos_counter += bat_bat_counter
-    elif (real_val == 0):
-        if abs(batman_fail_by) > unexvar_threshold:
-            zero_fail_counter += abs(batman_fail_by)  
-            fail_zero_counter += bat_fail_counter                                                            
+    elif (real_val == 0):        
+        zero_fail_counter += abs(batman_fail_by)  
+        fail_zero_counter += bat_fail_counter                                                            
         zero_counter += bat_bat_counter
     if (real_val == 0) and (batman_fail_by < LAST_MIN) and (LAST_MIN >= MAX_INTEREST):
         batman_unexvar += (MAX_INTEREST - batman_fail_by) ** 2.0        
-    if abs(batman_fail_by) > unexvar_threshold:           
-        batman_unexvar += batman_fail_by ** 2.0
-        if batman_fail_by < 0:
-            under_unexvar += batman_fail_by ** 2.0
-        else:
-            over_unexvar += batman_fail_by ** 2.0
+    #if abs(batman_fail_by) > unexvar_threshold:           
+    batman_unexvar += batman_fail_by ** 2.0
+    if batman_fail_by < 0:
+        under_unexvar += batman_fail_by ** 2.0
+    else:
+        over_unexvar += batman_fail_by ** 2.0
     
     return pos_fail_counter, fail_pos_counter, bat_pos_counter, zero_fail_counter, fail_zero_counter, zero_counter, batman_unexvar, under_unexvar, over_unexvar
 
@@ -1175,6 +1173,12 @@ def minimize_batman_func(parameters, *data):
     atbats_team_stat_data = {}    
     games_to_keep = {}
     rejection_threshold = LAST_BEST >= MAX_INTEREST    
+    if eventofinterest == "abs":
+        stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
+    elif eventofinterest == "hrs":
+        stagefour, stagethree, stagetwo, stageone, stageexact = 0.6, 0.45, 0.3, 0.15, 0.075
+    else:
+        stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
     #let some games jump the line    
     for gameid in LINE_JUMP_GAMES:
         game = LINE_JUMP_GAMES[gameid]
@@ -1264,14 +1268,9 @@ def minimize_batman_func(parameters, *data):
                     #reject_solution = True
                     #REJECTS += 1          
                     #break
-            if eventofinterest == "abs":
-                stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
-            elif eventofinterest == "hrs":
-                stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
-            else:
-                stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
+           
             if bat_bat_counter > 0:            
-                if (abs(batman_fail_by) < stagefour) and (real_val > 0):             
+                if (abs(batman_fail_by) < stagefour):             
                     pass_within_four += 1
                     if abs(batman_fail_by) < stagethree:                                                
                         pass_within_three += 1
@@ -1284,12 +1283,12 @@ def minimize_batman_func(parameters, *data):
                 unexvar_threshold = stageone if (eventofinterest == "abs") else stagetwo
                 pos_fail_counter, fail_pos_counter, bat_pos_counter, zero_fail_counter, fail_zero_counter, zero_counter, batman_unexvar, under_unexvar, over_unexvar = calc_unexvar(real_val, batman_fail_by, unexvar_threshold, pos_fail_counter, fail_pos_counter, bat_fail_counter, eventofinterest, batman_unexvar, under_unexvar, over_unexvar, bat_pos_counter, bat_bat_counter, zero_fail_counter, fail_zero_counter, zero_counter)                                                                                         
                                 
-                if abs(batman_min_err) >= (MAX_INTEREST - 0.25):                                            
+                if abs(batman_min_err) >= (MAX_INTEREST - stageone):                                            
                     reject_solution = True
                     REJECTS += 1                                                                            
                     break                 
                     
-                if max(batman_max_err, abs(batman_min_err)) > (LAST_BEST + 0.25):                            
+                if max(batman_max_err, abs(batman_min_err)) >= LAST_BEST:                            
                     reject_solution = True
                     REJECTS += 1                                                                            
                     break                          
@@ -1298,6 +1297,9 @@ def minimize_batman_func(parameters, *data):
                     reject_solution = True
                     REJECTS += 1                                                                            
                     break     
+
+                if (abs(batman_fail_by) > (LAST_BEST / 2)) or ((real_val > 0) and not (eventofinterest == "abs")):
+                    line_jumpers[game["away"]["game_id"]] = game                                        
 
     #seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
     seasonrange = reversed(range(14, 15))
@@ -1539,15 +1541,9 @@ def minimize_batman_func(parameters, *data):
                                 #break
                         #if (eventofinterest == "abs") and ((abs(batman_max_err) + abs(batman_min_err)) >= (WORST_ERROR - 0.5)) and not reject_solution:
                             #experimenting with adding games to the jump for being close to the worst error
-                            #LINE_JUMP_GAMES[game["away"]["game_id"]] = game                           
-                        if eventofinterest == "abs":
-                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
-                        elif eventofinterest == "hrs":
-                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
-                        else:
-                            stagefour, stagethree, stagetwo, stageone, stageexact = 1.0, 0.75, 0.5, 0.25, 0.1
+                            #LINE_JUMP_GAMES[game["away"]["game_id"]] = game                                                   
                         if bat_bat_counter > 0:                                                        
-                            if (abs(batman_fail_by) < stagefour) and (real_val > 0):             
+                            if (abs(batman_fail_by) < stagefour):             
                                 pass_within_four += 1
                                 if abs(batman_fail_by) < stagethree:                                                
                                     pass_within_three += 1
@@ -1568,13 +1564,13 @@ def minimize_batman_func(parameters, *data):
                                 min_err_actual = actual_result                         
 
                             if CURRENT_ITERATION > 1:                                                                                                                 
-                                if abs(batman_min_err) >= (MAX_INTEREST - 0.25):                                
+                                if abs(batman_min_err) >= (MAX_INTEREST - stageone):                                
                                     LINE_JUMP_GAMES[game["away"]["game_id"]] = game                                           
                                     reject_solution = True
                                     REJECTS += 1                                                                            
                                     break                 
                                                
-                                if max(batman_max_err, abs(batman_min_err)) > (LAST_BEST + 0.25):
+                                if max(batman_max_err, abs(batman_min_err)) >= LAST_BEST:
                                     LINE_JUMP_GAMES[game["away"]["game_id"]] = game                                           
                                     reject_solution = True
                                     REJECTS += 1                                                                            
@@ -1588,7 +1584,7 @@ def minimize_batman_func(parameters, *data):
                                 #    REJECTS += 1                                                                            
                                 #    break        
 
-                                if (abs(batman_fail_by) > (LAST_BEST / 2)) or (real_val > 0):
+                                if (abs(batman_fail_by) > (LAST_BEST / 2)) or ((real_val > 0) and not (eventofinterest == "abs")):
                                     line_jumpers[game["away"]["game_id"]] = game                                           
                                 
                 
@@ -1640,23 +1636,24 @@ def minimize_batman_func(parameters, *data):
     use_zero_error = zero_avg_error
     linear_fail = 9000000000000.0
     fail_points = 9000000000000.0          
-    if reject_solution and (batman_unexvar > BEST_UNEXVAR_ERROR):        
-        linear_fail = batman_unexvar * (ALL_GAMES / bat_counter) * 100.0
+    if reject_solution:        
+        unexvar_plus = (((batman_max_err + abs(batman_min_err)) / 2) ** 2) * (ALL_GAMES - bat_counter)
+        linear_fail = (batman_unexvar + unexvar_plus) * 100.0
     elif not reject_solution:       
         linear_fail = batman_unexvar
     if not reject_solution:                
-        pass_exact = (pass_exact / bat_pos_counter) * 100.0
-        pass_within_one = (pass_within_one / bat_pos_counter) * 100.0
-        pass_within_two = (pass_within_two / bat_pos_counter) * 100.0
-        pass_within_three = (pass_within_three / bat_pos_counter) * 100.0
-        pass_within_four = (pass_within_four / bat_pos_counter) * 100.0
+        pass_exact = (pass_exact / bat_counter) * 100.0
+        pass_within_one = (pass_within_one / bat_counter) * 100.0
+        pass_within_two = (pass_within_two / bat_counter) * 100.0
+        pass_within_three = (pass_within_three / bat_counter) * 100.0
+        pass_within_four = (pass_within_four / bat_counter) * 100.0
         #if (pass_exact > 0.0) or (CURRENT_ITERATION == 1):            
         if pass_exact >= BEST_EXACT:
             debug_print("Fail rate = {:.4f}, Pos fail rate = {:.4f}, zero fail rate = {:.4f}, pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}, pavgerr = {:.4f}, zavgerr = {:.4f}".format(fail_rate, pos_fail_rate, zero_fail_rate, pass_exact, batman_max_err, batman_min_err, pos_avg_error, use_zero_error), debug, "::::::::")
         if batman_max_err >= batman_min_err:                             
             fail_points = ((zero_fail_rate * 100.0) * use_zero_error) + ((pos_fail_rate * 100.0) * pos_avg_error) + ((100.0 - pass_exact) * (max(pos_avg_error, use_zero_error)))
-            #print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format(max(abs(batman_max_err), abs(batman_min_err)), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                                                                        
-            linear_fail *= max((100.0 - pass_within_four), 1)
+            #print("Candidate for success! {:.4f} error span, pos fail rate = {:.2f}, fail rate = {:.2f}, zero error = {:.4f}, pos error = {:.4f}".format(max(abs(batman_max_err), abs(batman_min_err)), pos_fail_rate, fail_rate, zero_avg_error, pos_avg_error))                                                                                    
+            linear_fail *= max((100.0 - pass_exact), 1)
             #if eventofinterest == "abs":
                 #linear_fail = (max(abs(batman_max_err), abs(batman_min_err)) * 4000.0) + fail_points + batman_unexvar
             #else:
@@ -1664,11 +1661,8 @@ def minimize_batman_func(parameters, *data):
         #else:
          #   debug_print("Rejected for insufficient exact. Pass exact = {:.4f}, max err = {:.4f}, min err = {:.4f}".format(pass_exact, batman_max_err, batman_min_err), debug, "::::::::")
           #  EXACT_FAILS += 1
-           # linear_fail = BEST_RESULT + EXACT_FAILS
-    if reject_solution:        
-        if linear_fail < BEST_RESULT:
-            linear_fail = BEST_RESULT + 1
-    if linear_fail < BEST_RESULT:        
+           # linear_fail = BEST_RESULT + EXACT_FAILS    
+    if linear_fail < BEST_RESULT and not reject_solution:        
         BEST_RESULT = linear_fail
         BEST_EXACT = pass_exact
         BEST_FAIL_RATE = pos_fail_rate                

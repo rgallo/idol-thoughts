@@ -4,6 +4,7 @@ BatmanModTerm = namedtuple("BatmanModTerm", ["attr", "team", "stat", "bounds"])
 
 BATMAN_MOD_TERMS = [    
     BatmanModTerm("LOVE", "opp", "Ruthlessness",[[-5, 5], [0, 1], [1, 1.5]]),
+    BatmanModTerm("LOVE", "opp", "WalkingRuthlessness",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("LOVE", "opp", "Unthwackability",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("LOVE", "opp", "Overpowerment",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("LOVE", "opp", "Shakespearianism",[[-5, 5], [0, 1], [1, 1.5]]),
@@ -26,6 +27,7 @@ BATMAN_MOD_TERMS = [
     BatmanModTerm("LOVE", "opp", "GroundFriction",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("LOVE", "opp", "Indulgence",[[-5, 5], [0, 1], [1, 1.5]]),    
     BatmanModTerm("EXTRA_STRIKE", "opp", "Ruthlessness", [[-15, 10], [-3, 4], [-3, 4]]),
+    BatmanModTerm("EXTRA_STRIKE", "opp", "WalkingRuthlessness", [[-15, 10], [-3, 4], [-3, 4]]),
     BatmanModTerm("EXTRA_STRIKE", "opp", "Unthwackability", [[-15, 10], [-3, 4], [-3, 4]]),
     BatmanModTerm("EXTRA_STRIKE", "opp", "Overpowerment", [[-15, 10], [-3, 4], [-3, 4]]),
     BatmanModTerm("EXTRA_STRIKE", "opp", "Shakespearianism", [[-15, 10], [-3, 4], [-3, 4]]),
@@ -48,6 +50,7 @@ BATMAN_MOD_TERMS = [
     BatmanModTerm("EXTRA_STRIKE", "same", "GroundFriction", [[-15, 10], [-3, 4], [-3, 4]]),
     BatmanModTerm("EXTRA_STRIKE", "same", "Indulgence", [[-15, 10], [-3, 4], [-3, 4]]),        
     BatmanModTerm("O_NO", "opp", "Ruthlessness",[[-5, 5], [0, 1], [1, 1.5]]),
+    BatmanModTerm("O_NO", "opp", "WalkingRuthlessness",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("O_NO", "opp", "Unthwackability",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("O_NO", "opp", "Overpowerment",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("O_NO", "opp", "Shakespearianism",[[-5, 5], [0, 1], [1, 1.5]]),
@@ -82,6 +85,7 @@ BATMAN_MOD_TERMS = [
     BatmanModTerm("HIGH_PRESSURE", "same", "GroundFriction",[[0, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("HIGH_PRESSURE", "same", "Indulgence",[[0, 5], [0, 1], [1, 1.5]]),        
     BatmanModTerm("BASE_INSTINCTS", "opp", "Ruthlessness",[[-5, 5], [0, 1], [1, 1.5]]),
+    BatmanModTerm("BASE_INSTINCTS", "opp", "WalkingRuthlessness",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("BASE_INSTINCTS", "opp", "Unthwackability",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("BASE_INSTINCTS", "opp", "Overpowerment",[[-5, 5], [0, 1], [1, 1.5]]),
     BatmanModTerm("BASE_INSTINCTS", "opp", "Shakespearianism",[[-5, 5], [0, 1], [1, 1.5]]),
