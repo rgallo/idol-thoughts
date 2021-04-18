@@ -134,6 +134,8 @@ def logistic_transform_bten(value):
        transformed_value = (1.0 / (1.0 + (100.0 ** (-1.0 * value))))
     except OverflowError:
        transformed_value = 1.0
+    if transformed_value > 1.0:
+        return 1.0
     return transformed_value
 
 def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pitcher_stat_data, ballpark, ballpark_mods):
@@ -184,17 +186,15 @@ def calc_batman_intelligent(numerator, denominator, positive_term, negative_term
     except:
         batman = 0
     if batman <= cutoff:
-        return 0
+        return 0    
     return batman
 
 def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pitchingteam, battingteam, weather, ballpark, ballpark_mods, team_pid_stat_data, pitcher_stat_data, innings, flip_lineup, terms, special_cases, outs_pi=3, baseline=False):    
     factor_hitcut, factor_hrscut, factor_walkcut, factor_attempt, factor_runout, reverberation, repeating = special_cases["factors"][:7]    
     team_atbat_data = {} 
-    batting_mods_by_Id = {}    
-    atbats = 0.0
+    batting_mods_by_Id = {}        
     batters = team_pid_stat_data.get(battingteam) 
-    hits, hrs, walks, final_hits, final_hrs, final_walks = {}, {}, {}, {}, {}, {}
-    hits_hrs_walks, remainder = 0.0, 0.0, 0.0, 0.0, 0.0
+    hits, hrs, walks, final_hits, final_hrs, final_walks = {}, {}, {}, {}, {}, {}    
     ordered_active_batters = sorted([(k, v) for k,v in batters.items() if not v["shelled"]], key=lambda x: x[1]["turnOrder"], reverse=flip_lineup)    
     #need to create a dict of mods to pass into the calculations based on the active batter
     for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
@@ -221,20 +221,11 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 final_hits[batter_id] = 0.0
                 final_hrs[batter_id] = 0.0
                 final_walks[batter_id] = 0.0
-            hits[batter_id] += calc_hits(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_hitcut)
-            hrs[batter_id] += calc_hrs(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_hrscut)
-            walks[batter_id] += calc_walks(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_walkcut)
 
-            if team_pid_stat_data[battingteam][batter_id]["reverberating"] and not baseline:                        
-                team_atbat_data[batter_id] += reverberation                
-                hits[batter_id] += hits[batter_id] * reverberation
-                hrs[batter_id] += hrs[batter_id] * reverberation
-                walks[batter_id] += walks[batter_id] * reverberation
-            if team_pid_stat_data[battingteam][batter_id]["repeating"] and not baseline:                        
-                team_atbat_data[batter_id] += repeating
-                hits[batter_id] += hits[batter_id] * reverberation
-                hrs[batter_id] += hrs[batter_id] * reverberation
-                walks[batter_id] += walks[batter_id] * reverberation
+            if not baseline:
+                hits[batter_id] += calc_hits(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_hitcut)
+                hrs[batter_id] += calc_hrs(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_hrscut)
+                walks[batter_id] += calc_walks(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_walkcut)
 
             if not baseline:
                 if ((hits[batter_id] >= 1) and not (hrs[batter_id] >= 1)) or (walks[batter_id] >= 1):                    
@@ -242,7 +233,7 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                     if steal_attempt > 0:
                         baserunners_out = calc_runner_out(pitcher, pitchingteam, batter_id, battingteam, team_pid_stat_data, pitcher_stat_data, terms, defenseMods, batting_mods_by_Id[batter_id], factor_runout) 
                         added_out = baserunners_out * steal_attempt
-                        current_outs += added_out                      
+                        current_outs += added_out                                              
             
             if walks[batter_id] >= 1.0:
                 #batter walked, don't add an out
@@ -260,13 +251,25 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
                 #always acknowledge the hit regardless
                 hits[batter_id] -= 1.0
             else:
+                #batter got out somehow
                 current_outs += 1
+
+            if team_pid_stat_data[battingteam][batter_id]["reverberating"] and not baseline:                        
+                team_atbat_data[batter_id] += reverberation                
+                hits[batter_id] += hits[batter_id] * reverberation
+                hrs[batter_id] += hrs[batter_id] * reverberation
+                walks[batter_id] += walks[batter_id] * reverberation
+            if team_pid_stat_data[battingteam][batter_id]["repeating"] and not baseline:                        
+                team_atbat_data[batter_id] += repeating
+                hits[batter_id] += hits[batter_id] * reverberation
+                hrs[batter_id] += hrs[batter_id] * reverberation
+                walks[batter_id] += walks[batter_id] * reverberation
             
             team_atbat_data[batter_id] += 1.0                                           
 
             if team_atbat_data[batter_id] >= (2.0 * innings):
                 #print("Unrealistic number of atbats caught, {} in {} innings".format(team_atbat_data[batter_id], innings))
-                return team_atbat_data            
+                return team_atbat_data, final_hits, final_hrs   
             
     #deal with fractional problems            
     for lineup_order, (batter_id, current_batter) in enumerate(ordered_active_batters):
@@ -278,7 +281,9 @@ def get_team_atbats(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, pitcher, pit
         if lineup_order > 0:
             team_atbat_data[batter_id] += max(walks[previous_batter], hrs[previous_batter], hits[previous_batter])
         else:
-            first_batter = batter_id                              
+            first_batter = batter_id   
+        final_hits[batter_id] += hits[batter_id]
+        final_hrs[batter_id] += hrs[batter_id]
         previous_batter = batter_id
     team_atbat_data[first_batter] += max(walks[previous_batter], hrs[previous_batter], hits[previous_batter])
     return team_atbat_data, final_hits, final_hrs
@@ -348,9 +353,9 @@ def calc_hits(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pi
     ruth = calc_team(terms, (("ruthlessness", pitcher_data["ruthlessness"]),), defenseMods, False)            
     thwack = calc_team(terms, (("thwackability", batter_data["thwackability"]),), battingMods, False)        
     unthwack = calc_team(terms, (("unthwackability", pitcher_data["unthwackability"]),), defenseMods, False)    
-    cold = calc_team(terms, (("coldness", pitcher_data["coldness"]),), defenseMods, False)   
+    cold = calc_team(terms, (("hitcoldness", pitcher_data["coldness"]),), defenseMods, False)   
     path = calc_team(terms, (("patheticism", batter_data["patheticism"]),), battingMods, False)        
-    other_bat = calc_team(terms, (("musclitude", batter_data["musclitude"]), ("martyrdom", batter_data["martyrdom"])), battingMods, False)
+    other_bat = calc_team(terms, (("hitmusclitude", batter_data["musclitude"]), ("martyrdom", batter_data["martyrdom"])), battingMods, False)
     for playerid, stlats in team_pid_stat_data[pitchingteam].items():
         player_omni = calc_team(terms, (("omniscience", stlats["omniscience"]),), defenseMods, False)  
         team_omniscience.append(player_omni)
