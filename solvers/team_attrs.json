@@ -259,5 +259,41 @@
     "Charleston Shoe Thieves": [
       "TRAVELING"
     ]
+  },
+  "17": {
+    "Boston Flowers": [
+      "GROWTH"
+    ],
+    "Hellmouth Sunbeams": [
+      "BASE_INSTINCTS"
+    ],
+    "San Francisco Lovers": [
+      "LOVE"
+    ],
+    "Canada Moist Talkers": [
+      "HIGH_PRESSURE",
+      "H20"
+    ],
+    "Baltimore Crabs": [
+      "0"
+    ],
+    "Yellowstone Magic": [
+      "O_NO"
+    ],
+    "Philly Pies": [
+      "AFFINITY_FOR_CROWS"
+    ],
+    "Dallas Steaks": [
+      "AAA"
+    ],
+    "Houston Spies": [
+      "PSYCHIC"
+    ],
+    "Hades Tigers": [
+      "FIERY"
+    ],
+    "Charleston Shoe Thieves": [
+      "TRAVELING"
+    ]
   }
 }
