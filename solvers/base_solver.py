@@ -52,6 +52,8 @@ BEST_AGG_FAIL_RATE = 0
 LAST_BEST = 1000000000.0
 LAST_BESTS = {}
 PREVIOUS_LAST_BEST = 1000000000.0
+POS_HITS = 0
+POS_HRS = 0
 LAST_DAY_RANGE = 1
 LAST_SEASON_RANGE = 1
 MOD_BASELINE = False
@@ -254,7 +256,7 @@ def check_rejects(min_condition, max_condition, eventlist, stages, batman_unexva
         if abs(min_condition[event]) >= (MAX_INTEREST[event] - stages[event][4]):                                            
             return True        
                     
-        if max(abs(min_condition[event]), max_condition[event]) >= LAST_BESTS[event]:                            
+        elif max(abs(min_condition[event]), max_condition[event]) >= LAST_BESTS[event]:                            
             return True                
                      
     if not (batman_unexvar == None):
@@ -1177,6 +1179,8 @@ def minimize_batman_func(parameters, *data):
     global LAST_MIN
     global LAST_BESTS
     global MAX_INTEREST
+    global POS_HITS
+    global POS_HRS
     global BASELINE_ERROR
     global REJECTS
     global EXACT_FAILS
@@ -1217,7 +1221,7 @@ def minimize_batman_func(parameters, *data):
         for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):        
             ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(a, b, c)
         special_cases = parameters[base_batman_list_size:-(team_mod_list_size + park_mod_list_size)]
-    bat_counter = 0
+    bat_counter, pos_hit_counter, pos_hr_counter = 0, 0, 0
     batman_max_err, batman_min_err, batman_max_val, batman_min_val, pos_error, zero_error, pos_counter, zero_counter = {}, {}, {}, {}, {}, {}, {}, {}
     pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = {}, {}, {}, {}, {}
     jump_errors = {}
@@ -1302,7 +1306,9 @@ def minimize_batman_func(parameters, *data):
             bat_bat_counter, bat_atbat_failby, bat_hit_failby, bat_hr_failby, atbat_real_val, hit_real_val, hr_real_val = calc_func(batter_perf, season_team_attrs, atbats_team_stat_data, 
                                                                                                                                     hits_team_stat_data, hrs_team_stat_data, batter_perf["batter_id"], game)                                                                                                                 
             
-            bat_counter += bat_bat_counter                      
+            bat_counter += bat_bat_counter     
+            pos_hit_counter += 1 if (hit_real_val > 0) else 0
+            pos_hr_counter += 1 if (hr_real_val > 0) else 0
 
             if bat_bat_counter > 0:                                                       
                 batman_max_err, batman_min_err, batman_max_val, batman_min_val = calc_maxes(batman_max_err, batman_min_err, batman_max_val, batman_min_val, bat_atbat_failby, bat_hit_failby, bat_hr_failby, atbat_real_val, hit_real_val, hr_real_val)                
@@ -1506,7 +1512,9 @@ def minimize_batman_func(parameters, *data):
                         if omit_from_good_abs:
                             print("Making sure we don't accumulate data from omitted sources")
                             continue
-                        bat_counter += bat_bat_counter                             
+                        bat_counter += bat_bat_counter    
+                        pos_hit_counter += 1 if (hit_real_val > 0) else 0
+                        pos_hr_counter += 1 if (hr_real_val > 0) else 0
                                                                         
                         if bat_bat_counter > 0:                      
                             pass_within_four, pass_within_three, pass_within_two, pass_within_one, pass_exact = check_margins(eventlist, bat_atbat_failby, bat_hit_failby, bat_hr_failby, stages, pass_within_four, pass_within_three, pass_within_two, pass_within_one, pass_exact)                            
@@ -1570,7 +1578,13 @@ def minimize_batman_func(parameters, *data):
     if reject_solution:        
         unexvar_plus = 0
         for event in eventlist:
-            unexvar_plus += (max(batman_max_err[event], abs(batman_min_err[event])) ** 2) * (ALL_GAMES - bat_counter)
+            unexvar_plus += (max(batman_max_err[event], abs(batman_min_err[event])) ** 2) * (ALL_GAMES - bat_counter)            
+            if not (event == "abs") and (CURRENT_ITERATION > 1):
+                if abs(batman_min_err[event]) >= (MAX_INTEREST[event] - stages[event][4]):
+                    if event == "hits":
+                        unexvar_plus += 1000000.0 * (POS_HITS - pos_hit_counter)
+                    if event == "hrs":
+                        unexvar_plus += 1000000.0 * (POS_HRS - pos_hr_counter)
         linear_fail = (batman_unexvar + unexvar_plus) * 100.0
     elif not reject_solution:       
         linear_fail = batman_unexvar
@@ -1650,6 +1664,8 @@ def minimize_batman_func(parameters, *data):
                             check_max_hits = hits if (hits > check_max_hits) else check_max_hits
                             check_max_homers = homers if (homers > check_max_homers) else check_max_homers
                             check_max_atbats = atbats if (atbats > check_max_atbats) else check_max_atbats
+                            POS_HITS += 1 if (hits > 0) else 0
+                            POS_HRS += 1 if (homers > 0) else 0
             print("Maximums in cached data: hits = {}, homers = {}, atbats = {}, batters = {}".format(check_max_hits, check_max_homers, check_max_atbats, total_batters))
             MAX_INTEREST["hits"] = check_max_hits                            
             MAX_INTEREST["hrs"] = check_max_homers        
@@ -1657,18 +1673,14 @@ def minimize_batman_func(parameters, *data):
             MAX_INTEREST["abs"] = abs(batman_min_err["abs"])
             ALL_GAMES = total_batters
             batman_unexvar *= (total_batters / bat_counter)                                    
-        #WORST_ERROR = abs(batman_max_err) + abs(batman_min_err)  
-        if pass_within_four == 0:
-            batman_max_err = MAX_INTEREST * 2           
-        LAST_MIN["abs"] = abs(batman_min_err["abs"])
-        LAST_MIN["hits"] = abs(batman_min_err["hits"]) 
-        LAST_MIN["hrs"] = abs(batman_min_err["hrs"])
-        LAST_MAX["abs"] = batman_max_err["abs"] 
-        LAST_MAX["hits"] = batman_max_err["hits"] 
-        LAST_MAX["hrs"] = batman_max_err["hrs"]
-        LAST_BESTS["abs"] = max(batman_max_err["abs"], abs(batman_min_err["abs"]), 0.5)
-        LAST_BESTS["hits"] = max(batman_max_err["abs"], abs(batman_min_err["abs"]), 0.5)
-        LAST_BESTS["hrs"] = max(batman_max_err["abs"], abs(batman_min_err["abs"]), 0.5)        
+        #WORST_ERROR = abs(batman_max_err) + abs(batman_min_err)          
+        for event in eventlist:
+            LAST_MIN[event] = abs(batman_min_err[event])        
+            LAST_MAX[event] = batman_max_err[event]              
+            if LAST_MIN[event] == MAX_INTEREST[event]:
+                LAST_BESTS[event] = 12.0
+            else:
+                LAST_BESTS[event] = max(batman_max_err[event], abs(batman_min_err[event]), 0.5)               
         BEST_UNEXVAR_ERROR = batman_unexvar                 
         LINE_JUMP_GAMES.clear()
         if CURRENT_ITERATION > 1:              
