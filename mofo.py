@@ -108,6 +108,8 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
             continue
         if attr == "high_pressure" and weather != flood_weather:
             continue
+        if attr == "psychic":
+            attr = "love"
         if attr in lowerAwayAttrs:            
             for name, stlatterm in mods[attr]["same"].items():
                 multiplier = calc_stlatmod(name, pitcher_stat_data[awayPitcher], team_stat_data[awayTeam], stlatterm)

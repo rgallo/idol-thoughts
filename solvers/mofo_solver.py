@@ -3,6 +3,7 @@ import json
 import os
 import random
 import re
+import collections
 
 import numpy as np
 from scipy.optimize import differential_evolution
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 sys.path.append("..")
 import requests
 from solvers import base_solver
+from helpers import parse_mods
 from solvers.mofo_ballpark_terms import BALLPARK_TERMS
 from solvers.mofo_mod_terms import MOFO_MOD_TERMS
 import mofo
@@ -47,6 +49,11 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     fail = 1 if ((awayodds < .5 and away_rbi > home_rbi) or (awayodds > .5 and away_rbi < home_rbi)) else 0
     return 1, fail, awayodds, homeodds
 
+def get_season_team_attrs(team_attrs, season):
+    attrs = []
+    for _, season_team_attrs in team_attrs.get(str(season), {}).items():
+        attrs.extend(season_team_attrs)
+    return attrs
 
 def handle_args():
     parser = argparse.ArgumentParser()
@@ -66,37 +73,64 @@ def handle_args():
     return args
 
 
-def get_init_values(init_dir, popsize, is_random, is_worst):
+def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms):        
     pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*), fail rate ([-\.\d]*)%$', re.MULTILINE)
     results = []
+    mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
     if len(job_ids) < popsize:
         raise Exception("Population is set to {} and there are only {} solutions, find more solutions or decrease pop size".format(popsize, len(job_ids)))
     for job_id in job_ids:
-        with open(os.path.join(init_dir, "{}-solution.json".format(job_id))) as solution_file, open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:
-            results.append((float(pattern.findall(details_file.read())[0][1]), json.load(solution_file)))
+        params = []
+        with open(os.path.join(init_dir, "{}-terms.csv".format(job_id))) as terms_file:            
+            termsplitdata = [d.split(",") for d in terms_file.readlines()[1:] if d]
+        for row in termsplitdata:
+            params.extend([float(row[1]), float(row[2]), float(row[3])])
+        with open(os.path.join(init_dir, "{}-mods.csv".format(job_id))) as mod_file:            
+            modsplitdata = [d.split(",") for d in mod_file.readlines()[1:] if d]
+        for row in modsplitdata:
+            attr, team, stat = [val for val in row[:3]]                
+            mods[attr][stat] = [float(row[3]), float(row[4]), float(row[5])]        
+        for modterm in team_mod_terms:                
+            if modterm.attr in mods:                
+                for stlatname in mods[attr]:
+                    if stlatname == modterm.stat:                                                
+                        params.extend(mods[attr][stat])
+            else:                                
+                params.extend([0, 0, 1])        
+        with open(os.path.join(init_dir, "{}-ballparkmods.csv".format(job_id))) as park_file:            
+            parksplitdata = [d.split(",") for d in park_file.readlines()[1:] if d]
+        for row in parksplitdata:
+            params.extend([float(row[2]), float(row[3]), float(row[4])])        
+        with open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:            
+            results.append((float(pattern.findall(details_file.read())[0][1]), params))                     
     if is_random:
         random.shuffle(results)
     else:
-        results.sort(key=lambda x: x[0], reverse=is_worst)
-    return np.array([result[1] for result in results[:popsize]])
-
+        results.sort(key=lambda x: x[0], reverse=is_worst)     
+    final_list = [result[1] for result in results[:popsize]]    
+    return np.array(final_list)
 
 def main():
     print(datetime.datetime.now())
-    cmd_args = handle_args()
-    bounds_team_mods = [modterm.bounds for modterm in MOFO_MOD_TERMS]
-    bounds_team = [item for sublist in bounds_team_mods for item in sublist]
+    cmd_args = handle_args()        
     bounds_park_mods = [modterm.bounds for modterm in BALLPARK_TERMS]
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
-    bounds_terms = ([(-8, 0), (0, 3), (0, 4)] * 2) + ([(0, 8), (0, 3), (0, 4)] * 20) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 3), (0, 4)] * (len(MOFO_STLAT_LIST) - 27))
-    bounds = bounds_terms + bounds_team + bounds_park
+    bounds_terms = ([(-8, 0), (0, 3), (0, 4)] * 2) + ([(0, 8), (0, 3), (0, 4)] * 20) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 3), (0, 4)] * (len(MOFO_STLAT_LIST) - 27))    
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     game_list = base_solver.get_games(cmd_args.gamefile)
+    current_season = 1
+    for row in game_list:
+        current_season = int(row["season"]) if (int(row["season"]) > current_season) else current_season
+    previous_season = current_season - 1    
     solve_for_ev = cmd_args.ev
     with open('team_attrs.json') as f:
-        team_attrs = json.load(f) 
+        team_attrs = json.load(f)    
+    team_mod_terms = [modterm for modterm in MOFO_MOD_TERMS if modterm.attr in (get_season_team_attrs(team_attrs, current_season) + get_season_team_attrs(team_attrs, previous_season))]    
+    bounds_team_mods = [modterm.bounds for modterm in team_mod_terms]
+    bounds_team = [item for sublist in bounds_team_mods for item in sublist]
+    bounds = bounds_terms + bounds_team + bounds_park    
    
     #establish our baseline    
     if not cmd_args.init:
@@ -105,47 +139,64 @@ def main():
         print("Using initial values. Checking master for number to beat.")
         load_dotenv(dotenv_path="../.env")
         github_token = os.getenv("GITHUB_TOKEN")
-        params = []
-        for url_prop in ("MOFO_TERMS", "MOFO_MODS", "MOFO_BALLPARK_TERMS"):
-            url = os.getenv(url_prop)      
-            terms = requests.get(url, headers={"Authorization": "token {}".format(github_token)}).text
-            params.extend(",".join([",".join(line.split(",")[-3:]) for line in terms.split("\n")[1:] if line]).split(","))   
+        params, modterms = [], []        
+        mofourl = os.getenv("MOFO_TERMS")      
+        mofoterms = requests.get(mofourl, headers={"Authorization": "token {}".format(github_token)}).text
+        params.extend(",".join([",".join(line.split(",")[-3:]) for line in mofoterms.split("\n")[1:] if line]).split(","))           
+        modurl = os.getenv("MOFO_MODS")      
+        teamterms = requests.get(modurl, headers={"Authorization": "token {}".format(github_token)}).text                    
+        teamlines = teamterms.split("\n")[1:]                
+        for line in teamlines:   
+            splitteamline = line.split(",")
+            modterms.append(splitteamline[0])                 
+        for modterm in team_mod_terms:            
+            if modterm.attr in modterms:
+                for line in teamterms.split("\n")[1:]:
+                    splitline = line.split(",")
+                    if (splitline[0] == modterm.attr) and (splitline[2] == modterm.stat):
+                        params.extend(splitline[-3:])
+            else:
+                params.extend([0,0,1])        
+        parkurl = os.getenv("MOFO_BALLPARK_TERMS")      
+        parkterms = requests.get(parkurl, headers={"Authorization": "token {}".format(github_token)}).text
+        params.extend(",".join([",".join(line.split(",")[-3:]) for line in parkterms.split("\n")[1:] if line]).split(","))   
         baseline_parameters = [float(val) for val in params]
         try:
-            number_to_beat = base_solver.minimize_func(baseline_parameters, get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS,
+            number_to_beat = base_solver.minimize_func(baseline_parameters, get_mofo_results, MOFO_STLAT_LIST, None, team_mod_terms,
                                                      BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
                                                      team_attrs, None, solve_for_ev, False, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)            
         except Exception as e:
             print(e)
             number_to_beat = None        
 
-    print("Number to beat = {}".format(number_to_beat))
+    print("Number to beat = {}".format(number_to_beat))    
     #solver time
     workers = int(cmd_args.workers)        
-    popsize = 27    
-    init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst) if cmd_args.init else 'latinhypercube'
+    popsize = 27        
+    init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms) if cmd_args.init else 'latinhypercube'
+    #print(len(init), ",".join(str(len(s)) for s in init))
     recombination = 0.7
     #recombination = 0.7 if (type(init) == str) else 0.4
     recombination = 0.5 if (workers > 2) else recombination
-    args = (get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
+    args = (get_mofo_results, MOFO_STLAT_LIST, None, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, number_to_beat, solve_for_ev, False, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
                                     mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000,
                                     init=init)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
                                                                                    zip(*[iter(result.x)] * 3))))
-    result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, MOFO_MOD_TERMS,
+    result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, team_mod_terms,
                                                  BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
                                                  team_attrs, None, solve_for_ev, True, cmd_args.debug, False, False, cmd_args.output)
     #screw it, final file output stuff in here to try and make sure it actually happens
     park_mod_list_size = len(BALLPARK_TERMS) * 3
-    team_mod_list_size = len(MOFO_MOD_TERMS) * 3
+    team_mod_list_size = len(team_mod_terms) * 3
     special_cases_count = 0
     base_mofo_list_size = len(MOFO_STLAT_LIST) * 3
     terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST, zip(*[iter(result.x[:(base_mofo_list_size)])] * 3)))  
     #need to set unused mods to 0, 0, 1
     mods_output = "identifier,team,name,a,b,c"
-    for mod, (a, b, c) in zip(MOFO_MOD_TERMS, zip(*[iter(result.x[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
+    for mod, (a, b, c) in zip(team_mod_terms, zip(*[iter(result.x[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
         mods_output += "\n{},{},{},{},{},{}".format(mod.attr, mod.team, mod.stat, a, b, c)        
     #mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
     ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(BALLPARK_TERMS, zip(*[iter(result.x[-(park_mod_list_size):])] * 3)))

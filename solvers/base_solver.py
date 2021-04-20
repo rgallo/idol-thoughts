@@ -1016,10 +1016,14 @@ def minimize_func(parameters, *data):
                             debug_print("Did not meet linearity requirement to calculate. Aggregate fail rate = {:.4f}, fail points = {}, linear points = {}".format(aggregate_fail_rate, int(fail_points), int(linear_points)), debug2, ":::")                                                    
                 if solve_for_ev:                    
                     linear_points *= 0.000000001
-                    linear_fail = web_ev - expected_val
-                    season_fail = current_web_ev - current_mofo_ev                
-                    if (linear_fail < BEST_RESULT) and (season_fail > BEST_SEASON):
-                        linear_fail += (BEST_RESULT + abs(current_mofo_ev) + (CURRENT_ITERATION / 100.0))
+                    season_fail = current_web_ev - current_mofo_ev  
+                    if MAX_DAY < 25:
+                        season_fail_per_day = (season_fail / MAX_DAY)
+                        previous_fail_per_day = (web_ev - expected_val) / (50 - MAX_DAY)
+                        #weight seasonal fail as if IT had the majority of days
+                        linear_fail = (previous_fail_per_day * MAX_DAY) + (season_fail_per_day * (50 - MAX_DAY))
+                    else:
+                        linear_fail = web_ev - expected_val
         elif game_counter == TOTAL_GAME_COUNTER and TOTAL_GAME_COUNTER > 0:        
             pass_exact = (pass_exact / game_counter) * 100.0
             pass_within_one = (pass_within_one / game_counter) * 100.0
@@ -1030,7 +1034,7 @@ def minimize_func(parameters, *data):
                 BEST_EXACT = fail_rate
                 debug_print("Fail rate = {:.4f}".format(fail_rate), debug, "::::::::")
             linear_fail = (k9_max_err - k9_min_err) * ((fail_rate * 100) - pass_exact - (pass_within_one / 4.0) - (pass_within_two / 8.0) - (pass_within_three / 16.0) - (pass_within_four / 32.0))
-    if (linear_fail < BEST_RESULT) and (season_fail <= BEST_SEASON):
+    if (linear_fail < BEST_RESULT):
         BEST_RESULT = linear_fail    
         BEST_SEASON = season_fail
         ALL_GAMES = game_counter        
@@ -1091,7 +1095,7 @@ def minimize_func(parameters, *data):
                 else:
                     detailtext += "\n{:.4f}% mod vs mod fail rate, {} games".format((mvm_fails / mvm_games) * 100.0, mvm_games)            
             detailtext += "\nBest so far - Linear fail {:.4f}, fail rate {:.4f}%".format(linear_fail, fail_rate * 100.0)
-            detailtext += "\nNet EV = {:.4f}, web EV = {:.4f}, season EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(expected_val, web_ev, BEST_SEASON, mismatches, dadbets)                        
+            detailtext += "\nNet EV = {:.4f}, web EV = {:.4f}, season EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(expected_val, web_ev, (-1 * BEST_SEASON), mismatches, dadbets)                        
             detailtext += "\nMax linear error {:.4f}% ({:.4f} actual, {:.4f} calculated), Min linear error {:.4f}%".format(max_linear_error, max_error_ratio, max_error_value, min_linear_error)            
             debug_print(detailtext, debug, run_id)
             if outputdir:
@@ -1149,11 +1153,11 @@ def minimize_func(parameters, *data):
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1           
     now = datetime.datetime.now()        
-    if ((now - LAST_CHECKTIME).total_seconds()) > 3600:
-        print("Taking our state-mandated minute long rest per hour of work")
-        time.sleep(60)          
+    if ((now - LAST_CHECKTIME).total_seconds()) > 10800:
+        print("Taking our state-mandated two minute long rest per three hours of work")
+        time.sleep(120)          
         LAST_CHECKTIME = datetime.datetime.now()        
-        print("BACK TO WORK")        
+        print("BACK TO WORK")       
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
@@ -1678,7 +1682,7 @@ def minimize_batman_func(parameters, *data):
             LAST_MIN[event] = abs(batman_min_err[event])        
             LAST_MAX[event] = batman_max_err[event]              
             if LAST_MIN[event] == MAX_INTEREST[event]:
-                LAST_BESTS[event] = 12.0
+                LAST_BESTS[event] = LAST_MIN[event] + 2.0
             else:
                 LAST_BESTS[event] = max(batman_max_err[event], abs(batman_min_err[event]), 0.5)               
         BEST_UNEXVAR_ERROR = batman_unexvar                 
@@ -1708,9 +1712,9 @@ def minimize_batman_func(parameters, *data):
         LAST_ITERATION_TIME = now          
     CURRENT_ITERATION += 1   
     now = datetime.datetime.now()        
-    if ((now - LAST_CHECKTIME).total_seconds()) > 3600:
-        print("Taking our state-mandated minute long rest per hour of work")
-        time.sleep(60)          
+    if ((now - LAST_CHECKTIME).total_seconds()) > 10800:
+        print("Taking our state-mandated two minute long rest per three hours of work")
+        time.sleep(120)          
         LAST_CHECKTIME = datetime.datetime.now()        
         print("BACK TO WORK")
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)

@@ -1,7 +1,7 @@
 from collections import namedtuple
 
 MofoModTerm = namedtuple("MofoModTerm", ["attr", "team", "stat", "bounds"])
-DefaultBounds = DefaultBounds
+DefaultBounds = [[-5, 5], [0, 1], [1, 1.5]]
 
 MOFO_MOD_TERMS = [    
     MofoModTerm("LOVE", "opp", "Ruthlessness", DefaultBounds),
@@ -316,5 +316,44 @@ MOFO_MOD_TERMS = [
     MofoModTerm("AAA", "same", "MaxBaseThirst", [[0, 5], [0, 1], [1, 1.5]]),
     MofoModTerm("AAA", "same", "MaxContinuation", [[0, 5], [0, 1], [1, 1.5]]),
     MofoModTerm("AAA", "same", "MaxGroundFriction", [[0, 5], [0, 1], [1, 1.5]]),
-    MofoModTerm("AAA", "same", "MaxIndulgence", [[0, 5], [0, 1], [1, 1.5]])    
+    MofoModTerm("AAA", "same", "MaxIndulgence", [[0, 5], [0, 1], [1, 1.5]]) 
 ]
+
+
+    #MofoModTerm("PSYCHIC", "opp", "Ruthlessness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "Unthwackability", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "Overpowerment", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "Shakespearianism", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "Coldness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanOmniscience", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanTenaciousness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanWatchfulness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanAnticapitalism", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanChasiness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanTragicness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanPatheticism", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanThwackability", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanDivinity", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanMoxie", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanMusclitude", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanMartyrdom", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanLaserlikeness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanBaseThirst", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanContinuation", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanGroundFriction", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MeanIndulgence", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxOmniscience", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxTenaciousness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxWatchfulness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxAnticapitalism", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxChasiness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxThwackability", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxDivinity", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxMoxie", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxMusclitude", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxMartyrdom", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxLaserLikeness", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxBaseThirst", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxContinuation", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxGroundFriction", DefaultBounds),
+    #MofoModTerm("PSYCHIC", "opp", "MaxIndulgence", DefaultBounds)
