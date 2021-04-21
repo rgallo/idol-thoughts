@@ -38,7 +38,7 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     away_game, home_game = game["away"], game["home"]
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])
     if away_rbi == home_rbi:        
-        return 0, 0, 0, 0
+        return 0, 0, 0, 0    
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
     awayMods, homeMods = mofo.get_mods(mods, game_attrs["away"], game_attrs["home"], awayTeam, homeTeam, awayPitcher, homePitcher, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)                          
@@ -93,11 +93,14 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms):
             mods[attr][stat] = [float(row[3]), float(row[4]), float(row[5])]        
         for modterm in team_mod_terms:                
             if modterm.attr in mods:                
-                for stlatname in mods[attr]:
+                for stlatname in mods[modterm.attr]:
                     if stlatname == modterm.stat:                                                
-                        params.extend(mods[attr][stat])
-            else:                                
-                params.extend([0, 0, 1])        
+                        params.extend(mods[modterm.attr][stlatname])
+            else:              
+                multiplier = random.uniform(0.0, 10.0) - 5.0
+                additive = random.uniform(0.0, 1.0)
+                exponent = random.uniform(1.0, 1.5)
+                params.extend([multiplier, additive, multiplier])        
         with open(os.path.join(init_dir, "{}-ballparkmods.csv".format(job_id))) as park_file:            
             parksplitdata = [d.split(",") for d in park_file.readlines()[1:] if d]
         for row in parksplitdata:

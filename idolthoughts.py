@@ -430,10 +430,10 @@ def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):
                 new_row = row
         else:
             new_row = row
-        if new_row["position"] == "rotation":
-            for key in (PITCHING_STLATS + ["pitchingStars"]):
-                pitcherstatdata[new_row["name"]][key] = float(new_row[key])
-        elif new_row["position"] == "lineup":
+        #if new_row["position"] == "rotation":
+        for key in (PITCHING_STLATS + ["pitchingStars"]):
+            pitcherstatdata[new_row["name"]][key] = float(new_row[key])
+        if new_row["position"] == "lineup":
             if "SHELLED" not in player_attrs and "ELSEWHERE" not in player_attrs:
                 for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
                     teamstatdata[team][key].append(float(new_row[key]))

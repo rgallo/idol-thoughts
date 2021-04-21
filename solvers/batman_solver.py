@@ -76,7 +76,7 @@ def get_init_values(init_dir, eventofinterest, popsize, is_random):
     for job_id in job_ids:
         with open(os.path.join(init_dir, "{}-".format(job_id) + eventofinterest + "solution.json")) as solution_file, open(os.path.join(init_dir, "{}-".format(job_id) + eventofinterest + "details.txt")) as details_file:
             underestimate, overestimate, unexvar = pattern.findall(details_file.read())[0]            
-            results.append(float(unexvar), json.load(solution_file))
+            results.append(int(unexvar), json.load(solution_file))
     if is_random:
         random.shuffle(results)
     else:

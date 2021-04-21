@@ -56,7 +56,7 @@ POS_HITS = 0
 POS_HRS = 0
 LAST_DAY_RANGE = 1
 LAST_SEASON_RANGE = 1
-MOD_BASELINE = False
+FIRST_SOLUTION = False
 EARLY_REJECT = False
 BEST_MOD_RATES = {}
 ALL_MOD_GAMES = {}
@@ -75,7 +75,9 @@ FLOOD_WEATHER = get_weather_idx("Flooding")
 def get_pitcher_id_lookup(filename):
     with open(filename) as f:
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
-    return {row["id"]: (row["name"], row["team"]) for row in filedata if row["position"] == "rotation"}
+    return {row["id"]: (row["name"], row["team"]) for row in filedata}
+    #experimenting with not caring about if the pitcher id is actually identified as a rotation position in the stlats file
+    #return {row["id"]: (row["name"], row["team"]) for row in filedata if row["position"] == "rotation"}
 
 def get_player_id_lookup(filename):
     with open(filename) as f:
@@ -251,17 +253,22 @@ def check_margins(eventlist, bat_atbat_failby, bat_hit_failby, bat_hr_failby, st
                             pass_exact[event] += 1   
     return pass_within_four, pass_within_three, pass_within_two, pass_within_one, pass_exact
     
-def check_rejects(min_condition, max_condition, eventlist, stages, batman_unexvar):            
-    for event in eventlist:
-        if abs(min_condition[event]) >= (MAX_INTEREST[event] - stages[event][4]):                                            
-            return True        
+def check_rejects(min_condition, max_condition, eventlist, stages, batman_unexvar):    
+    if FIRST_SOLUTION and (CURRENT_ITERATION > 1):
+        for event in eventlist:
+            #experiment with making this only care about max again
+            #if abs(min_condition[event]) >= (MAX_INTEREST[event] - stages[event][4]):                                            
+                #return True        
                     
-        elif max(abs(min_condition[event]), max_condition[event]) >= LAST_BESTS[event]:                            
-            return True                
+            #elif max(abs(min_condition[event]), max_condition[event]) >= LAST_BESTS[event]:                            
+            #    return True                
+
+            if max(abs(min_condition[event]), max_condition[event]) >= LAST_BEST:                            
+                return True                
                      
-    if not (batman_unexvar == None):
-        if batman_unexvar >= BEST_UNEXVAR_ERROR:                                        
-            return True                                                             
+        if not (batman_unexvar == None):
+            if batman_unexvar >= BEST_UNEXVAR_ERROR:                                        
+                return True                                                             
     return False
 
 def calc_linear_unex_error(vals, wins_losses, games):
@@ -1181,6 +1188,7 @@ def minimize_batman_func(parameters, *data):
     global WORST_ERROR
     global LAST_MAX
     global LAST_MIN
+    global LAST_BEST
     global LAST_BESTS
     global MAX_INTEREST
     global POS_HITS
@@ -1193,6 +1201,7 @@ def minimize_batman_func(parameters, *data):
     global LAST_DAY_RANGE
     global LAST_SEASON_RANGE
     global LAST_FAIL_EVENT
+    global FIRST_SOLUTION
     eventofinterest, batter_list, calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, games_swept, establish_baseline, debug, debug2, debug3, outputdir = data
     debug_print("func start: {}".format(starttime), debug3, run_id)             
     park_mod_list_size = len(ballpark_list) * 3
@@ -1609,7 +1618,7 @@ def minimize_batman_func(parameters, *data):
         else:
             linear_fail *= 100.0
             
-    if linear_fail < BEST_RESULT and not reject_solution:        
+    if (linear_fail < BEST_RESULT) and not reject_solution:        
         BEST_RESULT = linear_fail
         BEST_EXACT = worst_exact        
         #ALL_GAMES = bat_counter if (bat_counter > ALL_GAMES) else ALL_GAMES        
@@ -1677,17 +1686,22 @@ def minimize_batman_func(parameters, *data):
             MAX_INTEREST["abs"] = abs(batman_min_err["abs"])
             ALL_GAMES = total_batters
             batman_unexvar *= (total_batters / bat_counter)                                    
-        #WORST_ERROR = abs(batman_max_err) + abs(batman_min_err)          
+        #WORST_ERROR = abs(batman_max_err) + abs(batman_min_err)                  
+        check_for_pos = True        
+        LAST_BEST = 0.0
         for event in eventlist:
             LAST_MIN[event] = abs(batman_min_err[event])        
-            LAST_MAX[event] = batman_max_err[event]              
-            if LAST_MIN[event] == MAX_INTEREST[event]:
-                LAST_BESTS[event] = LAST_MIN[event] + 2.0
-            else:
-                LAST_BESTS[event] = max(batman_max_err[event], abs(batman_min_err[event]), 0.5)               
+            LAST_MAX[event] = batman_max_err[event]                          
+            LAST_BESTS[event] = max(batman_max_err[event], abs(batman_min_err[event]), 0.5)   
+            LAST_BEST = LAST_BESTS[event] if (LAST_BESTS[event] > LAST_BEST) else LAST_BEST
+            if LAST_MAX[event] == 0:
+                check_for_pos = False
+        #make sure we've gotten a single solution where all overestimates are a positive number before we start rejecting aggressively.
+        if not FIRST_SOLUTION:
+            FIRST_SOLUTION = check_for_pos        
         BEST_UNEXVAR_ERROR = batman_unexvar                 
         LINE_JUMP_GAMES.clear()
-        if CURRENT_ITERATION > 1:              
+        if CURRENT_ITERATION > 1:                        
             line_jumpers_a_go = True
             for event in eventlist:
                 if (LAST_MIN[event] == MAX_INTEREST[event]):

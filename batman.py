@@ -166,25 +166,21 @@ def setup(eventofinterest, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, pi
 
     return terms, special_cases, awayMods, homeMods
 
-def calc_batman_intelligent(numerator, denominator, positive_term, negative_term, cutoff):
+def calc_batman_intelligent(numerator, denominator, cutoff):
     batman_raw, batman = 0.0, 0.0
-    #experimenting with making them all fly
-    if (positive_term <= 0) or (denominator < 0):
+    
+    if (numerator <= 0) or (denominator < 0):
         return 0    
     if denominator == 0:
         return 1       
-    #experimenting with not square rooting the denominator
-    #denominator = denominator ** 0.5
+    
     batman_raw = numerator / denominator
     if math.isnan(batman_raw):            
-        return 1       
-    #if we're not squaring the denominator, we need this to be smaller
-    #experimenting with just always subtracting this instead
-    batman_raw -= (negative_term ** 2) / (positive_term ** 2)
-    try:
-        batman = logistic_transform_bten(batman_raw)      
-    except:
-        batman = 0
+        return 1           
+    
+    batman = logistic_transform_bten(batman_raw)
+    batman = (batman - 0.5) * 2.0
+    
     if batman <= cutoff:
         return 0    
     return batman
@@ -300,11 +296,12 @@ def calc_steal_attempt(pitcher, pitchingteam, batter, battingteam, team_pid_stat
     cops = geomean(team_cops)
     crimes = calc_team(terms, (("basethirst", batter_data["baseThirst"]), ("attemptlaserlikeness", batter_data["laserlikeness"])), battingMods, False)            
 
-    numerator = crimes - cops
-    denominator = cops
     positive_term = crimes
     negative_term = cops
-    walksperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
+    numerator = positive_term - negative_term
+    denominator = negative_term
+
+    walksperatbat = calc_batman_intelligent(numerator, denominator, float(factor_const))
 
     return walksperatbat
 
@@ -315,16 +312,18 @@ def calc_runner_out(pitcher, pitchingteam, batter, battingteam, team_pid_stat_da
     batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]  
     batter_data = batter_list_dict[0]
     for playerid, stlats in team_pid_stat_data[pitchingteam].items():
-        cop = calc_team(terms, (("anticapitalism", stlats["anticapitalism"]),), defenseMods, False)
+        cop = calc_team(terms, (("anticapitalism", stlats["anticapitalism"]), ("stealwatchfulness", stlats["watchfulness"])), defenseMods, False)
         team_cops.append(cop)
     cops = geomean(team_cops)
+    cold = calc_team(terms, (("coldness", pitcher_data["coldness"]),), defenseMods, False)   
     crimes = calc_team(terms, (("laserlikeness", batter_data["laserlikeness"]),), battingMods, False)            
 
-    numerator = cops - crimes
-    denominator = crimes
-    positive_term = cops
+    positive_term = cops + cold
     negative_term = crimes
-    walksperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
+    numerator = positive_term - negative_term
+    denominator = negative_term
+    
+    walksperatbat = calc_batman_intelligent(numerator, denominator, float(factor_const))
 
     return walksperatbat
 
@@ -340,7 +339,7 @@ def calc_walks(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, p
     numerator = positive_term - negative_term
     denominator = negative_term
     
-    walksperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
+    walksperatbat = calc_batman_intelligent(numerator, denominator, float(factor_const))
 
     return walksperatbat
 
@@ -352,21 +351,20 @@ def calc_hits(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pi
     batter_data = batter_list_dict[0]
     ruth = calc_team(terms, (("ruthlessness", pitcher_data["ruthlessness"]),), defenseMods, False)            
     thwack = calc_team(terms, (("thwackability", batter_data["thwackability"]),), battingMods, False)        
-    unthwack = calc_team(terms, (("unthwackability", pitcher_data["unthwackability"]),), defenseMods, False)    
-    cold = calc_team(terms, (("hitcoldness", pitcher_data["coldness"]),), defenseMods, False)   
+    unthwack = calc_team(terms, (("unthwackability", pitcher_data["unthwackability"]),), defenseMods, False)        
     path = calc_team(terms, (("patheticism", batter_data["patheticism"]),), battingMods, False)        
-    other_bat = calc_team(terms, (("hitmusclitude", batter_data["musclitude"]), ("martyrdom", batter_data["martyrdom"])), battingMods, False)
+    other_bat = calc_team(terms, (("musclitude", batter_data["musclitude"]), ("martyrdom", batter_data["martyrdom"])), battingMods, False)
     for playerid, stlats in team_pid_stat_data[pitchingteam].items():
         player_omni = calc_team(terms, (("omniscience", stlats["omniscience"]),), defenseMods, False)  
         team_omniscience.append(player_omni)
     omniscience = geomean(team_omniscience)
    
-    positive_term = (thwack + other_bat) * (5.0 / 3.0)
-    negative_term = unthwack + ruth + cold + omniscience - path
+    positive_term = (thwack + other_bat) * (4.0 / 3.0)
+    negative_term = unthwack + ruth + omniscience + path
     numerator = positive_term - negative_term
     denominator = negative_term
     
-    hitsperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
+    hitsperatbat = calc_batman_intelligent(numerator, denominator, float(factor_const))
 
     return hitsperatbat
 
@@ -376,16 +374,14 @@ def calc_hrs(pitcher, pitchingteam, batter, battingteam, team_pid_stat_data, pit
     batter_list_dict = [stlats for player_id, stlats in team_pid_stat_data[battingteam].items() if player_id == batter]  
     batter_data = batter_list_dict[0]    
     divinity = calc_team(terms, (("divinity", batter_data["divinity"]),), battingMods, False)        
-    overpower = calc_team(terms, (("overpowerment", pitcher_data["overpowerment"]),), defenseMods, False)    
-    cold = calc_team(terms, (("coldness", pitcher_data["coldness"]),), defenseMods, False)        
-    muscl = calc_team(terms, (("musclitude", batter_data["musclitude"]),), battingMods, False)   
+    overpower = calc_team(terms, (("overpowerment", pitcher_data["overpowerment"]),), defenseMods, False)            
     
-    positive_term = divinity + muscl
-    negative_term = overpower + cold
+    positive_term = divinity
+    negative_term = overpower
     numerator = positive_term - negative_term
     denominator = negative_term
     
-    hrsperatbat = calc_batman_intelligent(numerator, denominator, positive_term, negative_term, float(factor_const))
+    hrsperatbat = calc_batman_intelligent(numerator, denominator, float(factor_const))
 
     return hrsperatbat
 
