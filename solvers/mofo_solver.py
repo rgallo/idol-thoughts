@@ -73,8 +73,12 @@ def handle_args():
     return args
 
 
-def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms):        
-    pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*), fail rate ([-\.\d]*)%$', re.MULTILINE)
+def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solve_for_ev):        
+    if solve_for_ev:
+        pattern = re.compile(r'^Net EV = ([-\.\d]*), web EV = ([-\.\d]*), season EV = ([-\.\d]*), mismatches = ([-\.\d]*), dadbets = ([-\.\d]*)$', re.MULTILINE)
+        is_worst = True
+    else:
+        pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*), early linear ([-\.\d]*) \(([-\.\d]*)% of final\), fail rate ([-\.\d]*)%$', re.MULTILINE)
     results = []
     mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
@@ -106,7 +110,7 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms):
         for row in parksplitdata:
             params.extend([float(row[2]), float(row[3]), float(row[4])])        
         with open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:            
-            results.append((float(pattern.findall(details_file.read())[0][1]), params))                     
+            results.append((float(pattern.findall(details_file.read())[0][1]), params))               
     if is_random:
         random.shuffle(results)
     else:
@@ -136,7 +140,7 @@ def main():
     bounds = bounds_terms + bounds_team + bounds_park    
    
     #establish our baseline    
-    if not cmd_args.init:
+    if not cmd_args.init or not solve_for_ev:
         number_to_beat = None
     else:
         print("Using initial values. Checking master for number to beat.")
@@ -175,12 +179,12 @@ def main():
     print("Number to beat = {}".format(number_to_beat))    
     #solver time
     workers = int(cmd_args.workers)        
-    popsize = 27        
-    init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms) if cmd_args.init else 'latinhypercube'
+    popsize = 25        
+    init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'latinhypercube'
     #print(len(init), ",".join(str(len(s)) for s in init))
     recombination = 0.7
     #recombination = 0.7 if (type(init) == str) else 0.4
-    recombination = 0.5 if (workers > 2) else recombination
+    recombination = 0.5 if (workers > 2 and solve_for_ev) else recombination
     args = (get_mofo_results, MOFO_STLAT_LIST, None, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, number_to_beat, solve_for_ev, False, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,

@@ -136,7 +136,8 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
                     multiplier = 2.0 - (2.0 * base_multiplier)                
                 else:
                     multiplier = 1.0
-                awayMods[playerstlat].append(multiplier)
+                if ballparkstlat != "hype":
+                    awayMods[playerstlat].append(multiplier)
                 homeMods[playerstlat].append(multiplier)
     return awayMods, homeMods
 
