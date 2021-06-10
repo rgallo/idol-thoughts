@@ -297,7 +297,7 @@ def calc_linear_unex_error(vals, wins_losses, gameids, threshold):
             if win_threshold:
                 actual_val = total_wins            
                 current_error = max(abs(current_val - actual_val), 2.0) - 2.0
-                error += current_error ** 2
+                error += current_error ** 4
                 if ((current_val - actual_val) > max_error):
                     max_error = (current_val - actual_val)
                     max_error_val = current_val            
@@ -311,8 +311,8 @@ def calc_linear_unex_error(vals, wins_losses, gameids, threshold):
                         other_errors[gameids[idx]]["mofo"] = current_val
                         other_errors[gameids[idx]]["actual"] = actual_val            
         idx += 1
-    error += (max_error * 20) ** 2
-    error += (min_error * 20) ** 2
+    #error += (max_error * 20) ** 2
+    #error += (min_error * 20) ** 2
     return error, max_error, min_error, max_error_val, min_error_val, major_errors, max_error_game, other_errors
 
 def store_ev_by_team(ev_by_team, hometeam, awayteam, web_ev, mofo_ev):
