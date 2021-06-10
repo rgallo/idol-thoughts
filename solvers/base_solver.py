@@ -484,6 +484,7 @@ def minimize_func(parameters, *data):
     reject_solution, viability_unchecked, new_pass, addfails, stats_regened, early_linear_checked = False, True, False, False, False, True
     line_jumpers, reorder_failsfirst, reorder_keys, ev_set, ev_by_team, games_by_mod, vals_by_mod = {}, {}, {}, {}, {}, {}, {}
     all_vals, win_loss, gameids, early_vals, early_sorted = [], [], [], [], []
+    worst_vals, worst_win_loss, worst_gameids = [], [], []
     if ALL_GAMES > 0:       
         games_available = ALL_GAMES - len(LINE_JUMP_GAMES)
     else:
@@ -586,22 +587,24 @@ def minimize_func(parameters, *data):
                         mod_web_fails[name] -= game_web_ev
                     check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name])  
                     if (WORST_MOD == name) and (mod_games[name] == ALL_MOD_GAMES[name]) and ((PLUS_NAME == "") or (mod_games[PLUS_NAME] == ALL_MOD_GAMES[PLUS_NAME])):
-                        worst_vals, worst_win_loss, worst_gameids = [], [], []
-                        if (PLUS_NAME != ""):
-                            for game in vals_by_mod[PLUS_NAME]:
-                                worst_vals.append(vals_by_mod[PLUS_NAME][game]["mofo_away"])
-                                worst_vals.append(vals_by_mod[PLUS_NAME][game]["mofo_home"])
-                                worst_win_loss.append(vals_by_mod[PLUS_NAME][game]["away_win"])
-                                worst_win_loss.append(vals_by_mod[PLUS_NAME][game]["home_win"])
-                                worst_gameids.append(game)
-                                worst_gameids.append(game)                            
-                        for game in vals_by_mod[name]:
-                            worst_vals.append(vals_by_mod[name][game]["mofo_away"])
-                            worst_vals.append(vals_by_mod[name][game]["mofo_home"])
-                            worst_win_loss.append(vals_by_mod[name][game]["away_win"])
-                            worst_win_loss.append(vals_by_mod[name][game]["home_win"])
-                            worst_gameids.append(game)
-                            worst_gameids.append(game)                                       
+                        worst_vals.clear()
+                        worst_win_loss.clear()
+                        worst_gameids.clear()
+                        if PLUS_NAME != "":
+                            for thisgameid in vals_by_mod[PLUS_NAME]:
+                                worst_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_away"])
+                                worst_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_home"])
+                                worst_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["away_win"])
+                                worst_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["home_win"])
+                                worst_gameids.append(thisgameid)
+                                worst_gameids.append(thisgameid)                            
+                        for thisgameid in vals_by_mod[name]:
+                            worst_vals.append(vals_by_mod[name][thisgameid]["mofo_away"])
+                            worst_vals.append(vals_by_mod[name][thisgameid]["mofo_home"])
+                            worst_win_loss.append(vals_by_mod[name][thisgameid]["away_win"])
+                            worst_win_loss.append(vals_by_mod[name][thisgameid]["home_win"])
+                            worst_gameids.append(thisgameid)
+                            worst_gameids.append(thisgameid)                                       
                         sorted_win_loss = [x for _,x in sorted(zip(worst_vals, worst_win_loss))]
                         sorted_gameids = [x for _,x in sorted(zip(worst_vals, worst_gameids))]
                         worst_vals.sort()                    
@@ -655,22 +658,24 @@ def minimize_func(parameters, *data):
                         mod_web_fails[name] -= game_web_ev
                     check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name])
                     if (WORST_MOD == name) and (mod_games[name] == ALL_MOD_GAMES[name]) and ((PLUS_NAME == "") or (mod_games[PLUS_NAME] == ALL_MOD_GAMES[PLUS_NAME])):
-                        worst_vals, worst_win_loss, worst_gameids = [], [], []
-                        if (PLUS_NAME != ""):
-                            for game in vals_by_mod[PLUS_NAME]:
-                                worst_vals.append(vals_by_mod[PLUS_NAME][game]["mofo_away"])
-                                worst_vals.append(vals_by_mod[PLUS_NAME][game]["mofo_home"])
-                                worst_win_loss.append(vals_by_mod[PLUS_NAME][game]["away_win"])
-                                worst_win_loss.append(vals_by_mod[PLUS_NAME][game]["home_win"])
-                                worst_gameids.append(game)
-                                worst_gameids.append(game)                            
-                        for game in vals_by_mod[name]:
-                            worst_vals.append(vals_by_mod[name][game]["mofo_away"])
-                            worst_vals.append(vals_by_mod[name][game]["mofo_home"])
-                            worst_win_loss.append(vals_by_mod[name][game]["away_win"])
-                            worst_win_loss.append(vals_by_mod[name][game]["home_win"])
-                            worst_gameids.append(game)
-                            worst_gameids.append(game)                                       
+                        worst_vals.clear()
+                        worst_win_loss.clear()
+                        worst_gameids.clear()
+                        if PLUS_NAME != "":
+                            for thisgameid in vals_by_mod[PLUS_NAME]:
+                                worst_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_away"])
+                                worst_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_home"])
+                                worst_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["away_win"])
+                                worst_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["home_win"])
+                                worst_gameids.append(thisgameid)
+                                worst_gameids.append(thisgameid)                            
+                        for thisgameid in vals_by_mod[name]:
+                            worst_vals.append(vals_by_mod[name][thisgameid]["mofo_away"])
+                            worst_vals.append(vals_by_mod[name][thisgameid]["mofo_home"])
+                            worst_win_loss.append(vals_by_mod[name][thisgameid]["away_win"])
+                            worst_win_loss.append(vals_by_mod[name][thisgameid]["home_win"])
+                            worst_gameids.append(thisgameid)
+                            worst_gameids.append(thisgameid)                                       
                         sorted_win_loss = [x for _,x in sorted(zip(worst_vals, worst_win_loss))]
                         sorted_gameids = [x for _,x in sorted(zip(worst_vals, worst_gameids))]
                         worst_vals.sort()                    
@@ -692,34 +697,37 @@ def minimize_func(parameters, *data):
                     mvm_games += game_game_counter  
                     if solve_for_ev:
                         mvm_web_fails -= game_web_ev
-                elif awayMods == 0 and homeMods == 0:
+                if awayMods == 0 and homeMods == 0:
                     unmod_fails += game_fail_counter  
                     unmod_games += game_game_counter
                     if "unmod" not in games_by_mod:
                         games_by_mod["unmod"] = {}                                
                         vals_by_mod["unmod"] = {}
-                    games_by_mod["unmod"][game["away"]["game_id"]] = game
-                    vals_by_mod["unmod"][game["away"]["game_id"]] = {}
-                    vals_by_mod["unmod"][game["away"]["game_id"]]["mofo_away"] = game_away_val
-                    vals_by_mod["unmod"][game["away"]["game_id"]]["mofo_home"] = game_home_val
-                    if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
-                        vals_by_mod["unmod"][game["away"]["game_id"]]["away_win"] = 1
-                        vals_by_mod["unmod"][game["away"]["game_id"]]["home_win"] = 0
-                    else:
-                        vals_by_mod["unmod"][game["away"]["game_id"]]["away_win"] = 0
-                        vals_by_mod["unmod"][game["away"]["game_id"]]["home_win"] = 1
+                    if game["away"]["game_id"] not in games_by_mod["unmod"]:
+                        games_by_mod["unmod"][game["away"]["game_id"]] = game
+                        vals_by_mod["unmod"][game["away"]["game_id"]] = {}
+                        vals_by_mod["unmod"][game["away"]["game_id"]]["mofo_away"] = game_away_val
+                        vals_by_mod["unmod"][game["away"]["game_id"]]["mofo_home"] = game_home_val
+                        if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
+                            vals_by_mod["unmod"][game["away"]["game_id"]]["away_win"] = 1
+                            vals_by_mod["unmod"][game["away"]["game_id"]]["home_win"] = 0
+                        else:
+                            vals_by_mod["unmod"][game["away"]["game_id"]]["away_win"] = 0
+                            vals_by_mod["unmod"][game["away"]["game_id"]]["home_win"] = 1
                     if solve_for_ev:
                         unmod_web_fails -= game_web_ev
                     check_fail_rate = (unmod_fails / ALL_UNMOD_GAMES)
                     if unmod_games == ALL_UNMOD_GAMES:
-                        worst_vals, worst_win_loss, worst_gameids = [], [], []
-                        for game in vals_by_mod["unmod"]:
-                            worst_vals.append(vals_by_mod["unmod"][game]["mofo_away"])
-                            worst_vals.append(vals_by_mod["unmod"][game]["mofo_home"])
-                            worst_win_loss.append(vals_by_mod["unmod"][game]["away_win"])
-                            worst_win_loss.append(vals_by_mod["unmod"][game]["home_win"])
-                            worst_gameids.append(game)
-                            worst_gameids.append(game)                                       
+                        worst_vals.clear()
+                        worst_win_loss.clear()
+                        worst_gameids.clear()
+                        for thisgameid in vals_by_mod["unmod"]:
+                            worst_vals.append(vals_by_mod["unmod"][thisgameid]["mofo_away"])
+                            worst_vals.append(vals_by_mod["unmod"][thisgameid]["mofo_home"])
+                            worst_win_loss.append(vals_by_mod["unmod"][thisgameid]["away_win"])
+                            worst_win_loss.append(vals_by_mod["unmod"][thisgameid]["home_win"])
+                            worst_gameids.append(thisgameid)
+                            worst_gameids.append(thisgameid)                                       
                         sorted_win_loss = [x for _,x in sorted(zip(worst_vals, worst_win_loss))]
                         sorted_gameids = [x for _,x in sorted(zip(worst_vals, worst_gameids))]
                         worst_vals.sort()                    
@@ -1082,8 +1090,8 @@ def minimize_func(parameters, *data):
             #Remember to negate ev is when we can pass it through and make better results when EV is bigger
             expected_val, mismatches, dadbets, web_ev, current_mofo_ev, current_web_ev = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
             if solve_for_ev:
-                for game in ev_set:
-                    game_expected_val, game_mismatches, game_dadbets, game_web_ev, game_season_ev, game_season_web_ev = game_ev_calculate(ev_set, game)                    
+                for thisgame in ev_set:
+                    game_expected_val, game_mismatches, game_dadbets, game_web_ev, game_season_ev, game_season_web_ev = game_ev_calculate(ev_set, solve_for_ev)                    
                     expected_val += game_expected_val
                     mismatches += game_mismatches
                     dadbets += game_dadbets
@@ -1111,6 +1119,7 @@ def minimize_func(parameters, *data):
                             new_worstmod = modname
                         continue
                     if modname == PLUS_NAME:
+                        linear_by_mod[modname] = 0.0
                         continue
                     #print("Mod order reporting, {}".format(modname))
                     if (len(mod_vals) >= 150):
@@ -1119,13 +1128,13 @@ def minimize_func(parameters, *data):
                         mod_win_loss.clear()
                         mod_gameids.clear()                                        
                         new_plusname = ""
-                    for game in vals_by_mod[modname]:
-                        mod_vals.append(vals_by_mod[modname][game]["mofo_away"])
-                        mod_vals.append(vals_by_mod[modname][game]["mofo_home"])
-                        mod_win_loss.append(vals_by_mod[modname][game]["away_win"])
-                        mod_win_loss.append(vals_by_mod[modname][game]["home_win"])
-                        mod_gameids.append(game)
-                        mod_gameids.append(game)               
+                    for thisgame in vals_by_mod[modname]:
+                        mod_vals.append(vals_by_mod[modname][thisgame]["mofo_away"])
+                        mod_vals.append(vals_by_mod[modname][thisgame]["mofo_home"])
+                        mod_win_loss.append(vals_by_mod[modname][thisgame]["away_win"])
+                        mod_win_loss.append(vals_by_mod[modname][thisgame]["home_win"])
+                        mod_gameids.append(thisgame)
+                        mod_gameids.append(thisgame)               
                     if len(mod_vals) < 150:
                         #print("Continuing for having too few values, mod = {}".format(modname))
                         new_plusname = modname
@@ -1271,16 +1280,25 @@ def minimize_func(parameters, *data):
         if best_plusname != "":
             for newgame in games_by_mod[best_plusname]:
                 if newgame not in LINE_JUMP_GAMES:
-                    LINE_JUMP_GAMES[newgame] = games_by_mod[best_plusname][newgame]        
+                    if type(games_by_mod[best_plusname][newgame]) != dict:
+                        print("game is somehow not a dict; failed to push to line jump; game id {}, plus mod {}".format(newgame, best_plusname))
+                    else:
+                        LINE_JUMP_GAMES[newgame] = games_by_mod[best_plusname][newgame]        
         PLUS_NAME = best_plusname
         for newgame in games_by_mod[new_worstmod]:
             if newgame not in LINE_JUMP_GAMES:
-                LINE_JUMP_GAMES[newgame] = games_by_mod[new_worstmod][newgame]                 
+                if type(games_by_mod[new_worstmod][newgame]) != dict:
+                    print("game is somehow not a dict; failed to push to line jump; game id {}, worst mod {}".format(newgame, new_worstmod))
+                else:
+                    LINE_JUMP_GAMES[newgame] = games_by_mod[new_worstmod][newgame]                 
         WORST_MOD = new_worstmod
         if WORST_MOD != "unmod":
             for newgame in games_by_mod["unmod"]:
                 if newgame not in LINE_JUMP_GAMES:
-                    LINE_JUMP_GAMES[newgame] = games_by_mod["unmod"][newgame]  
+                    if type(games_by_mod["unmod"][newgame]) != dict:
+                        print("game is somehow not a dict; failed to push to line jump; game id {}, unmod and not worstmod".format(newgame))
+                    else:
+                        LINE_JUMP_GAMES[newgame] = games_by_mod["unmod"][newgame]
         LAST_UNMOD = unmod_linear_error
         WORST_ERROR_GAME.clear()           
         WORST_ERROR_GAME[max_error_game] = {}
