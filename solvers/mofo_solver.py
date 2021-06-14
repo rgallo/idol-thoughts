@@ -17,16 +17,17 @@ from solvers import base_solver
 from helpers import parse_mods
 from solvers.mofo_ballpark_terms import BALLPARK_TERMS
 from solvers.mofo_mod_terms import MOFO_MOD_TERMS
+from solvers.mofo_solver_terms import MOFO_TERMS
 import mofo
 
 
-MOFO_STLAT_LIST = ("meantragicness", "meanpatheticism", "meanthwackability", "meandivinity", "meanmoxie",
-                   "meanmusclitude", "meanmartyrdom", "maxthwackability", "maxdivinity", "maxmoxie", "maxmusclitude",
-                   "maxmartyrdom", "meanlaserlikeness", "meanbasethirst", "meancontinuation", "meangroundfriction",
-                   "meanindulgence", "maxlaserlikeness", "maxbasethirst", "maxcontinuation", "maxgroundfriction",
-                   "maxindulgence", "unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness",
-                   "meanomniscience", "meantenaciousness", "meanwatchfulness", "meananticapitalism", "meanchasiness",
-                   "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
+#MOFO_STLAT_LIST = ("meantragicness", "meanpatheticism", "meanthwackability", "meandivinity", "meanmoxie",
+#                   "meanmusclitude", "meanmartyrdom", "maxthwackability", "maxdivinity", "maxmoxie", "maxmusclitude",
+#                   "maxmartyrdom", "meanlaserlikeness", "meanbasethirst", "meancontinuation", "meangroundfriction",
+#                   "meanindulgence", "maxlaserlikeness", "maxbasethirst", "maxcontinuation", "maxgroundfriction",
+#                   "maxindulgence", "unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness",
+#                   "meanomniscience", "meantenaciousness", "meanwatchfulness", "meananticapitalism", "meanchasiness",
+#                   "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 
 def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods):    
@@ -121,9 +122,12 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
 def main():
     print(datetime.datetime.now())
     cmd_args = handle_args()        
+    mofo_base_terms = [term.stat for term in MOFO_TERMS]
     bounds_park_mods = [modterm.bounds for modterm in BALLPARK_TERMS]
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
-    bounds_terms = ([(-8, 0), (0, 3), (0, 4)] * 2) + ([(0, 8), (0, 3), (0, 4)] * 20) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 3), (0, 4)] * (len(MOFO_STLAT_LIST) - 27))    
+    bounds_mofo_terms = [term.bounds for term in MOFO_TERMS]
+    bounds_terms = [item for sublist in bounds_mofo_terms for item in sublist]
+    #bounds_terms = ([(-8, 0), (0, 3), (0, 4)] * 2) + ([(0, 8), (0, 3), (0, 4)] * 20) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 3), (0, 4)] * (len(MOFO_STLAT_LIST) - 27))    
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     game_list = base_solver.get_games(cmd_args.gamefile)
@@ -169,7 +173,7 @@ def main():
         params.extend(",".join([",".join(line.split(",")[-3:]) for line in parkterms.split("\n")[1:] if line]).split(","))   
         baseline_parameters = [float(val) for val in params]
         try:
-            number_to_beat = base_solver.minimize_func(baseline_parameters, get_mofo_results, MOFO_STLAT_LIST, None, team_mod_terms,
+            number_to_beat = base_solver.minimize_func(baseline_parameters, get_mofo_results, mofo_base_terms, None, team_mod_terms,
                                                      BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
                                                      team_attrs, None, solve_for_ev, False, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)            
         except Exception as e:
@@ -184,23 +188,24 @@ def main():
     #print(len(init), ",".join(str(len(s)) for s in init))
     recombination = 0.7
     #recombination = 0.7 if (type(init) == str) else 0.4
-    recombination = 0.5 if (workers > 2 and solve_for_ev) else recombination
-    args = (get_mofo_results, MOFO_STLAT_LIST, None, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
+    if (workers > 2 and solve_for_ev) or (type(init) != str and not solve_for_ev):
+        recombination = 0.5
+    args = (get_mofo_results, mofo_base_terms, None, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, number_to_beat, solve_for_ev, False, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
                                     mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000,
                                     init=init)
-    print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST,
+    print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms,
                                                                                    zip(*[iter(result.x)] * 3))))
-    result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, MOFO_STLAT_LIST, None, team_mod_terms,
+    result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, mofo_base_terms, None, team_mod_terms,
                                                  BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
                                                  team_attrs, None, solve_for_ev, True, cmd_args.debug, False, False, cmd_args.output)
     #screw it, final file output stuff in here to try and make sure it actually happens
     park_mod_list_size = len(BALLPARK_TERMS) * 3
     team_mod_list_size = len(team_mod_terms) * 3
     special_cases_count = 0
-    base_mofo_list_size = len(MOFO_STLAT_LIST) * 3
-    terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(MOFO_STLAT_LIST, zip(*[iter(result.x[:(base_mofo_list_size)])] * 3)))  
+    base_mofo_list_size = len(mofo_base_terms) * 3
+    terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms, zip(*[iter(result.x[:(base_mofo_list_size)])] * 3)))  
     #need to set unused mods to 0, 0, 1
     mods_output = "identifier,team,name,a,b,c"
     for mod, (a, b, c) in zip(team_mod_terms, zip(*[iter(result.x[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
