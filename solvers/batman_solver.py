@@ -21,7 +21,7 @@ BATMAN_HITS_SPECIAL_CASES = ("cutoff",)
 
 BATMAN_HRS_SPECIAL_CASES = ("cutoff",)
 
-BATMAN_ABS_SPECIAL_CASES = ("hitcutoff", "hrcutoff", "walkcutoff", "attemptcutoff", "runoutcutoff", "reverberation", "repeating")                                                                                                                                
+BATMAN_ABS_SPECIAL_CASES = ("contactcutoff", "hitcutoff", "hrcutoff", "walkcutoff", "attemptcutoff", "runoutcutoff", "reverberation", "repeating")                                                                                                                                
 
 def get_batman_results(batter_perf_data, season_team_attrs, atbats_team_stat_data, hits_team_stat_data, hrs_team_stat_data, batter, game):
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
@@ -102,7 +102,7 @@ def main():
     bounds_terms_base = [stlatterm.bounds for stlatterm in BATMAN_ABS_TERMS]        
     bounds_terms = [item for sublist in bounds_terms_base for item in sublist]    
     special_cases = BATMAN_ABS_SPECIAL_CASES                
-    base_bounds = bounds_terms + [[0, 0.1], [0, 0.1], [0, 0.1], [0, 0.25], [0, 0.1], [0, 0.02], [0, 0.02]]        
+    base_bounds = bounds_terms + [[0, 0.1], [0, 0.1], [0, 0.1], [0, 0.1], [0, 0.25], [0, 0.1], [0, 0.02], [0, 0.02]]        
     bounds_team_mods = [modterm.bounds for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]    
     modterms = [modterm for modterm in BATMAN_MOD_TERMS if modterm.stat.lower() in stlatlist]
