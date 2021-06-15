@@ -6,6 +6,7 @@ import collections
 import csv
 import json
 import linecache
+import operator
 import os
 import random
 import sys
@@ -357,6 +358,12 @@ def defense_stars(player):
     )
 
 
+def get_team_attributes(attributes={}):
+    if not attributes:
+        attributes.update({team["fullName"]: (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"]) for team in requests.get("https://www.blaseball.com/database/allTeams").json()})
+    return attributes
+
+
 def adjust_stlats(row, game, day, player_attrs, team_attrs=None):
     new_row = row.copy()
     if "UNDERPERFORMING" in player_attrs:
@@ -480,7 +487,7 @@ def do_init(args):
         streamdata = get_stream_snapshot()
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
     day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
-    if already_ran_for_day(args.dayfile, season_number, day) and not args.forcerun and not args.lineupfile:
+    if already_ran_for_day(args.dayfile, season_number, day) and not args.forcerun:
         print("Already ran for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
     today_schedule = streamdata['value']['games']['schedule']
@@ -533,7 +540,7 @@ def do_init(args):
     for game in game_schedule:
         all_pitcher_ids.extend((game["awayPitcher"], game["homePitcher"]))
     all_pitcher_ids = [pid for pid in all_pitcher_ids if pid]
-    if not all_pitcher_ids and not args.lineupfile:
+    if not all_pitcher_ids:
         print("No pitchers assigned to games on Season {} Day {}, exiting.".format(season_number + 1, day))
         sys.exit(0)
     outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]

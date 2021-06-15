@@ -207,12 +207,6 @@ def get_def_off_ratio(pitcher, defenseteamname, offenseteamname, team_stat_data,
     return (pitchingstars+meandefstars)/((meanbatstars+meanrunstars) ** 2)
 
 
-def get_team_attributes(attributes={}):
-    if not attributes:
-        attributes.update({team["fullName"]: (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"]) for team in requests.get("https://www.blaseball.com/database/allTeams").json()})
-    return attributes
-
-
 def get_player_slug(playername):
     playerslug = playername.lower().replace(" ", "-")
     playerslug = BR_PLAYERNAME_SUBS.get(playerslug, playerslug)
@@ -271,7 +265,8 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
     homeStlatStats = calc_stlat_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
     homeTIM, homeTIMRank, homeTIMCalc = tim.calculate(homeStlatStats)
     awayTIM, awayTIMRank, awayTIMCalc = tim.calculate(awayStlatStats)
-    awayAttrs, homeAttrs = get_team_attributes()[awayTeam], get_team_attributes()[homeTeam]
+    team_attributes = helpers.get_team_attributes()
+    awayAttrs, homeAttrs = team_attributes[awayTeam], team_attributes[homeTeam]
     awayMOFO, homeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs, day, game["weather"])
     # noModAwayMOFO, noModHomeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs, day, game["weather"], skip_mods=True)
     # print("Away: {}, Modded MOFO: {}, Unmodded MOFO: {}".format(awayTeam, awayMOFO, noModAwayMOFO))
