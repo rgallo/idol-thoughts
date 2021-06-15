@@ -39,8 +39,8 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     away_game, home_game = game["away"], game["home"]
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])
     if away_rbi == home_rbi:        
-        return 0, 0, 0, 0    
-    awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
+        return 0, 0, 0, 0        
+    awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
     awayMods, homeMods = mofo.get_mods(mods, game_attrs["away"], game_attrs["home"], awayTeam, homeTeam, awayPitcher, homePitcher, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)                          
     awayodds, homeodds = mofo.get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms,
