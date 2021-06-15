@@ -175,7 +175,7 @@ def get_payout_bonuses(player_ids):
 def print_pitcher(pitcher, fomo_error):
     print(f"{pitcher.pitchername} ({pitcher.pitcherteamnickname}, "
           f"FOMO {((pitcher.fomoodds - fomo_error) * 100.0):.2f}% - {((pitcher.fomoodds + fomo_error) * 100.0):.2f}%, "
-          f"Webodds {(pitcher.websiteodds * 100.0):.2f}%")
+          f"Webodds {(pitcher.websiteodds * 100.0):.2f}%)")
 
 
 def print_fomo(day, best, worst, fomo_error):
@@ -196,7 +196,7 @@ def get_games_to_output(pair_results, fomo_error):
     fomo_top_game = fomo_sorted_results[0]
     min_fomo = max(fomo_top_game.awayFOMOData.fomoodds, fomo_top_game.homeFOMOData.fomoodds) - fomo_error
     for pair in fomo_sorted_results:
-        if (pair.awayFOMOData.gameid == top_webodds_game_id or max(pair.awayFOMOData.fomoodds, pair.homeFOMOData.fomoodds) > min_fomo):
+        if (pair.awayFOMOData.gameid == top_webodds_game_id or (max(pair.awayFOMOData.fomoodds, pair.homeFOMOData.fomoodds) + fomo_error) > min_fomo):
             if pair.awayFOMOData.fomoodds >= .5:
                 best.append(pair.awayFOMOData)
                 worst.append(pair.homeFOMOData)
