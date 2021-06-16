@@ -17,13 +17,13 @@ FOMOData = namedtuple("FOMOData", ["pitchername", "pitcherid", "pitcherteam", "g
 FOMOPair = namedtuple("FOMOPair", ["awayFOMOData", "homeFOMOData"])
 
 
-def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players, bonus_multiplier, screen=False):
+def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players, bonus_multiplier, mismatches, screen=False):
     Webhook, Embed = (helpers.PrintWebhook, helpers.PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     notify_role = os.getenv("NOTIFY_ROLE")
     webhook = Webhook(url=discord_webhook_url, content="__**Day {}**__".format(day))
     if bonus_players:
-        desc = f"<@&{notify_role}>\n"
+        desc = "" # f"<@&{notify_role}>\n"
         desc += "\n".join(f"[:rotating_light: :rotating_light: "
                           f"{pitchers[bonus_player]} has a {bonus_multiplier}x payout, go idol! "
                           f":rotating_light: :rotating_light:](https://www.blaseball.com/player/{bonus_player})"
@@ -35,6 +35,16 @@ def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players
                          f"(FOMO {((pitcher.fomoodds - fomo_error) * 100.0):.2f}% - {((pitcher.fomoodds + fomo_error) * 100.0):.2f}%, "
                          f"Webodds {(pitcher.websiteodds * 100.0):.2f}%)" for pitcher in pitchers)
         webhook.add_embed(Embed(title=f"{title} Pitchers:", description=desc))
+    if mismatches:
+        odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, FOMO: **{}** {:.2f}%".format(
+            "**{}**".format(result.awayFOMOData.pitcherteamnickname) if result.awayFOMOData.fomoodds > result.homeFOMOData.fomoodds else result.awayFOMOData.pitcherteamnickname,
+            "**{}**".format(result.homeFOMOData.pitcherteamnickname) if result.homeFOMOData.fomoodds > result.awayFOMOData.fomoodds else result.homeFOMOData.pitcherteamnickname,
+            result.awayFOMOData.pitcherteamnickname if result.awayFOMOData.websiteodds > result.homeFOMOData.websiteodds else result.homeFOMOData.pitcherteamnickname,
+            (max(result.awayFOMOData.websiteodds, result.homeFOMOData.websiteodds)) * 100.0,
+            result.awayFOMOData.pitcherteamnickname if result.awayFOMOData.fomoodds > result.homeFOMOData.fomoodds else result.homeFOMOData.pitcherteamnickname,
+            (max(result.awayFOMOData.fomoodds, result.homeFOMOData.fomoodds)) * 100.0)
+                                      for result in sorted(mismatches, key=lambda result: max(result.awayFOMOData.websiteodds, result.homeFOMOData.websiteodds), reverse=True)])
+        webhook.add_embed(Embed(title="FOMO Mismatches", description=odds_description))
     return webhook.execute()
 
 
@@ -84,7 +94,7 @@ def print_pitcher(pitcher, fomo_error):
           f"Webodds {(pitcher.websiteodds * 100.0):.2f}%)")
 
 
-def print_fomo(day, best, worst, fomo_error, pitchers, bonus_players, bonus_multiplier):
+def print_fomo(day, best, worst, fomo_error, pitchers, bonus_players, bonus_multiplier, mismatches):
     print("Day {}".format(day))
     if bonus_players:
         for bonus_player in bonus_players:
@@ -95,6 +105,14 @@ def print_fomo(day, best, worst, fomo_error, pitchers, bonus_players, bonus_mult
     print("\nWorst:")
     for pitcher in worst:
         print_pitcher(pitcher, fomo_error)
+    if mismatches:
+        print("\nOdds Mismatches:")
+        print("\n".join(["{} @ {} - Website: {} {:.2f}%, FOMO: {} {:.2f}%".format(result.awayFOMOData.pitcherteamnickname, result.homeFOMOData.pitcherteamnickname,
+            result.awayFOMOData.pitcherteamnickname if result.awayFOMOData.websiteodds > result.homeFOMOData.websiteodds else result.homeFOMOData.pitcherteamnickname,
+            (max(result.awayFOMOData.websiteodds, result.homeFOMOData.websiteodds)) * 100.0,
+            result.awayFOMOData.pitcherteamnickname if result.awayFOMOData.fomoodds > result.homeFOMOData.fomoodds else result.homeFOMOData.pitcherteamnickname,
+            (max(result.awayFOMOData.fomoodds, result.homeFOMOData.fomoodds)) * 100.0)
+            for result in sorted(mismatches, key=lambda result: max(result.awayFOMOData.websiteodds, result.homeFOMOData.websiteodds), reverse=True)]))
 
 
 def get_games_to_output(pair_results, fomo_error):
@@ -137,15 +155,16 @@ def main():
         pitchers.update({awayFOMO.pitcherid: awayFOMO.pitchername, homeFOMO.pitcherid: homeFOMO.pitchername})
         pair_results.append(FOMOPair(awayFOMO, homeFOMO))
     if pair_results:
+        mismatches = [pair for pair in pair_results if (pair.awayFOMOData.fomoodds < .5 < pair.awayFOMOData.websiteodds) or (pair.awayFOMOData.fomoodds > .5 > pair.awayFOMOData.websiteodds) or (.495 <= pair.awayFOMOData.websiteodds < .505)]
         bonus_playerids, bonus_multiplier = get_bonus_players(pitchers.keys())
         fomo_error = float(list(helpers.load_data(os.getenv("FOMO_ERROR")).keys())[0]) / 100.0
         best, worst = get_games_to_output(pair_results, fomo_error)
         if args.discord:
-            output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier)
+            output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, mismatches)
         if args.discordprint:
-            output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, screen=True)
+            output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, mismatches, screen=True)
         if args.print:
-            print_fomo(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier)
+            print_fomo(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, mismatches)
     else:
         print("No results")
     if not args.justlooking:
