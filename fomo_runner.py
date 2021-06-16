@@ -1,10 +1,7 @@
 from __future__ import division
 from __future__ import print_function
 
-import collections
-import operator
 import os
-import time
 from collections import namedtuple
 
 import requests
@@ -13,129 +10,29 @@ from dotenv import load_dotenv
 
 import helpers
 import fomo
-from helpers import geomean, get_weather_idx
-from helpers import PITCHING_STLATS, BATTING_STLATS, DEFENSE_STLATS, BASERUNNING_STLATS, INVERSE_STLATS
 
+FOMOData = namedtuple("FOMOData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "defemoji", "vsteam",
+                                   "offemoji", "pitcherteamnickname", "vsteamnickname", "websiteodds", "fomoodds"])
 
 FOMOPair = namedtuple("FOMOPair", ["awayFOMOData", "homeFOMOData"])
 
 
-def get_formatted_odds(away_odds, home_odds):
-    formatted_away_odds = "{:.2f}%".format(away_odds*100.0)
-    formatted_home_odds = "{:.2f}%".format(home_odds*100.0)
-    if away_odds < home_odds:
-        formatted_away_odds = "~~{}~~".format(formatted_away_odds)
-    elif home_odds < away_odds:
-        formatted_home_odds = "~~{}~~".format(formatted_home_odds)
-    return formatted_away_odds, formatted_home_odds
-
-def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pitchers, score_adjustments, screen=False):
+def output_fomo_to_discord(day, best, worst, fomo_error, screen=False):
     Webhook, Embed = (helpers.PrintWebhook, helpers.PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
-    notify_tim_rank, notify_role = os.getenv("NOTIFY_TIM_RANK"), os.getenv("NOTIFY_ROLE")
-    siesta_notify_role = os.getenv("SIESTA_NOTIFY_ROLE")
-    sortkey = lambda matchup_pair: (max(matchup_pair.awayMatchupData.timrank, matchup_pair.homeMatchupData.timrank),
-                                    max(matchup_pair.awayMatchupData.k9, matchup_pair.homeMatchupData.k9),
-                                    max(matchup_pair.awayMatchupData.mofoodds, matchup_pair.homeMatchupData.mofoodds))
-    sorted_pairs = sorted(matchup_pairs, key=sortkey, reverse=True)
-    batches = len(matchup_pairs)
-    sun2weather, bhweather = get_weather_idx("Sun 2"), get_weather_idx("Black Hole")
-    webhooks = [Webhook(url=discord_webhook_url,
-                        content="__**Day {}**__".format(day) if not batch else helpers.discord_hr(10, char='-')) for batch in range(batches)]
-    odds_mismatch, notify, picks_to_click, not_your_dad, bad_bets = [], [], [], [], []
-    for idx, result in enumerate(sorted_pairs):
-        awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
-        awayOdds, homeOdds = get_formatted_odds(awayMatchupData.websiteodds, homeMatchupData.websiteodds)
-        awayMOFOOdds, homeMOFOOdds = get_formatted_odds(awayMatchupData.mofoodds, homeMatchupData.mofoodds)
-        awayHigherTIMRank = awayMatchupData.timrank > homeMatchupData.timrank
-        awayHigherTIM = awayHigherTIMRank or (awayMatchupData.timrank == homeMatchupData.timrank and awayMatchupData.timcalc > homeMatchupData.timcalc)
-        homeHigherTIMRank = homeMatchupData.timrank > awayMatchupData.timrank
-        homeHigherTIM = homeHigherTIMRank or (homeMatchupData.timrank == awayMatchupData.timrank and homeMatchupData.timcalc > awayMatchupData.timcalc)
-        awayOutput = get_output_line_from_matchup(awayMatchupData, awayOdds, awayMOFOOdds, so9_pitchers, k9_pitchers,
-                                                  awayHigherTIM, homeHigherTIMRank, screen=screen)
-        awayOutput = add_score_adjustments(awayOutput, awayMatchupData, score_adjustments)
-        homeOutput = get_output_line_from_matchup(homeMatchupData, homeOdds, homeMOFOOdds, so9_pitchers, k9_pitchers,
-                                                  homeHigherTIM, awayHigherTIMRank, screen=screen)
-        homeOutput = add_score_adjustments(homeOutput, homeMatchupData, score_adjustments)
-        if (awayMatchupData.mofoodds < .5 < awayMatchupData.websiteodds) or (awayMatchupData.mofoodds > .5 > awayMatchupData.websiteodds) or (.495 <= awayMatchupData.websiteodds < .505):
-            odds_mismatch.append(result)
-        ev = get_ev(awayMatchupData, homeMatchupData)
-        loser_ev = get_ev(awayMatchupData, homeMatchupData, loser=True)
-        if ev >= 1.0:
-            picks_to_click.append(result)
-        if loser_ev >= 1.0 and loser_ev >= ev:
-            not_your_dad.append(result)
-        if ev <= 1.0 and loser_ev <= 1.0:
-            bad_bets.append(result)
-        if notify_tim_rank and notify_role:
-            if awayMatchupData.timrank >= int(notify_tim_rank):
-                notify.append(awayMatchupData)
-            if homeMatchupData.timrank >= int(notify_tim_rank):
-                notify.append(homeMatchupData)
-        webhooks[(idx * 2) // DISCORD_RESULT_PER_BATCH].add_embed(Embed(description=awayOutput, color=awayMatchupData.tim.color))
-        webhooks[(idx * 2) // DISCORD_RESULT_PER_BATCH].add_embed(Embed(description=homeOutput, color=homeMatchupData.tim.color))
-    results = []
-    for webhook in webhooks:
-        results.append(webhook.execute())
-        time.sleep(.5)
-    if picks_to_click:
-        p2c_description = "\n".join(["{} @ {} - EV: {} {}".format(
-            "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
-            "**{}**".format(result.homeMatchupData.pitcherteamnickname) if result.homeMatchupData.mofoodds > result.awayMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
-            "{:.2f}".format(get_ev(result.awayMatchupData, result.homeMatchupData)),
-            ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else ""
-        ) for result in sorted(picks_to_click, key=lambda result: get_ev(result.awayMatchupData, result.homeMatchupData), reverse=True)])
-        results.append(helpers.send_discord_message("__Picks To Click__", p2c_description, screen=screen))
-        time.sleep(.5)
-    if not_your_dad:
-        linyd_description = "\n".join(["{} @ {} - EV: {:.2f}, MOFO: {:.2f}% {}".format(
-            "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds < result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
-            "**{}**".format(result.homeMatchupData.pitcherteamnickname) if result.homeMatchupData.mofoodds < result.awayMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
-            get_ev(result.awayMatchupData, result.homeMatchupData, loser=True),
-            min(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds) * 100.0,
-            ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else ""
-        ) for result in sorted(not_your_dad, key=lambda result: get_ev(result.awayMatchupData, result.homeMatchupData, loser=True), reverse=True)])
-        results.append(helpers.send_discord_message("__Look, I'm Not Your Dad__", linyd_description, screen=screen))
-        time.sleep(.5)
-    if odds_mismatch:
-        odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, MOFO: **{}** {:.2f}% {}".format(
-            "**{}**".format(result.awayMatchupData.pitcherteamnickname) if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.awayMatchupData.pitcherteamnickname,
-            "**{}**".format(result.homeMatchupData.pitcherteamnickname) if result.homeMatchupData.mofoodds > result.awayMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
-            result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.websiteodds > result.homeMatchupData.websiteodds else result.homeMatchupData.pitcherteamnickname,
-            (max(result.awayMatchupData.websiteodds, result.homeMatchupData.websiteodds)) * 100.0,
-            result.awayMatchupData.pitcherteamnickname if result.awayMatchupData.mofoodds > result.homeMatchupData.mofoodds else result.homeMatchupData.pitcherteamnickname,
-            (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0,
-            ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else "")
-                                      for result in sorted(odds_mismatch, key=lambda result: max(result.awayMatchupData.websiteodds, result.homeMatchupData.websiteodds), reverse=True)])
-        results.append(helpers.send_discord_message("__Odds Mismatches__", odds_description, screen=screen))
-        time.sleep(.5)
-    if bad_bets:
-        bb_description = "\n".join(["{} @ {} - EV: {} {}".format(
-            result.awayMatchupData.pitcherteamnickname, result.homeMatchupData.pitcherteamnickname, "{:.2f}".format(get_ev(result.awayMatchupData, result.homeMatchupData)),
-            ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else ""
-        ) for result in sorted(bad_bets, key=lambda result: get_ev(result.awayMatchupData, result.homeMatchupData), reverse=True)])
-        results.append(helpers.send_discord_message("__Bad Bets__", bb_description, screen=screen))
-        time.sleep(.5)
-    if notify:
-        notify_message = "<@&{}> __**FIRE PICKS**__\n".format(notify_role)
-        notify_message += "\n".join(["{}, {} - **{}**".format(matchup_data.pitchername, matchup_data.pitcherteamnickname,
-                                                            matchup_data.tim.name) for matchup_data in notify])
-        results.append(Webhook(url=discord_webhook_url, content=notify_message).execute())
-    if siesta_notify_role and day in (28, 73):
-        siesta_notify_message = "<@&{}> Siesta coming up!".format(siesta_notify_role)
-        siesta_notify_message += "\nRemember to get your bets in before all the current games end!"
-        results.append(Webhook(url=discord_webhook_url, content=siesta_notify_message).execute())
-    return results
+    notify_role = os.getenv("NOTIFY_ROLE")
+    # TODO notify_message = "<@&{}> __**FIRE PICKS**__\n".format(notify_role)
+    webhook = Webhook(url=discord_webhook_url, content="__**Day {}**__".format(day))
+    for title, pitchers in (("Best", best), ("Worst", worst)):
+        desc = "\n".join(f"{helpers.get_emoji(pitcher.defemoji)} **[{pitcher.pitchername}](https://www.blaseball.com/player/{pitcher.pitcherid}), {pitcher.pitcherteamnickname}** (FOMO {((pitcher.fomoodds - fomo_error) * 100.0):.2f}% - {((pitcher.fomoodds + fomo_error) * 100.0):.2f}%, Webodds {(pitcher.websiteodds * 100.0):.2f}%)" for pitcher in pitchers)
+        webhook.add_embed(Embed(title=f"{title} Pitchers:", description=desc))
+    return webhook.execute()
 
 
 def get_team_attributes(attributes={}):
     if not attributes:
         attributes.update({team["fullName"]: (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"]) for team in requests.get("https://www.blaseball.com/database/allTeams").json()})
     return attributes
-
-
-FOMOData = namedtuple("FOMOData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "defemoji", "vsteam",
-                                   "offemoji", "pitcherteamnickname", "vsteamnickname", "websiteodds", "fomoodds"])
 
 
 def process_fomo(game, team_stat_data, pitcher_stat_data, day):

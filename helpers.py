@@ -229,7 +229,7 @@ def handle_args():
     parser.add_argument('--env', help="path to .env file, defaults to .env in same directory")
     parser.add_argument('--justlooking', help="don't update lastday file", action='store_true')
     args = parser.parse_args()
-    if not args.print and not args.discord and not args.airtable and not args.discordprint and not args.lineupfile:
+    if not args.print and not args.discord and not args.discordprint:
         print("No output specified")
         parser.print_help()
         sys.exit(-1)
@@ -511,7 +511,7 @@ def do_init(args):
                     message = "Waiting up to {} minute{} {}for current games to end."
                     message = message.format(total_seconds // 60, "" if total_seconds // 60 == 1 else "s",
                                              "{} seconds ".format(total_seconds % 60) if total_seconds % 60 else "")
-                    if args.discord:
+                    if args.discord and os.getenv("WAIT_APOLOGY", "true") == "true":
                         send_discord_message("Sorry!", message)
                     else:
                         print(message)
@@ -546,7 +546,7 @@ def do_init(args):
     outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
     stat_file_exists = os.path.isfile(args.statfile)
     if (outcomes or not stat_file_exists or args.forceupdate or ((day == 1 and args.today) or day == 2)) and not args.skipupdate:
-        if args.discord:
+        if args.discord and os.getenv("SHOW_STAT_CHANGES", "true") == "true":
             message = "Generating new stat file, please stand by.\n\n{}".format("\n".join("`{}`".format(outcome) for outcome in outcomes))
             send_discord_message("One sec!", message[:DISCORD_SPLIT_LIMIT])
         else:
@@ -556,3 +556,10 @@ def do_init(args):
     team_pid_stat_data, _ = load_stat_data_pid(args.statfile, game_schedule, day)
     return game_schedule, streamdata, season_number, day, all_pitcher_ids, team_stat_data, team_pid_stat_data, pitcher_stat_data
 
+
+def get_emoji(raw_emoji):
+    try:
+        emoji = chr(int(raw_emoji, 16))
+    except ValueError:
+        emoji = raw_emoji
+    return emoji
