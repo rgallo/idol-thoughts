@@ -39,8 +39,8 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     away_game, home_game = game["away"], game["home"]
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])
     if away_rbi == home_rbi:        
-        return 0, 0, 0, 0    
-    awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])
+        return 0, 0, 0, 0        
+    awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
     awayMods, homeMods = mofo.get_mods(mods, game_attrs["away"], game_attrs["home"], awayTeam, homeTeam, awayPitcher, homePitcher, away_game["weather"], ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)                          
     awayodds, homeodds = mofo.get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms,
@@ -79,7 +79,7 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
         pattern = re.compile(r'^Net EV = ([-\.\d]*), web EV = ([-\.\d]*), season EV = ([-\.\d]*), mismatches = ([-\.\d]*), dadbets = ([-\.\d]*)$', re.MULTILINE)
         is_worst = True
     else:
-        pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*), early linear ([-\.\d]*) \(([-\.\d]*)% of final\), fail rate ([-\.\d]*)%$', re.MULTILINE)
+        pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*), worst mod = ([^,]*), ([-\.\d]*), fail rate ([-\.\d]*)\%$', re.MULTILINE)
     results = []
     mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
@@ -110,8 +110,8 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
             parksplitdata = [d.split(",") for d in park_file.readlines()[1:] if d]
         for row in parksplitdata:
             params.extend([float(row[2]), float(row[3]), float(row[4])])        
-        with open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:            
-            results.append((float(pattern.findall(details_file.read())[0][1]), params))               
+        with open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:                            
+            results.append((float(pattern.findall(details_file.read())[0][0]), params))               
     if is_random:
         random.shuffle(results)
     else:
@@ -213,9 +213,14 @@ def main():
     #mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
     ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(BALLPARK_TERMS, zip(*[iter(result.x[-(park_mod_list_size):])] * 3)))
     outputdir = cmd_args.output
-    base_solver.write_final(outputdir, "MOFOCoefficients.csv", "name,a,b,c\n" + terms_output)
-    base_solver.write_final(outputdir, "MOFOTeamModsCorrection.csv",  mods_output)
-    base_solver.write_final(outputdir, "MOFOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
+    if solve_for_ev:
+        base_solver.write_final(outputdir, "MOFOCoefficients.csv", "name,a,b,c\n" + terms_output)
+        base_solver.write_final(outputdir, "MOFOTeamModsCorrection.csv",  mods_output)
+        base_solver.write_final(outputdir, "MOFOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
+    else:
+        base_solver.write_final(outputdir, "FOMOCoefficients.csv", "name,a,b,c\n" + terms_output)
+        base_solver.write_final(outputdir, "FOMOTeamModsCorrection.csv",  mods_output)
+        base_solver.write_final(outputdir, "FOMOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())
 

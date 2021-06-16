@@ -71,7 +71,7 @@ HAS_GAMES = {}
 WORST_ERROR_GAME = {}
 LAST_ITERATION_TIME = datetime.datetime.now()
 
-ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "ACIDIC", "FIERY", "PSYCHIC"}
+ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "A", "ACIDIC", "FIERY", "PSYCHIC"}
 ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
 
@@ -81,7 +81,7 @@ FLOOD_WEATHER = get_weather_idx("Flooding")
 
 def get_pitcher_id_lookup(filename):
     with open(filename) as f:
-        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
+        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]        
     return {row["id"]: (row["name"], row["team"]) for row in filedata}
     #experimenting with not caring about if the pitcher id is actually identified as a rotation position in the stlats file
     #return {row["id"]: (row["name"], row["team"]) for row in filedata if row["position"] == "rotation"}
@@ -483,7 +483,7 @@ def minimize_func(parameters, *data):
     unmod_fails, unmod_games, unmod_rate, unmod_web_fails = 0, 0, 0.0, 0
     reject_solution, viability_unchecked, new_pass, addfails, stats_regened, early_linear_checked = False, True, False, False, False, True
     line_jumpers, reorder_failsfirst, reorder_keys, ev_set, ev_by_team, games_by_mod, vals_by_mod = {}, {}, {}, {}, {}, {}, {}
-    all_vals, win_loss, gameids, early_vals, early_sorted = [], [], [], [], []
+    all_vals, win_loss, gameids, early_vals, early_sorted, pos_vals = [], [], [], [], [], []
     worst_vals, worst_win_loss, worst_gameids, overall_vals, overall_win_loss, overall_gameids = [], [], [], [], [], []
     if ALL_GAMES > 0:       
         games_available = ALL_GAMES - len(LINE_JUMP_GAMES)
@@ -899,7 +899,7 @@ def minimize_func(parameters, *data):
                     pitchers = get_pitcher_id_lookup(last_stat_filename)
                     team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
                     stats_regened = False
-                STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)
+                STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)                
             if not pitchers:
                 raise Exception("No stat file found")
             cached_ballparks = BALLPARK_CACHE.get((season, day))
@@ -951,7 +951,7 @@ def minimize_func(parameters, *data):
                         win_loss.append(0)
                         win_loss.append(1)
                     gameids.append(game["home"]["game_id"])
-                    all_vals.append(game_home_val)   
+                    all_vals.append(game_home_val)                      
                     game_ev, game_mismatch, game_dadbets, game_web_ev, season_ev, season_web_ev = game_ev_calculate(ev_set, game["away"]["game_id"])    
                     if solve_for_ev:
                         game_fail_counter = -game_ev   
@@ -1130,7 +1130,7 @@ def minimize_func(parameters, *data):
         TOTAL_GAME_COUNTER = game_counter if (game_counter > TOTAL_GAME_COUNTER) else TOTAL_GAME_COUNTER         
 
     fail_points, linear_points = 10000000000.0, 10000000000.0    
-    max_fail_rate = 0.0
+    max_fail_rate, expected_average = 0.0, 0.25
     new_worstmod_linear_error = max(worstmod_linear_error, unmod_linear_error)    
     linear_error = 0.0
     max_mod_unmod, max_error_game, new_plusname = "", "", ""
@@ -1163,6 +1163,10 @@ def minimize_func(parameters, *data):
                 all_vals.sort()
                 linear_error, max_linear_error, min_linear_error, max_error_value, min_error_value, errors, max_error_game, other_errors = calc_linear_unex_error(all_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD)  
             else:
+                for val in all_vals:
+                    if val >= 0.5:
+                        pos_vals.append(val)
+                expected_average = sum(pos_vals) / len(pos_vals)
                 sorted_vals_by_mod = sorted(vals_by_mod, key=lambda k: len(vals_by_mod[k]))
                 modcount = 0
                 for modname in sorted_vals_by_mod:
@@ -1448,7 +1452,7 @@ def minimize_func(parameters, *data):
             #    detailtext += "\nMajor errors at: " + errors_output
             #elif not solve_for_ev:
             #    detailtext += "\nNo major errors"
-            detailtext += "\nFail error points = {:.0f}, Linearity error points = {:.0f}, total = {:.0f}".format(fail_points, linear_points, linear_fail)
+            detailtext += "\nFail error points = {:.0f}, Linearity error points = {:.0f}, total = {:.0f}, fail rate {:.2f}%, expected {:.2f}%".format(fail_points, linear_points, linear_fail, fail_rate * 100.0, (1.0 - expected_average) * 100.0)
             debug_print(detailtext, debug, run_id)
             if outputdir:
                 write_file(outputdir, run_id, "details.txt", detailtext)
@@ -1514,26 +1518,24 @@ def minimize_func(parameters, *data):
                 debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, linear error {:.4f}, {} rejects since last check-in, {:.2f} seconds".format(BEST_RESULT, CURRENT_ITERATION, (BEST_FAIL_RATE * 100.0), BEST_LINEAR_ERROR, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)
             else:  
                 worstmod_report = WORST_MOD + (" " + PLUS_NAME if (PLUS_NAME != "") else "")
-                debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, max linear fail {:.2f}, worst mod {}, {} rejects since last check-in, {:.2f} seconds".format(BEST_RESULT, CURRENT_ITERATION, (BEST_AGG_FAIL_RATE * 100.0), ERROR_THRESHOLD, worstmod_report, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)
+                debug_print("Best so far - {:.2f}, iteration # {}, fail rate {:.2f}, max linear fail {:.2f}, worst mod {}, {} rejects since last check-in, {:.2f} seconds".format(BEST_RESULT, CURRENT_ITERATION, (BEST_AGG_FAIL_RATE * 100.0), ERROR_THRESHOLD, worstmod_report, REJECTS, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)                
             REJECTS = 0
             LAST_ITERATION_TIME = now
         else:
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1           
-    now = datetime.datetime.now()        
-    #if ((now - LAST_CHECKTIME).total_seconds()) % 600 <= 6:
-    #    #print("Six second pause")
-    #    time.sleep(6)          
-    #    #print("BACK TO WORK")
-    if ((now - LAST_CHECKTIME).total_seconds()) > 28800:    
-        print("{} Taking our state-mandated twenty minute long rest per eight hours of work".format(datetime.datetime.now()))
+    now = datetime.datetime.now()
+    if CURRENT_ITERATION % 500 == 0:
+        time.sleep(10)
+    if ((now - LAST_CHECKTIME).total_seconds()) > 7200:    
+        print("{} Taking our state-mandated 4 minute long rest per 2 hours of work".format(datetime.datetime.now()))
         sleeptime, sleepmins = 0.0, 0.0         
-        while sleepmins < 20:
+        while sleepmins < 5:
             time.sleep(6)          
             sleeptime += 0.1
             if sleeptime >= 1.0:
                 sleepmins += 1.1
-                if sleepmins == 5.5 or sleepmins == 11 or sleepmins >= 20:
+                if sleepmins == 2.2 or sleepmins == 4.4:
                     print("{} Slept for {} minutes".format(datetime.datetime.now(), sleepmins))
                 sleeptime = 0.0
         LAST_CHECKTIME = datetime.datetime.now()        
