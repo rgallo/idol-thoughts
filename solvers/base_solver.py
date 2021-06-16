@@ -11,7 +11,7 @@ import uuid
 from glob import glob
 
 from helpers import StlatTerm, ParkTerm, get_weather_idx
-from idolthoughts import load_stat_data, load_stat_data_pid
+from helpers import load_stat_data, load_stat_data_pid
 from batman import get_team_atbats, get_batman_mods
 
 STAT_CACHE = {}
