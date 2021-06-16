@@ -24,7 +24,6 @@ def calc_team(terms, termset, mods, skip_mods=False):
         total += term.calc(val) * multiplier
     return total
 
-
 def team_defense(terms, pitcher, teamname, mods, team_stat_data, pitcher_stat_data, skip_mods=False):
     pitcher_data = pitcher_stat_data[pitcher]
     team_data = team_stat_data[teamname]
@@ -72,6 +71,33 @@ def team_offense(terms, teamname, mods, team_stat_data, skip_mods=False):
             ("maxcontinuation", max(team_data["continuation"])),
             ("maxgroundfriction", max(team_data["groundFriction"])),
             ("maxindulgence", max(team_data["indulgence"])))
+    return calc_team(terms, termset, mods, skip_mods=skip_mods)
+
+def player_offense(terms, teamname, mods, player_stat_data, skip_mods=False):    
+    termset = (
+            ("tragicness", player_stat_data["tragicness"]),
+            ("patheticism", player_stat_data["patheticism"]),
+            ("thwackability", player_stat_data["thwackability"]),
+            ("divinity", player_stat_data["divinity"]),
+            ("moxie", player_stat_data["moxie"]),
+            ("musclitude", player_stat_data["musclitude"]),
+            ("martyrdom", player_stat_data["martyrdom"]),            
+            ("laserlikeness", player_stat_data["laserlikeness"]),
+            ("basethirst", player_stat_data["baseThirst"]),
+            ("continuation", player_stat_data["continuation"]),
+            ("groundfriction", player_stat_data["groundFriction"]),
+            ("indulgence", player_stat_data["indulgence"])
+            )
+    return calc_team(terms, termset, mods, skip_mods=skip_mods)
+
+def player_defense(terms, teamname, mods, player_stat_data, skip_mods=False):    
+    termset = (
+            ("omniscience", player_stat_data["omniscience"]),
+            ("tenaciousness", player_stat_data["tenaciousness"]),
+            ("watchfulness", player_stat_data["watchfulness"]),
+            ("anticapitalism", player_stat_data["anticapitalism"]),
+            ("chasiness", player_stat_data["chasiness"])
+            )
     return calc_team(terms, termset, mods, skip_mods=skip_mods)
 
 def calc_stlatmod(name, pitcher_data, team_data, stlatterm):    
