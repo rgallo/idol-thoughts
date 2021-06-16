@@ -17,14 +17,23 @@ FOMOData = namedtuple("FOMOData", ["pitchername", "pitcherid", "pitcherteam", "g
 FOMOPair = namedtuple("FOMOPair", ["awayFOMOData", "homeFOMOData"])
 
 
-def output_fomo_to_discord(day, best, worst, fomo_error, screen=False):
+def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players, bonus_multiplier, screen=False):
     Webhook, Embed = (helpers.PrintWebhook, helpers.PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     notify_role = os.getenv("NOTIFY_ROLE")
-    # TODO notify_message = "<@&{}> __**FIRE PICKS**__\n".format(notify_role)
     webhook = Webhook(url=discord_webhook_url, content="__**Day {}**__".format(day))
+    if bonus_players:
+        desc = f"<@&{notify_role}>\n"
+        desc += "\n".join(f"[:rotating_light::rotating_light: "
+                          f"{pitchers[bonus_player]} has a {bonus_multiplier}x payout, go idol! "
+                          f":rotating_light::rotating_light:](https://www.blaseball.com/player/{bonus_player})"
+                          f"" for bonus_player in bonus_players)
+        webhook.add_embed(Embed(title="Bonus Payouts!", description=desc))
     for title, pitchers in (("Best", best), ("Worst", worst)):
-        desc = "\n".join(f"{helpers.get_emoji(pitcher.defemoji)} **[{pitcher.pitchername}](https://www.blaseball.com/player/{pitcher.pitcherid}), {pitcher.pitcherteamnickname}** (FOMO {((pitcher.fomoodds - fomo_error) * 100.0):.2f}% - {((pitcher.fomoodds + fomo_error) * 100.0):.2f}%, Webodds {(pitcher.websiteodds * 100.0):.2f}%)" for pitcher in pitchers)
+        desc = "\n".join(f"{helpers.get_emoji(pitcher.defemoji)} **[{pitcher.pitchername}]"
+                         f"(https://www.blaseball.com/player/{pitcher.pitcherid}), {pitcher.pitcherteamnickname}** "
+                         f"(FOMO {((pitcher.fomoodds - fomo_error) * 100.0):.2f}% - {((pitcher.fomoodds + fomo_error) * 100.0):.2f}%, "
+                         f"Webodds {(pitcher.websiteodds * 100.0):.2f}%)" for pitcher in pitchers)
         webhook.add_embed(Embed(title=f"{title} Pitchers:", description=desc))
     return webhook.execute()
 
@@ -75,8 +84,11 @@ def print_pitcher(pitcher, fomo_error):
           f"Webodds {(pitcher.websiteodds * 100.0):.2f}%)")
 
 
-def print_fomo(day, best, worst, fomo_error):
+def print_fomo(day, best, worst, fomo_error, pitchers, bonus_players, bonus_multiplier):
     print("Day {}".format(day))
+    if bonus_players:
+        for bonus_player in bonus_players:
+            print(f"---{pitchers[bonus_player]} has a {bonus_multiplier}x payout, go idol!---")
     print("Best:")
     for pitcher in best:
         print_pitcher(pitcher, fomo_error)
@@ -103,23 +115,37 @@ def get_games_to_output(pair_results, fomo_error):
     return best, worst
 
 
+def get_bonus_players(player_ids):
+    players, bonus = None, 0
+    credits_to_the_team, double_payouts = get_payout_bonuses(player_ids)
+    if credits_to_the_team & double_payouts:
+        players, bonus = credits_to_the_team & double_payouts, 10
+    elif credits_to_the_team:
+        players, bonus = credits_to_the_team, 5
+    elif double_payouts:
+        players, bonus = double_payouts, 2
+    return players, bonus
+
+
 def main():
     args = helpers.handle_args()
     load_dotenv(dotenv_path=args.env)
     game_schedule, streamdata, season_number, day, all_pitcher_ids, team_stat_data, team_pid_stat_data, pitcher_stat_data = helpers.do_init(args)
-    pair_results = []
+    pair_results, pitchers = [], {}
     for game in game_schedule:
         awayFOMO, homeFOMO = process_fomo(game, team_stat_data, pitcher_stat_data, day)
+        pitchers.update({awayFOMO.pitcherid: awayFOMO.pitchername, homeFOMO.pitcherid: homeFOMO.pitchername})
         pair_results.append(FOMOPair(awayFOMO, homeFOMO))
     if pair_results:
+        bonus_playerids, bonus_multiplier = get_bonus_players(pitchers.keys())
         fomo_error = float(list(helpers.load_data(os.getenv("FOMO_ERROR")).keys())[0]) / 100.0
         best, worst = get_games_to_output(pair_results, fomo_error)
         if args.discord:
-            output_fomo_to_discord(day, best, worst, fomo_error)
+            output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier)
         if args.discordprint:
-            output_fomo_to_discord(day, best, worst, fomo_error, screen=True)
+            output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, screen=True)
         if args.print:
-            print_fomo(day, best, worst, fomo_error)
+            print_fomo(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier)
     else:
         print("No results")
     if not args.justlooking:
