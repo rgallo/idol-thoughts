@@ -186,7 +186,7 @@ def main():
     popsize = 25        
     init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'latinhypercube'
     #print(len(init), ",".join(str(len(s)) for s in init))
-    recombination = 0.7
+    recombination = 0.7 if solve_for_ev else 0.5
     #recombination = 0.7 if (type(init) == str) else 0.4
     if (workers > 2 and solve_for_ev) or (type(init) != str and not solve_for_ev):
         recombination = 0.5

@@ -1525,19 +1525,14 @@ def minimize_func(parameters, *data):
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1           
     now = datetime.datetime.now()
-    if CURRENT_ITERATION % 500 == 0:
+    if CURRENT_ITERATION % 100 == 0:
         time.sleep(10)
-    if ((now - LAST_CHECKTIME).total_seconds()) > 7200:    
-        print("{} Taking our state-mandated 4 minute long rest per 2 hours of work".format(datetime.datetime.now()))
+    if ((now - LAST_CHECKTIME).total_seconds()) > 1800:    
+        print("{} Taking our state-mandated 4 minute long rest per 30 minutes of work".format(datetime.datetime.now()))
         sleeptime, sleepmins = 0.0, 0.0         
-        while sleepmins < 5:
-            time.sleep(6)          
-            sleeptime += 0.1
-            if sleeptime >= 1.0:
-                sleepmins += 1.1
-                if sleepmins == 2.2 or sleepmins == 4.4:
-                    print("{} Slept for {} minutes".format(datetime.datetime.now(), sleepmins))
-                sleeptime = 0.0
+        while sleeptime < 4:
+            time.sleep(30)          
+            sleeptime += 0.50            
         LAST_CHECKTIME = datetime.datetime.now()        
         print("{} BACK TO WORK".format(datetime.datetime.now()))       
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
