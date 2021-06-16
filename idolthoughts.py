@@ -1,26 +1,19 @@
 from __future__ import division
 from __future__ import print_function
 
-import argparse
 import collections
-import csv
-import json
-import linecache
 import operator
 import os
-import random
-import sys
 import time
 from collections import namedtuple
 
 import requests
-from airtable import Airtable
 from discord_webhook import DiscordWebhook, DiscordEmbed
 from dotenv import load_dotenv
 
 import batman
+import helpers
 import k9
-from blaseball_stat_csv import blaseball_stat_csv
 import tim
 import mofo
 from helpers import geomean, get_weather_idx
@@ -51,44 +44,7 @@ BR_PLAYERNAME_SUBS = {
 
 BNG_FLOOR = 100.0
 BNG_CEILING = 994975
-LAST_SEASON_STAT_CUTOFF = 11
-DISCORD_SPLIT_LIMIT = 1900
 DISCORD_RESULT_PER_BATCH = 2
-
-
-class PrintWebhook:
-    def __init__(self, content=None, **kwargs):
-        self.content = content
-        self.embeds = []
-
-    def add_embed(self, embed):
-        self.embeds.append(embed)
-
-    def execute(self):
-        if self.content:
-            print(self.content)
-        for embed in self.embeds:
-            print(embed)
-
-
-class PrintEmbed:
-    def __init__(self, description=None, **kwargs):
-        self.description = description
-
-    def __repr__(self):
-        return "{}\n{}".format(discord_hr(), self.description)
-
-
-def discord_hr(spaces=25, char=" "):
-    return "~~-{}-~~".format(char * spaces)
-
-
-def send_discord_message(title, message, screen=False):
-    Webhook, Embed = (PrintWebhook, PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
-    discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
-    webhook = Webhook(url=discord_webhook_url)
-    webhook.add_embed(Embed(title=title, description=message))
-    return webhook.execute()
 
 
 def get_formatted_odds(away_odds, home_odds):
@@ -109,10 +65,7 @@ def get_output_line_from_matchup(matchup_data, websiteodds, mofoodds, so9_pitche
                  "({:.2f}★ AOB, {:.2f}★ MOB), {:.2f} D/O^2, {} WebOdds, {} MOFO")
     name = matchup_data.pitchername if screen else ("[{}](https://blaseball-reference.com/players/{})"
                                                     "").format(matchup_data.pitchername, get_player_slug(matchup_data.pitchername))
-    try:
-        emoji = chr(int(matchup_data.defemoji, 16))
-    except ValueError:
-        emoji = matchup_data.defemoji
+    emoji = helpers.get_emoji(matchup_data.defemoji)
     return formatstr.format(emoji, name, matchup_data.pitcherteamnickname, tim, k9, so9, matchup_data.era,
                             matchup_data.stardata.meanbatstars, matchup_data.stardata.maxbatstars, matchup_data.defoff,
                             websiteodds, mofoodds)
@@ -145,7 +98,7 @@ def get_ev(awayMatchupData, homeMatchupData, loser=False):
 
 
 def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pitchers, score_adjustments, screen=False):
-    Webhook, Embed = (PrintWebhook, PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
+    Webhook, Embed = (helpers.PrintWebhook, helpers.PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     notify_tim_rank, notify_role = os.getenv("NOTIFY_TIM_RANK"), os.getenv("NOTIFY_ROLE")
     siesta_notify_role = os.getenv("SIESTA_NOTIFY_ROLE")
@@ -156,7 +109,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     batches = len(matchup_pairs)
     sun2weather, bhweather = get_weather_idx("Sun 2"), get_weather_idx("Black Hole")
     webhooks = [Webhook(url=discord_webhook_url,
-                        content="__**Day {}**__".format(day) if not batch else discord_hr(10, char='-')) for batch in range(batches)]
+                        content="__**Day {}**__".format(day) if not batch else helpers.discord_hr(10, char='-')) for batch in range(batches)]
     odds_mismatch, notify, picks_to_click, not_your_dad, bad_bets = [], [], [], [], []
     for idx, result in enumerate(sorted_pairs):
         awayMatchupData, homeMatchupData = result.awayMatchupData, result.homeMatchupData
@@ -200,7 +153,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
             "{:.2f}".format(get_ev(result.awayMatchupData, result.homeMatchupData)),
             ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else ""
         ) for result in sorted(picks_to_click, key=lambda result: get_ev(result.awayMatchupData, result.homeMatchupData), reverse=True)])
-        results.append(send_discord_message("__Picks To Click__", p2c_description, screen=screen))
+        results.append(helpers.send_discord_message("__Picks To Click__", p2c_description, screen=screen))
         time.sleep(.5)
     if not_your_dad:
         linyd_description = "\n".join(["{} @ {} - EV: {:.2f}, MOFO: {:.2f}% {}".format(
@@ -210,7 +163,7 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
             min(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds) * 100.0,
             ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else ""
         ) for result in sorted(not_your_dad, key=lambda result: get_ev(result.awayMatchupData, result.homeMatchupData, loser=True), reverse=True)])
-        results.append(send_discord_message("__Look, I'm Not Your Dad__", linyd_description, screen=screen))
+        results.append(helpers.send_discord_message("__Look, I'm Not Your Dad__", linyd_description, screen=screen))
         time.sleep(.5)
     if odds_mismatch:
         odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, MOFO: **{}** {:.2f}% {}".format(
@@ -222,14 +175,14 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
             (max(result.awayMatchupData.mofoodds, result.homeMatchupData.mofoodds)) * 100.0,
             ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else "")
                                       for result in sorted(odds_mismatch, key=lambda result: max(result.awayMatchupData.websiteodds, result.homeMatchupData.websiteodds), reverse=True)])
-        results.append(send_discord_message("__Odds Mismatches__", odds_description, screen=screen))
+        results.append(helpers.send_discord_message("__Odds Mismatches__", odds_description, screen=screen))
         time.sleep(.5)
     if bad_bets:
         bb_description = "\n".join(["{} @ {} - EV: {} {}".format(
             result.awayMatchupData.pitcherteamnickname, result.homeMatchupData.pitcherteamnickname, "{:.2f}".format(get_ev(result.awayMatchupData, result.homeMatchupData)),
             ":sunny:" if result.awayMatchupData.weather == sun2weather else ":cyclone:" if result.awayMatchupData.weather == bhweather else ""
         ) for result in sorted(bad_bets, key=lambda result: get_ev(result.awayMatchupData, result.homeMatchupData), reverse=True)])
-        results.append(send_discord_message("__Bad Bets__", bb_description, screen=screen))
+        results.append(helpers.send_discord_message("__Bad Bets__", bb_description, screen=screen))
         time.sleep(.5)
     if notify:
         notify_message = "<@&{}> __**FIRE PICKS**__\n".format(notify_role)
@@ -243,243 +196,12 @@ def send_matchup_data_to_discord_webhook(day, matchup_pairs, so9_pitchers, k9_pi
     return results
 
 
-def get_blaseball_snapshot():
-    snapshot = None
-    response = requests.get("https://www.blaseball.com/events/streamData", stream=True)
-    for line in response.iter_lines():
-        snapshot = line
-        break
-    try:
-        json_snapshot = json.loads(snapshot.decode("utf-8")[6:])
-    except json.decoder.JSONDecodeError:
-        return None
-    return json_snapshot
-
-
-def get_testing_snapshot():
-    snapshot = None
-    with requests.get("https://api-test.sibr.dev/replay/v1/replay?from=2020-10-19T22:45:00Z", stream=True) as response:
-        for line in response.iter_lines():
-            if line and line.decode("utf-8").startswith("data"):
-                snapshot = line
-                break
-    try:
-        json_snapshot = json.loads(snapshot.decode("utf-8")[5:])
-    except json.decoder.JSONDecodeError:
-        return None
-    return json_snapshot
-
-
-def get_stream_snapshot():
-    json_snapshot = None
-    retries = 0
-    while json_snapshot is None and retries < 5:
-        if retries:
-            time.sleep(2)  # Sleep after first time
-        json_snapshot = get_blaseball_snapshot()
-        retries += 1
-    if not json_snapshot:
-        raise Exception("Unable to get stream snapshot")
-    return json_snapshot
-
-
 def get_def_off_ratio(pitcher, defenseteamname, offenseteamname, team_stat_data, pitcher_stat_data):
     pitchingstars = pitcher_stat_data[pitcher]["pitchingStars"]
     meandefstars = geomean(team_stat_data[defenseteamname]["defenseStars"])
     meanbatstars = geomean(team_stat_data[offenseteamname]["battingStars"])
     meanrunstars = geomean(team_stat_data[offenseteamname]["baserunningStars"])
     return (pitchingstars+meandefstars)/((meanbatstars+meanrunstars) ** 2)
-
-
-def get_team_attributes(attributes={}):
-    if not attributes:
-        attributes.update({team["fullName"]: (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"]) for team in requests.get("https://www.blaseball.com/database/allTeams").json()})
-    return attributes
-
-
-def adjust_by_pct(row, pct, stlats, star_func):
-    new_row = row.copy()
-    original_stars = star_func(row)
-    new_stars = original_stars
-    op = operator.lt if pct >= 0.0 else operator.gt
-    while op(new_stars, original_stars * (1.0 + pct)):
-        for stlat in stlats:
-            if pct >= 0.0:
-                if stlat in INVERSE_STLATS and stlat != "tragicness":
-                    new_row[stlat] = max(float(new_row[stlat]) - .01, .001)
-                elif stlat not in INVERSE_STLATS:
-                    new_row[stlat] = float(new_row[stlat]) + .01
-            else:
-                if stlat in INVERSE_STLATS and stlat != "tragicness":
-                    new_row[stlat] = float(new_row[stlat]) + .01
-                elif stlat not in INVERSE_STLATS:
-                    new_row[stlat] = max(float(new_row[stlat]) - .01, .001)
-        new_stars = star_func(new_row)
-    return new_row
-
-
-def batting_stars(player):
-    return (
-        ((1 - float(player["tragicness"])) ** 0.01)
-        * (float(player["buoyancy"]) ** 0)
-        * (float(player["thwackability"]) ** 0.35)
-        * (float(player["moxie"]) ** 0.075)
-        * (float(player["divinity"]) ** 0.35)
-        * (float(player["musclitude"]) ** 0.075)
-        * ((1 - float(player["patheticism"])) ** 0.05)
-        * (float(player["martyrdom"]) ** 0.02)
-        * 5.0
-    )
-
-
-def pitching_stars(player):
-    return (
-        (float(player["shakespearianism"]) ** 0.1)
-        * (float(player["suppression"]) ** 0)
-        * (float(player["unthwackability"]) ** 0.5)
-        * (float(player["coldness"]) ** 0.025)
-        * (float(player["overpowerment"]) ** 0.15)
-        * (float(player["ruthlessness"]) ** 0.4)
-        * 5.0
-    )
-
-
-def baserunning_stars(player):
-    return (
-        (float(player["laserlikeness"]) ** 0.5)
-        * (float(player["continuation"]) ** 0.1)
-        * (float(player["baseThirst"]) ** 0.1)
-        * (float(player["indulgence"]) ** 0.1)
-        * (float(player["groundFriction"]) ** 0.1)
-        * 5.0
-    )
-
-
-def defense_stars(player):
-    return (
-        (float(player["omniscience"]) ** 0.2)
-        * (float(player["tenaciousness"]) ** 0.2)
-        * (float(player["watchfulness"]) ** 0.1)
-        * (float(player["anticapitalism"]) ** 0.1)
-        * (float(player["chasiness"]) ** 0.1)
-        * 5.0
-    )
-
-
-def adjust_stlats(row, game, day, player_attrs, team_attrs=None):
-    new_row = row.copy()
-    if "UNDERPERFORMING" in player_attrs:
-        new_row = adjust_by_pct(new_row, -0.2, PITCHING_STLATS, pitching_stars)
-        new_row = adjust_by_pct(new_row, -0.2, BATTING_STLATS, batting_stars)
-        new_row = adjust_by_pct(new_row, -0.2, BASERUNNING_STLATS, baserunning_stars)
-        new_row = adjust_by_pct(new_row, -0.2, DEFENSE_STLATS, defense_stars)
-    if "OVERPERFORMING" in player_attrs:
-        new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, pitching_stars)
-        new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, batting_stars)
-        new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, baserunning_stars)
-        new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, defense_stars)
-    if game:
-        coffee_weathers = [get_weather_idx("Coffee"), get_weather_idx("Coffee 2"), get_weather_idx("Coffee 3s")]
-        if "PERK" in player_attrs and game["weather"] in coffee_weathers:
-            new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, pitching_stars)
-            new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, batting_stars)
-            new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, baserunning_stars)
-            new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, defense_stars)
-        team = row["team"]
-        current_team_attrs = (team_attrs if team_attrs is not None else get_team_attributes()).get(team, {})
-        if "GROWTH" in current_team_attrs:
-            growth_pct = .05 * min(day / 99, 1.0)
-            new_row = adjust_by_pct(new_row, growth_pct, PITCHING_STLATS, pitching_stars)
-            new_row = adjust_by_pct(new_row, growth_pct, BATTING_STLATS, batting_stars)
-            new_row = adjust_by_pct(new_row, growth_pct, BASERUNNING_STLATS, baserunning_stars)
-            new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, defense_stars)
-        if "TRAVELING" in current_team_attrs and team == game["awayTeamName"]:
-            new_row = adjust_by_pct(new_row, 0.05, PITCHING_STLATS, pitching_stars)
-            new_row = adjust_by_pct(new_row, 0.05, BATTING_STLATS, batting_stars)
-            new_row = adjust_by_pct(new_row, 0.05, BASERUNNING_STLATS, baserunning_stars)
-            new_row = adjust_by_pct(new_row, 0.05, DEFENSE_STLATS, defense_stars)
-        bird_weather = get_weather_idx("Birds")
-        if "AFFINITY_FOR_CROWS" in current_team_attrs and game["weather"] == bird_weather:
-            new_row = adjust_by_pct(new_row, 0.50, PITCHING_STLATS, pitching_stars)
-            new_row = adjust_by_pct(new_row, 0.50, BATTING_STLATS, batting_stars)
-        if ("EARLBIRDS" in current_team_attrs and 1 <= day <= 27) or ("LATE_TO_PARTY" in current_team_attrs and 73 <= day <= 99):
-            new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, pitching_stars)
-            new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, batting_stars)
-            new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, baserunning_stars)
-            new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, defense_stars)
-    return new_row
-
-
-def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):
-    with open(filepath) as f:
-        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
-    games = {}
-    if schedule:
-        games.update({game["homeTeamName"]: game for game in schedule})
-        games.update({game["awayTeamName"]: game for game in schedule})
-    pitcherstatdata = collections.defaultdict(lambda: {})
-    teamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: []))
-    for row in filedata:
-        player_attrs = row["permAttr"] + row["seasAttr"] + row["weekAttr"] + row["gameAttr"]
-        team = row["team"]
-        if games:
-            game = games.get(team)
-            if game:
-                new_row = adjust_stlats(row, game, day, player_attrs, team_attrs)
-            else:
-                new_row = row
-        else:
-            new_row = row
-        #if new_row["position"] == "rotation":
-        for key in (PITCHING_STLATS + ["pitchingStars"]):
-            pitcherstatdata[new_row["name"]][key] = float(new_row[key])
-        if new_row["position"] == "lineup":
-            if "SHELLED" not in player_attrs and "ELSEWHERE" not in player_attrs:
-                for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
-                    teamstatdata[team][key].append(float(new_row[key]))
-            if "ELSEWHERE" not in player_attrs:
-                for key in (DEFENSE_STLATS + ["defenseStars"]):
-                    teamstatdata[team][key].append(float(new_row[key]))
-    return teamstatdata, pitcherstatdata
-
-
-def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
-    with open(filepath) as f:
-        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
-    games = {}
-    if schedule:
-        games.update({game["homeTeamName"]: game for game in schedule})
-        games.update({game["awayTeamName"]: game for game in schedule})
-    pitcherstatdata = collections.defaultdict(lambda: {})
-    teamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: {}))
-    for row in filedata:
-        player_attrs = row["permAttr"] + row["seasAttr"] + row["weekAttr"] + row["gameAttr"]
-        team = row["team"]
-        player_id = row["id"]
-        if games:
-            game = games.get(team)
-            new_row = adjust_stlats(row, game, day, player_attrs, team_attrs)
-        else:
-            new_row = row
-        if new_row["position"] == "rotation":
-            for key in (PITCHING_STLATS + ["pitchingStars"]):
-                pitcherstatdata[new_row["name"]][key] = float(new_row[key])
-        elif new_row["position"] == "lineup":
-            if "SHELLED" not in player_attrs and "ELSEWHERE" not in player_attrs:
-                for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
-                    teamstatdata[team][player_id][key] = float(new_row[key])
-                teamstatdata[team][player_id]["turnOrder"] = int(new_row["turnOrder"])
-            if "ELSEWHERE" not in player_attrs:
-                for key in (DEFENSE_STLATS + ["defenseStars"]):
-                    teamstatdata[team][player_id][key] = float(new_row[key])
-                teamstatdata[team][player_id]["shelled"] = ("SHELLED" in player_attrs)
-                teamstatdata[team][player_id]["reverberating"] = ("REVERBERATING" in player_attrs)
-                teamstatdata[team][player_id]["repeating"] = ("REPEATING" in player_attrs)
-            if player_id in teamstatdata[team]:  # these are defaultdicts so we don't want to add skipped players
-                teamstatdata[team][player_id]["team"] = team
-                teamstatdata[team][player_id]["name"] = new_row["name"]
-                teamstatdata[team][player_id]["attrs"] = player_attrs
-    return teamstatdata, pitcherstatdata
 
 
 def get_player_slug(playername):
@@ -525,22 +247,6 @@ def calc_stlat_stats(pitcher, pitcherteamname, offenseteamname, team_stat_data, 
     return stlatdata
 
 
-def get_dict_from_matchupdata(matchup, season_number, day):
-    return {"Pitcher Name": matchup.pitchername, "Season": season_number, "Day": day,
-            "SO9": matchup.so9, "ERA": matchup.era, "Opposing Team": matchup.vsteam,
-            "D/O": matchup.defoff, "Game ID": matchup.gameid, "Pitcher ID": matchup.pitcherid,
-            "Pitching Stars": matchup.stardata.pitchingstars, "Max Batting": matchup.stardata.maxbatstars,
-            "Mean Batting": matchup.stardata.meanbatstars, "Max Defense": matchup.stardata.maxdefstars,
-            "Mean Defense": matchup.stardata.meandefstars, "Max Baserunning": matchup.stardata.maxrunstars,
-            "Mean Baserunning": matchup.stardata.meanrunstars, "Ball Count": matchup.ballcount,
-            "Strike Count": matchup.strikecount, "Base Count": matchup.basecount}
-
-
-def insert_into_airtable(results, season_number, day):
-    airtable = Airtable(os.getenv("AIRTABLE_BASE_KEY"), os.getenv("AIRTABLE_TABLE_NAME"), os.getenv("AIRTABLE_API_KEY"))
-    airtable.batch_insert([get_dict_from_matchupdata(matchup, season_number, day) for matchup in results])
-
-
 def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_stats, day, team_pid_stat_data):
     results = []
     gameId = game["id"]
@@ -556,7 +262,8 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
     homeStlatStats = calc_stlat_stats(homePitcher, homeTeam, awayTeam, team_stat_data, pitcher_stat_data)
     homeTIM, homeTIMRank, homeTIMCalc = tim.calculate(homeStlatStats)
     awayTIM, awayTIMRank, awayTIMCalc = tim.calculate(awayStlatStats)
-    awayAttrs, homeAttrs = get_team_attributes()[awayTeam], get_team_attributes()[homeTeam]
+    team_attributes = helpers.get_team_attributes()
+    awayAttrs, homeAttrs = team_attributes[awayTeam], team_attributes[homeTeam]
     awayMOFO, homeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs, day, game["weather"])
     # noModAwayMOFO, noModHomeMOFO = mofo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs, day, game["weather"], skip_mods=True)
     # print("Away: {}, Modded MOFO: {}, Unmodded MOFO: {}".format(awayTeam, awayMOFO, noModAwayMOFO))
@@ -583,44 +290,6 @@ def process_game(game, team_stat_data, pitcher_stat_data, pitcher_performance_st
     return results, []
 
 
-def run_lineup_file_mode(filepath, team_stat_data, pitcher_stat_data, stat_season_number):
-    with open(filepath, "r") as json_file:
-        json_data = json.load(json_file)
-        all_pitcher_ids = [matchup["awayPitcherId"] for matchup in json_data] + [matchup["homePitcherId"] for matchup in json_data]
-        pitcher_performance_stats = get_all_pitcher_performance_stats(all_pitcher_ids, stat_season_number)
-        fmtstr = ("{} ({}, {} K9, {:.2f} SO9, {:.2f} ERA) vs. {} ({:.2f} OppMeanBat*, {:.2f} OppMaxBat),"
-                  " {:.2f} D/O^2, {:.2f}% MOFO")
-        for matchup in json_data:
-            awayMOFO, homeMOFO = mofo.calculate(matchup["awayPitcherName"], matchup["homePitcherName"],
-                                                matchup["awayTeam"], matchup["homeTeam"], team_stat_data,
-                                                pitcher_stat_data)
-            awayresult = process_pitcher_vs_team(matchup["awayPitcherName"], matchup["awayPitcherId"],
-                                                 matchup["awayTeam"], matchup["homeTeam"], team_stat_data,
-                                                 pitcher_stat_data, pitcher_performance_stats)
-            print(fmtstr.format(awayresult.pitchername, awayresult.tim.name, awayresult.k9, awayresult.so9,
-                                awayresult.era, awayresult.vsteam, awayresult.stardata.meanbatstars,
-                                awayresult.stardata.maxbatstars, awayresult.defoff, awayMOFO*100.0))
-            homeresult = process_pitcher_vs_team(matchup["homePitcherName"], matchup["homePitcherId"],
-                                                 matchup["homeTeam"], matchup["awayTeam"], team_stat_data,
-                                                 pitcher_stat_data, pitcher_performance_stats)
-            print(fmtstr.format(homeresult.pitchername, homeresult.tim.name, homeresult.k9, homeresult.so9,
-                                homeresult.era, homeresult.vsteam, homeresult.stardata.meanbatstars,
-                                homeresult.stardata.maxbatstars, homeresult.defoff, homeMOFO*100.0))
-
-
-def process_pitcher_vs_team(pitcherName, pitcherId, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data,
-                            pitcher_performance_stats):
-    pitcherStats = pitcher_performance_stats.get(pitcherId, {})
-    starStats = calc_star_max_mean_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    stlatStats = calc_stlat_stats(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    timTier, timRank, timCalc = tim.calculate(stlatStats)
-    pitcherk9 = k9.calculate(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data)
-    return MatchupData(pitcherName, None, None, None, float(pitcherStats.get("strikeouts_per_9", -1.0)),
-                       float(pitcherStats.get("earned_run_average", -1.0)), None, otherTeam, None,
-                       get_def_off_ratio(pitcherName, pitcherTeam, otherTeam, team_stat_data, pitcher_stat_data),
-                       timTier, timRank, timCalc, starStats, 4, 3, 4, None, None, None, -1, pitcherk9, None)
-
-
 def sort_results(results):
     return sorted(results, key=lambda result: (result.timrank, result.k9, result.mofoodds), reverse=True)
 
@@ -641,24 +310,6 @@ def get_score_adjustments(is_today, today_schedule, tomorrow_schedule):
             if game["homeTeamName"] in hfa_teams:
                 score_adjustments[game["homeTeamName"]].append(ScoreAdjustment(1, "Home Field Advantage"))
     return score_adjustments
-
-
-def outcome_matters(outcome):
-    return all(s not in outcome for s in ("is now Unstable", "is now Flickering", "Red Hot", "is now Repeating",
-                                          "Black Hole swallowed a Win", "Sun 2 set a Win upon"))
-
-
-def already_ran_for_day(filepath, season_number, day):
-    if os.path.isfile(filepath):
-        with open(filepath, "r") as f:
-            file_season_number, file_day = (int(n) for n in f.read().split("-"))
-            return file_season_number == season_number and file_day == day
-    return False
-
-
-def write_day(filepath, season_number, day):
-    with open(filepath, "w") as f:
-        f.write("{}-{}".format(season_number, day))
 
 
 def get_payout_mult(player):
@@ -711,128 +362,11 @@ def print_results(day, results, score_adjustments, batman_data):
         print("\n".join(("{}, {}: {:.2f} hits, {:.2f} homers, {:.2f} at bats, {:.0f} max earnings").format(row["name"], row["team"], row["hits"], row["homers"], row["abs"], ((row["hits"] * 1500) + (row["homers"]*4000)) * get_payout_mult(row)) for row in batman_data["york"]))
 
 
-def load_test_data(testfile):
-    filename, linenumber = testfile, None
-    if ":" in testfile:
-        filename, linenumber = testfile.split(":")
-    else:
-        with open(filename) as f:
-            for i, l in enumerate(f):
-                pass
-        linenumber = random.randint(1, i + 1)
-    print("Loading test data from {}, line {}".format(filename, linenumber))
-    return json.loads(linecache.getline(filename, int(linenumber)))
-
-
-def handle_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--print', help="print to screen", action='store_true')
-    parser.add_argument('--discord', help="output to discord", action='store_true')
-    parser.add_argument('--discordprint', help="print discord-formatted output to screen", action='store_true')
-    parser.add_argument('--airtable', help="insert into airtable", action='store_true')
-    parser.add_argument('--statfile', default='output.csv', help="stats filepath")
-    parser.add_argument('--dayfile', default='lastday.txt', help="dayfile filepath")
-    parser.add_argument('--today', help="run for today instead of tomorrow", action='store_true')
-    parser.add_argument('--skipupdate', help="skip csv update, even if there should be one", action='store_true')
-    parser.add_argument('--forceupdate', help="force csv update, even if it doesn't need it", action='store_true')
-    parser.add_argument('--forcerun', help="force running for day, even if it was already run last",
-                        action='store_true')
-    parser.add_argument('--lineupfile', help="json file with array of{pitcherName, pitcherTeam, awayTeam, seasonNumber}"
-                                             " lineups, print mode only")
-    parser.add_argument('--archive', help="move csv file if a new one is regenerated before writing",
-                        action='store_true')
-    parser.add_argument('--testfile', help="path to file with test data in jsonl format, pass optional line number as "
-                                           "filename:n, otherwise random line is used")
-    parser.add_argument('--env', help="path to .env file, defaults to .env in same directory")
-    parser.add_argument('--justlooking', help="don't update lastday file", action='store_true')
-    args = parser.parse_args()
-    if not args.print and not args.discord and not args.airtable and not args.discordprint and not args.lineupfile:
-        print("No output specified")
-        parser.print_help()
-        sys.exit(-1)
-    return args
-
-
 def main():
-    args = handle_args()
+    args = helpers.handle_args()
     load_dotenv(dotenv_path=args.env)
-    if args.testfile:
-        streamdata = load_test_data(args.testfile)
-    else:
-        streamdata = get_stream_snapshot()
-    season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
-    day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
-    if already_ran_for_day(args.dayfile, season_number, day) and not args.forcerun and not args.lineupfile:
-        print("Already ran for Season {} Day {}, exiting.".format(season_number+1, day))
-        sys.exit(0)
-    today_schedule = streamdata['value']['games']['schedule']
-    retry_count = int(os.getenv("RETRY_COUNT", 10))
-    show_waiting_message = int(os.getenv("SHOW_WAITING_MESSAGE", 1))
-    sleep_interval = int(os.getenv("WAIT_INTERVAL", 30))
-    games_complete = all([game["finalized"] for game in today_schedule])
-    is_postseason = any([game["isPostseason"] for game in today_schedule])
-    if all([(game["day"] == 0 and game["gameStart"] is False) for game in today_schedule]):
-        print("This season's games haven't started yet")
-        sys.exit(0)
-    if not args.today and not args.forcerun and not args.testfile and retry_count > 0:
-        first_try = True
-        for _ in range(retry_count):
-            games_complete = all([game["finalized"] for game in today_schedule])
-            is_postseason = any([game["isPostseason"] for game in today_schedule])
-            keep_trying = (not games_complete or (is_postseason and not args.today and not streamdata['value']['games']['tomorrowSchedule']))
-            if keep_trying and first_try:
-                total_seconds = sleep_interval * retry_count
-                if show_waiting_message:
-                    message = "Waiting up to {} minute{} {}for current games to end."
-                    message = message.format(total_seconds // 60, "" if total_seconds // 60 == 1 else "s",
-                                             "{} seconds ".format(total_seconds % 60) if total_seconds % 60 else "")
-                    if args.discord:
-                        send_discord_message("Sorry!", message)
-                    else:
-                        print(message)
-                first_try = False
-            elif not keep_trying:
-                break
-            time.sleep(sleep_interval)
-            streamdata = get_stream_snapshot()
-            today_schedule = streamdata['value']['games']['schedule']
-        if not games_complete:
-            message = "Running even though games aren't complete, watch out!"
-            if args.discord:
-                send_discord_message("Warning!", message)
-            else:
-                print(message)
-    stat_season_number = (season_number - 1) if day < LAST_SEASON_STAT_CUTOFF else season_number
-    game_schedule = today_schedule if args.today else streamdata['value']['games']['tomorrowSchedule']
-    if not game_schedule and day >= 100 and not args.today:
-        time.sleep(30)
-        game_schedule = get_stream_snapshot()['value']['games']['tomorrowSchedule']
-    if not game_schedule and not args.lineupfile:
-        print("No games found for Season {} Day {}, exiting.".format(season_number+1, day))
-        if games_complete and is_postseason:
-            write_day(args.dayfile, season_number, day)
-        sys.exit(0)
-    all_pitcher_ids = []
-    for game in game_schedule:
-        all_pitcher_ids.extend((game["awayPitcher"], game["homePitcher"]))
-    all_pitcher_ids = [pid for pid in all_pitcher_ids if pid]
-    if not all_pitcher_ids and not args.lineupfile:
-        print("No pitchers assigned to games on Season {} Day {}, exiting.".format(season_number + 1, day))
-        sys.exit(0)
-    outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
-    stat_file_exists = os.path.isfile(args.statfile)
-    if (outcomes or not stat_file_exists or args.forceupdate or ((day == 1 and args.today) or day == 2)) and not args.skipupdate:
-        if args.discord:
-            message = "Generating new stat file, please stand by.\n\n{}".format("\n".join("`{}`".format(outcome) for outcome in outcomes))
-            send_discord_message("One sec!", message[:DISCORD_SPLIT_LIMIT])
-        else:
-            print("Generating new stat file, please stand by.")
-        blaseball_stat_csv.generate_file(args.statfile, False, args.archive, True)
-    team_stat_data, pitcher_stat_data = load_stat_data(args.statfile, game_schedule, day)
-    team_pid_stat_data, _ = load_stat_data_pid(args.statfile, game_schedule, day)
-    if args.lineupfile:
-        run_lineup_file_mode(args.lineupfile, team_stat_data, pitcher_stat_data, stat_season_number)
-        sys.exit(0)
+    game_schedule, streamdata, season_number, day, all_pitcher_ids, team_stat_data, team_pid_stat_data, pitcher_stat_data = helpers.do_init(args)
+    stat_season_number = (season_number - 1) if day < helpers.LAST_SEASON_STAT_CUTOFF else season_number
     results, pair_results = [], []
     score_adjustments = get_score_adjustments(args.today, streamdata['value']['games']['schedule'],
                                               streamdata['value']['games']['tomorrowSchedule'])
@@ -858,14 +392,12 @@ def main():
             send_matchup_data_to_discord_webhook(day, pair_results, so9_pitchers, k9_pitchers, score_adjustments)
         if args.discordprint:
             send_matchup_data_to_discord_webhook(day, pair_results, so9_pitchers, k9_pitchers, score_adjustments, screen=True)
-        if args.airtable:
-            insert_into_airtable(results, season_number+1, day)
         if args.print:
             print_results(day, results, score_adjustments, batman_data)
     else:
         print("No results")
     if not args.justlooking:
-        write_day(args.dayfile, season_number, day)
+        helpers.write_day(args.dayfile, season_number, day)
 
 
 if __name__ == "__main__":

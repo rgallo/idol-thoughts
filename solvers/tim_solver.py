@@ -20,8 +20,8 @@ from scipy.optimize import NonlinearConstraint
 sys.path.append("..")
 
 from solvers import base_solver
-from helpers import StlatTerm, get_weather_idx
-from idolthoughts import load_stat_data, calc_stlat_stats
+from helpers import StlatTerm, get_weather_idx, load_stat_data
+from idolthoughts import calc_stlat_stats
 import tim
 
 STAT_CACHE = {}
