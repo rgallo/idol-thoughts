@@ -2,6 +2,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import statistics
 
 import helpers
 import math
@@ -20,7 +21,7 @@ def calc_team(terms, termset, mods, skip_mods=False):
         multiplier = 1.0 
         if not skip_mods:            
             modterms = (mods or {}).get(termname, [])             
-            multiplier *= math.prod(modterms)                
+            multiplier *= statistics.harmonic_mean(modterms)                
         total += term.calc(val) * multiplier
     return total
 
@@ -73,7 +74,7 @@ def team_offense(terms, teamname, mods, team_stat_data, skip_mods=False):
             ("maxindulgence", max(team_data["indulgence"])))
     return calc_team(terms, termset, mods, skip_mods=skip_mods)
 
-def player_offense(terms, teamname, mods, player_stat_data, skip_mods=False):    
+def player_offense(terms, mods, player_stat_data, skip_mods=False):    
     termset = (
             ("tragicness", player_stat_data["tragicness"]),
             ("patheticism", player_stat_data["patheticism"]),
@@ -90,13 +91,23 @@ def player_offense(terms, teamname, mods, player_stat_data, skip_mods=False):
             )
     return calc_team(terms, termset, mods, skip_mods=skip_mods)
 
-def player_defense(terms, teamname, mods, player_stat_data, skip_mods=False):    
+def player_defense(terms, mods, player_stat_data, skip_mods=False):    
     termset = (
             ("omniscience", player_stat_data["omniscience"]),
             ("tenaciousness", player_stat_data["tenaciousness"]),
             ("watchfulness", player_stat_data["watchfulness"]),
             ("anticapitalism", player_stat_data["anticapitalism"]),
             ("chasiness", player_stat_data["chasiness"])
+            )
+    return calc_team(terms, termset, mods, skip_mods=skip_mods)
+
+def player_pitching(terms, mods, player_stat_data, skip_mods=False):    
+    termset = (
+            ("unthwackability", player_stat_data["unthwackability"]),
+            ("ruthlessness", player_stat_data["ruthlessness"]),
+            ("overpowerment", player_stat_data["overpowerment"]),
+            ("shakespearianism", player_stat_data["shakespearianism"]),
+            ("coldness", player_stat_data["coldness"])
             )
     return calc_team(terms, termset, mods, skip_mods=skip_mods)
 
@@ -121,6 +132,131 @@ def calc_stlatmod(name, pitcher_data, team_data, stlatterm):
     base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))                
     multiplier = 2.0 * base_multiplier
     return multiplier
+
+def calc_player_stlatmod(name, player_data, stlatterm):    
+    if name in helpers.PITCHING_STLATS:
+        if name not in player_data:
+            return None
+        value = player_data[name]        
+    else:
+        stlatname = name
+        if stlatname == "basethirst":
+            stlatname = "baseThirst"
+        if stlatname == "groundfriction":
+            stlatname = "groundFriction"
+        if (name in helpers.BATTING_STLATS or name in helpers.BASERUNNING_STLATS) and player_data["shelled"]:
+            return None
+        value = player_data[stlatname]    
+    normalized_value = stlatterm.calc(value)
+    base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))                
+    multiplier = 2.0 * base_multiplier
+    return multiplier
+
+def get_player_mods(mods, awayAttrs, homeAttrs, playerMods, weather, away_home, player_stat_data):            
+    lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
+    lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
+    bird_weather = helpers.get_weather_idx("Birds")    
+    flood_weather = helpers.get_weather_idx("Flooding")    
+    for attr in mods:
+        # Special case for Affinity for Crows and High Pressure
+        if attr == "affinity_for_crows" and weather != bird_weather:
+            continue
+        if attr == "high_pressure" and weather != flood_weather:
+            continue                
+        if attr in lowerAwayAttrs:            
+            if away_home == "away":
+                for name, stlatterm in mods[attr]["same"].items():                
+                    multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
+                    if multiplier is not None:
+                        playerMods[name].append(multiplier)
+            if away_home == "home":
+                for name, stlatterm in mods[attr]["opp"].items():                
+                    multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
+                    if multiplier is not None:
+                        playerMods[name].append(multiplier)
+        if attr in lowerHomeAttrs and attr != "traveling":
+            if away_home == "home":
+                for name, stlatterm in mods[attr]["same"].items():                
+                    multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
+                    if multiplier is not None:
+                        playerMods[name].append(multiplier)
+            if away_home == "away":
+                for name, stlatterm in mods[attr]["opp"].items():                
+                    multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
+                    if multiplier is not None:
+                        playerMods[name].append(multiplier)
+    return playerMods
+
+def get_park_mods(ballpark, ballpark_mods):
+    awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])    
+    for ballparkstlat, stlatterms in ballpark_mods.items():        
+        for playerstlat, stlatterm in stlatterms.items():
+            if type(stlatterm) == ParkTerm:            
+                value = ballpark[ballparkstlat]                
+                normalized_value = stlatterm.calc(value)
+                base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
+                if value > 0.5:
+                    multiplier = 2.0 * base_multiplier
+                elif value < 0.5:
+                    multiplier = 2.0 - (2.0 * base_multiplier)                
+                else:
+                    multiplier = 1.0
+                if ballparkstlat != "hype":
+                    awayMods[playerstlat].append(multiplier)
+                homeMods[playerstlat].append(multiplier)
+    return awayMods, homeMods
+
+def setup_playerbased(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data):
+    terms_url = os.getenv("MOFO_TERMS")
+    terms, _ = helpers.load_terms(terms_url)
+    mods_url = os.getenv("MOFO_MODS")
+    mods = helpers.load_mods(mods_url)
+    ballparks_url = os.getenv("BALLPARKS")
+    ballparks = helpers.load_ballparks(ballparks_url)
+    ballpark_mods_url = os.getenv("MOFO_BALLPARK_TERMS")
+    ballpark_mods = helpers.load_bp_terms(ballpark_mods_url)
+    homeTeamId = helpers.get_team_id(homeTeam)
+    ballpark = ballparks.get(homeTeamId, collections.defaultdict(lambda: 0.5))
+    awayMods, homeMods = get_park_mods(ballpark, ballpark_mods)
+    return mods, terms, awayMods, homeMods
+
+
+def calculate_playerbased(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs,
+              day, weather, skip_mods=False):
+    mods, terms, awayMods, homeMods = setup_playerbased(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data)
+    return get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_data, terms, awayMods,
+                    homeMods, skip_mods=skip_mods)
+
+def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods,
+             skip_mods=False):
+    away_offense, away_defense, home_offense, home_defense = 0.0, 0.0, 0.0, 0.0
+    #calc away numbers
+    for playerid in team_stat_data[awayTeam]:               
+        playerMods = get_player_mods(mods, awayAttrs, homeAttrs, awayMods, weather, "away", team_stat_data[awayTeam][playerid])
+        if not team_stat_data[awayTeam][playerid]["shelled"]:            
+            away_offense += player_offense(terms, playerMods, team_stat_data[awayTeam][playerid], skip_mods=False)
+        away_defense += player_defense(terms, playerMods, team_stat_data[awayTeam][playerid], skip_mods=False)
+    pitcherMods = get_player_mods(mods, awayAttrs, homeAttrs, awayMods, weather, "away", pitcher_stat_data[awayPitcher])
+    away_defense += player_pitching(terms, pitcherMods, team_stat_data[awayTeam][playerid], skip_mods=False)
+
+    for playerid in team_stat_data[homeTeam]:               
+        playerMods = get_player_mods(mods, awayAttrs, homeAttrs, awayMods, weather, "home", team_stat_data[homeTeam][playerid])
+        if not team_stat_data[awayTeam][playerid]["shelled"]:            
+            home_offense += player_offense(terms, playerMods, team_stat_data[homeTeam][playerid], skip_mods=False)
+        home_defense += player_defense(terms, playerMods, team_stat_data[homeTeam][playerid], skip_mods=False)
+    pitcherMods = get_player_mods(mods, awayAttrs, homeAttrs, awayMods, weather, "home", pitcher_stat_data[homePitcher])
+    home_defense += player_pitching(terms, pitcherMods, team_stat_data[awayTeam][playerid], skip_mods=False)
+    
+    numerator = (away_offense - home_defense) - (home_offense - away_defense)
+    denominator = abs((away_offense - home_defense) + (home_offense - away_defense))
+    if not denominator:
+        return .5, .5    
+    away_formula = numerator / denominator    
+    try:
+        away_odds = (1 / (1 + (100 ** (-1 * away_formula))))
+    except OverflowError:
+        away_odds = 1.0
+    return away_odds, 1.0 - away_odds
 
 def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data):
     awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
