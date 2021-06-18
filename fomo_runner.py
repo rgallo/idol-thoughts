@@ -23,7 +23,7 @@ def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players
     notify_role = os.getenv("NOTIFY_ROLE")
     webhook = Webhook(url=discord_webhook_url, content="__**Day {}**__".format(day))
     if bonus_players:
-        desc = "" # f"<@&{notify_role}>\n"
+        desc = f"<@&{notify_role}>\n"
         desc += "\n".join(f"[:rotating_light: :rotating_light: "
                           f"{pitchers[bonus_player]} has a {bonus_multiplier}x payout, go idol! "
                           f":rotating_light: :rotating_light:](https://www.blaseball.com/player/{bonus_player})"
