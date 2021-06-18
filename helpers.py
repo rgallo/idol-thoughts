@@ -462,18 +462,22 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
         if new_row["position"] == "rotation":
             for key in (PITCHING_STLATS + ["pitchingStars"]):
                 pitcherstatdata[new_row["name"]][key] = float(new_row[key])
-        elif new_row["position"] == "lineup":
+            pitcherstatdata[new_row["name"]]["ispitcher"] = True
+        elif new_row["position"] == "lineup":            
             if "SHELLED" not in player_attrs and "ELSEWHERE" not in player_attrs:
                 for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
-                    teamstatdata[team][player_id][key] = float(new_row[key])
-                teamstatdata[team][player_id]["turnOrder"] = int(new_row["turnOrder"])
+                    teamstatdata[team][player_id][key] = float(new_row[key])                
+                teamstatdata[team][player_id]["ispitcher"] = False
+                teamstatdata[team][player_id]["shelled"] = ("SHELLED" in player_attrs)
+                teamstatdata[team][player_id]["turnOrder"] = int(new_row["turnOrder"])                
             if "ELSEWHERE" not in player_attrs:
                 for key in (DEFENSE_STLATS + ["defenseStars"]):
-                    teamstatdata[team][player_id][key] = float(new_row[key])
+                    teamstatdata[team][player_id][key] = float(new_row[key])                          
+                teamstatdata[team][player_id]["ispitcher"] = False
                 teamstatdata[team][player_id]["shelled"] = ("SHELLED" in player_attrs)
                 teamstatdata[team][player_id]["reverberating"] = ("REVERBERATING" in player_attrs)
                 teamstatdata[team][player_id]["repeating"] = ("REPEATING" in player_attrs)
-            if player_id in teamstatdata[team]:  # these are defaultdicts so we don't want to add skipped players
+            if player_id in teamstatdata[team]:  # these are defaultdicts so we don't want to add skipped players                
                 teamstatdata[team][player_id]["team"] = team
                 teamstatdata[team][player_id]["name"] = new_row["name"]
                 teamstatdata[team][player_id]["attrs"] = player_attrs

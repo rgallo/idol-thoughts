@@ -137,14 +137,18 @@ def calc_player_stlatmod(name, player_data, stlatterm):
     if name in helpers.PITCHING_STLATS:
         if name not in player_data:
             return None
+        if not player_data["ispitcher"]:
+            return None
         value = player_data[name]        
     else:
+        if player_data["ispitcher"]:
+            return None
         stlatname = name
         if stlatname == "basethirst":
             stlatname = "baseThirst"
         if stlatname == "groundfriction":
             stlatname = "groundFriction"
-        if (name in helpers.BATTING_STLATS or name in helpers.BASERUNNING_STLATS) and player_data["shelled"]:
+        if (stlatname in helpers.BATTING_STLATS or stlatname in helpers.BASERUNNING_STLATS) and player_data["shelled"]:
             return None
         value = player_data[stlatname]    
     normalized_value = stlatterm.calc(value)
@@ -227,25 +231,35 @@ def calculate_playerbased(awayPitcher, homePitcher, awayTeam, homeTeam, team_sta
     return get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_data, terms, awayMods,
                     homeMods, skip_mods=skip_mods)
 
-def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods,
+def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods,
              skip_mods=False):
     away_offense, away_defense, home_offense, home_defense = 0.0, 0.0, 0.0, 0.0
-    #calc away numbers
-    for playerid in team_stat_data[awayTeam]:               
+    
+    away_lineup, away_off_lineup = 0, 0
+    for playerid in team_stat_data[awayTeam]:                               
         playerMods = get_player_mods(mods, awayAttrs, homeAttrs, awayMods, weather, "away", team_stat_data[awayTeam][playerid])
         if not team_stat_data[awayTeam][playerid]["shelled"]:            
             away_offense += player_offense(terms, playerMods, team_stat_data[awayTeam][playerid], skip_mods=False)
+            away_off_lineup += 1
         away_defense += player_defense(terms, playerMods, team_stat_data[awayTeam][playerid], skip_mods=False)
+        away_lineup += 1
+    away_offense = away_offense / away_off_lineup
+    away_defense = away_defense / away_lineup
     pitcherMods = get_player_mods(mods, awayAttrs, homeAttrs, awayMods, weather, "away", pitcher_stat_data[awayPitcher])
-    away_defense += player_pitching(terms, pitcherMods, team_stat_data[awayTeam][playerid], skip_mods=False)
+    away_defense += player_pitching(terms, pitcherMods, pitcher_stat_data[awayPitcher], skip_mods=False)
 
+    home_lineup, home_off_lineup = 0, 0
     for playerid in team_stat_data[homeTeam]:               
-        playerMods = get_player_mods(mods, awayAttrs, homeAttrs, awayMods, weather, "home", team_stat_data[homeTeam][playerid])
-        if not team_stat_data[awayTeam][playerid]["shelled"]:            
+        playerMods = get_player_mods(mods, awayAttrs, homeAttrs, homeMods, weather, "home", team_stat_data[homeTeam][playerid])
+        if not team_stat_data[homeTeam][playerid]["shelled"]:            
             home_offense += player_offense(terms, playerMods, team_stat_data[homeTeam][playerid], skip_mods=False)
+            home_off_lineup += 1
         home_defense += player_defense(terms, playerMods, team_stat_data[homeTeam][playerid], skip_mods=False)
-    pitcherMods = get_player_mods(mods, awayAttrs, homeAttrs, awayMods, weather, "home", pitcher_stat_data[homePitcher])
-    home_defense += player_pitching(terms, pitcherMods, team_stat_data[awayTeam][playerid], skip_mods=False)
+        home_lineup += 1
+    home_offense = home_offense / home_off_lineup
+    home_defense = home_defense / home_lineup
+    pitcherMods = get_player_mods(mods, awayAttrs, homeAttrs, homeMods, weather, "home", pitcher_stat_data[homePitcher])
+    home_defense += player_pitching(terms, pitcherMods, pitcher_stat_data[homePitcher], skip_mods=False)
     
     numerator = (away_offense - home_defense) - (home_offense - away_defense)
     denominator = abs((away_offense - home_defense) + (home_offense - away_defense))

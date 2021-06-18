@@ -889,15 +889,15 @@ def minimize_func(parameters, *data):
                 if stat_filename:
                     last_stat_filename = stat_filename
                     pitchers = get_pitcher_id_lookup(stat_filename)
-                    team_stat_data, pitcher_stat_data = load_stat_data(stat_filename, schedule, day, season_team_attrs)
+                    team_stat_data, pitcher_stat_data = load_stat_data_pid(stat_filename, schedule, day, season_team_attrs)
                     stats_regened = False
                 elif should_regen(day_mods):
                     pitchers = get_pitcher_id_lookup(last_stat_filename)
-                    team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
+                    team_stat_data, pitcher_stat_data = load_stat_data_pid(last_stat_filename, schedule, day, season_team_attrs)
                     stats_regened = True
                 elif stats_regened:
                     pitchers = get_pitcher_id_lookup(last_stat_filename)
-                    team_stat_data, pitcher_stat_data = load_stat_data(last_stat_filename, schedule, day, season_team_attrs)
+                    team_stat_data, pitcher_stat_data = load_stat_data_pid(last_stat_filename, schedule, day, season_team_attrs)
                     stats_regened = False
                 STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)                
             if not pitchers:
