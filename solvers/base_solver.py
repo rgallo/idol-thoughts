@@ -485,6 +485,40 @@ def minimize_func(parameters, *data):
     line_jumpers, reorder_failsfirst, reorder_keys, ev_set, ev_by_team, games_by_mod, vals_by_mod = {}, {}, {}, {}, {}, {}, {}
     all_vals, win_loss, gameids, early_vals, early_sorted, pos_vals = [], [], [], [], [], []
     worst_vals, worst_win_loss, worst_gameids, overall_vals, overall_win_loss, overall_gameids = [], [], [], [], [], []
+
+    unthwack_adjust = terms["unthwackability"].calc(0.0)
+    ruth_adjust = terms["ruthlessness"].calc(0.0)
+    overp_adjust = terms["overpowerment"].calc(0.0)    
+    shakes_adjust = terms["shakespearianism"].calc(0.0)
+    cold_adjust = terms["coldness"].calc(0.0)
+
+    path_adjust = terms["patheticism"].calc(0.0)
+    trag_adjust = terms["tragicness"].calc(0.0)
+    thwack_adjust = terms["thwackability"].calc(0.0)
+    div_adjust = terms["divinity"].calc(0.0)
+    moxie_adjust = terms["moxie"].calc(0.0)
+    muscl_adjust = terms["musclitude"].calc(0.0)
+    martyr_adjust = terms["martyrdom"].calc(0.0)    
+        
+    omni_adjust = terms["omniscience"].calc(0.0)
+    watch_adjust = terms["watchfulness"].calc(0.0)
+    tenacious_adjust = terms["tenaciousness"].calc(0.0)
+    chasi_adjust = terms["chasiness"].calc(0.0)
+    anticap_adjust = terms["anticapitalism"].calc(0.0)
+
+    laser_adjust = terms["laserlikeness"].calc(0.0)
+    basethirst_adjust = terms["basethirst"].calc(0.0)
+    groundfriction_adjust = terms["groundfriction"].calc(0.0)
+    continuation_adjust = terms["continuation"].calc(0.0)
+    indulgence_adjust = terms["indulgence"].calc(0.0)
+
+    max_thwack = terms["thwackability"].calc(2.0)
+    max_moxie = terms["moxie"].calc(2.0)
+    max_ruth = terms["moxie"].calc(2.0)
+
+    adjustments = [unthwack_adjust, ruth_adjust, overp_adjust, shakes_adjust, cold_adjust, path_adjust, trag_adjust, thwack_adjust, div_adjust, moxie_adjust, muscl_adjust, martyr_adjust, omni_adjust, 
+                   watch_adjust, tenacious_adjust, chasi_adjust, anticap_adjust, laser_adjust, basethirst_adjust, groundfriction_adjust, continuation_adjust, indulgence_adjust, max_thwack, max_moxie, max_ruth]
+
     if ALL_GAMES > 0:       
         games_available = ALL_GAMES - len(LINE_JUMP_GAMES)
     else:
@@ -517,7 +551,7 @@ def minimize_func(parameters, *data):
         game_attrs = get_attrs_from_paired_game(season_team_attrs, game)
         awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]                
         special_game_attrs = (homeAttrs.union(awayAttrs)) - ALLOWED_IN_BASE    
-        game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods)                        
+        game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods, adjustments)                        
         game_counter += game_game_counter        
         if game_game_counter == 1:   
             ev_set[game["away"]["game_id"]] = {}
@@ -928,7 +962,7 @@ def minimize_func(parameters, *data):
                 if game["away"]["game_id"] in LINE_JUMP_GAMES:
                     continue
                 ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
-                game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods)                
+                game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods, adjustments)                
                 if not is_cached and game_game_counter:
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
@@ -1244,6 +1278,12 @@ def minimize_func(parameters, *data):
                 overall_linear_error, overall_max_linear_error, overall_min_linear_error, overall_max_error_value, overall_min_error_value, overall_errors, overall_max_error_game, overall_other_errors = calc_linear_unex_error(overall_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD)  
                 overall_linear_error = (overall_linear_error / (modcount * 2))
                 linear_error += overall_linear_error
+                linear_by_mod["overall"] = overall_linear_error
+                if overall_linear_error > new_worstmod_linear_error:
+                    new_worstmod_linear_error = overall_linear_error
+                    new_worstmod = "overall"                   
+                    best_plusname = ""
+                linear_error = new_worstmod_linear_error
             #linear_points = (linear_error + ((max_linear_error + max_error_value) ** 2) + ((min_linear_error - min_error_value) ** 2) + (sum(errors) ** 2)) * 2.5
             #major_errors = sum(errors) ** 2
             major_errors = 0.0           
@@ -1331,9 +1371,9 @@ def minimize_func(parameters, *data):
                     if not (team_span < 0):
                         team_span = -1 * min_span                        
                     linear_fail = linear_fail + (team_span * min_span)
-                else:
-                    for newgame in games_by_mod[max_mod_unmod]:                                      
-                        line_jumpers[newgame] = games_by_mod[max_mod_unmod][newgame]
+                #else:
+                #    for newgame in games_by_mod[max_mod_unmod]:                                      
+                #        line_jumpers[newgame] = games_by_mod[max_mod_unmod][newgame]
         elif game_counter == TOTAL_GAME_COUNTER and TOTAL_GAME_COUNTER > 0:        
             pass_exact = (pass_exact / game_counter) * 100.0
             pass_within_one = (pass_within_one / game_counter) * 100.0
@@ -1446,7 +1486,7 @@ def minimize_func(parameters, *data):
                 detailtext += "\nNet EV = {:.4f}, web EV = {:.4f}, season EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(expected_val, web_ev, (-1 * BEST_SEASON), mismatches, dadbets)                        
             detailtext += "\nMax linear error {:.2f}% ({:.2f} actual, {:.2f} calculated) - {}".format(max_linear_error, (max_error_value - max_linear_error), max_error_value, max_error_mod)            
             detailtext += "\nMin linear error {:.2f}% ({:.2f} actual, {:.2f} calculated) - {}".format(min_linear_error, (min_error_value - min_linear_error), min_error_value, min_error_mod)              
-            detailtext += "\nOverall linear error {:.2f}, max {:.2f}% ({:.2f} actual, {:.2f} calculated), min {:.2f}% ({:.2f} actual, {:.2f} calculated)".format(overall_linear_error, overall_max_linear_error, (overall_max_error_value - overall_max_linear_error), overall_max_error_value, overall_min_linear_error, (overall_min_error_value - overall_min_linear_error), overall_min_error_value)                        
+            detailtext += "\nOverall linear error {:.0f}, max {:.2f}% ({:.2f} actual, {:.2f} calculated), min {:.2f}% ({:.2f} actual, {:.2f} calculated)".format(overall_linear_error, overall_max_linear_error, (overall_max_error_value - overall_max_linear_error), overall_max_error_value, overall_min_linear_error, (overall_min_error_value - overall_min_linear_error), overall_min_error_value)                        
             #if len(errors) > 0 and not solve_for_ev:
             #    errors_output = ", ".join(map(str, errors))
             #    detailtext += "\nMajor errors at: " + errors_output
@@ -1511,7 +1551,7 @@ def minimize_func(parameters, *data):
                 WORST_ERROR = (k9_max_err - k9_min_err)
         debug_print("-" * 20 + "\n", debug, run_id)             
  
-    if ((CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 2500) or (CURRENT_ITERATION % 1000 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 50000) or (CURRENT_ITERATION % 10000 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 50000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 100000 == 0)):
+    if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 1000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 2500) or (CURRENT_ITERATION % 1000 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 50000) or (CURRENT_ITERATION % 10000 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 50000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 100000 == 0)):
         if len(win_loss) > 0:
             now = datetime.datetime.now()
             if solve_for_ev:
@@ -1526,9 +1566,9 @@ def minimize_func(parameters, *data):
     CURRENT_ITERATION += 1           
     now = datetime.datetime.now()
     if CURRENT_ITERATION % 100 == 0:
-        time.sleep(10)
-    if ((now - LAST_CHECKTIME).total_seconds()) > 1800:    
-        print("{} Taking our state-mandated 4 minute long rest per 30 minutes of work".format(datetime.datetime.now()))
+        time.sleep(6)
+    if ((now - LAST_CHECKTIME).total_seconds()) > 2700:    
+        print("{} Taking our state-mandated 4 minute long rest per 45 minutes of work".format(datetime.datetime.now()))
         sleeptime, sleepmins = 0.0, 0.0         
         while sleeptime < 4:
             time.sleep(30)          
