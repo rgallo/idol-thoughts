@@ -512,9 +512,9 @@ def minimize_func(parameters, *data):
     continuation_adjust = terms["continuation"].calc(0.0)
     indulgence_adjust = terms["indulgence"].calc(0.0)
 
-    max_thwack = terms["thwackability"].calc(2.0)
-    max_moxie = terms["moxie"].calc(2.0)
-    max_ruth = terms["moxie"].calc(2.0)
+    max_thwack = terms["thwackability"].calc(2.5)
+    max_moxie = terms["moxie"].calc(2.5)
+    max_ruth = terms["moxie"].calc(2.5)
 
     adjustments = [unthwack_adjust, ruth_adjust, overp_adjust, shakes_adjust, cold_adjust, path_adjust, trag_adjust, thwack_adjust, div_adjust, moxie_adjust, muscl_adjust, martyr_adjust, omni_adjust, 
                    watch_adjust, tenacious_adjust, chasi_adjust, anticap_adjust, laser_adjust, basethirst_adjust, groundfriction_adjust, continuation_adjust, indulgence_adjust, max_thwack, max_moxie, max_ruth]

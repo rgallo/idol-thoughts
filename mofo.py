@@ -21,7 +21,8 @@ def calc_team(terms, termset, mods, skip_mods=False):
         multiplier = 1.0 
         if not skip_mods:            
             modterms = (mods or {}).get(termname, [])             
-            multiplier *= statistics.harmonic_mean(modterms)                
+            #multiplier *= statistics.harmonic_mean(modterms)      
+            multiplier *= math.prod(modterms)
         total += term.calc(val) * multiplier
     return total
 
@@ -319,7 +320,7 @@ def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, adjustment
             
         base_steal_score = (baset + laser - watch - anti) * min((base_hit_chance + walk_chance), 1.0)
         on_base_score = (laser + cont + indulg - tragic - cold - tenacious) * min(base_hit_chance + walk_chance, 1.0)
-        hit_score = max((ground + muscl + martyr - overp - chasi - shakes), 0.0) * base_hit_chance
+        hit_score = (ground + muscl + martyr - overp - chasi - shakes) * base_hit_chance
         homerun_score = max((thwack + div - path - overp - unthwack), 0.0) * strike_chance
         team_score += base_steal_score + on_base_score + hit_score + homerun_score
 

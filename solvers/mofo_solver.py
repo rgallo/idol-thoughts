@@ -39,8 +39,8 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]
     away_game, home_game = game["away"], game["home"]
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])
-    #if away_rbi == home_rbi:        
-    #    return 0, 0, 0, 0        
+    if away_rbi == home_rbi:        
+        return 0, 0, 0, 0        
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
     awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)                          
@@ -184,7 +184,7 @@ def main():
     print("Number to beat = {}".format(number_to_beat))    
     #solver time
     workers = int(cmd_args.workers)        
-    popsize = 25        
+    popsize = 25     
     init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'latinhypercube'
     #print(len(init), ",".join(str(len(s)) for s in init))
     recombination = 0.7 if solve_for_ev else 0.5
