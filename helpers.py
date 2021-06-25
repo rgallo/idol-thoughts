@@ -563,3 +563,7 @@ def get_emoji(raw_emoji):
     except ValueError:
         emoji = raw_emoji
     return emoji
+
+
+def get_player_attrs(player, include_items=True):
+    return player["permAttr"] + player["seasAttr"] + (list(player["state"].get("itemModSources", {}).keys()) if include_items else [])
