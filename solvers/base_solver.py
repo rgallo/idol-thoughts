@@ -1280,21 +1280,21 @@ def minimize_func(parameters, *data):
                 sorted_gameids = [x for _,x in sorted(zip(overall_vals, overall_gameids))]
                 overall_vals.sort()                    
                 overall_linear_error, overall_max_linear_error, overall_min_linear_error, overall_max_error_value, overall_min_error_value, overall_errors, overall_max_error_game, overall_other_errors = calc_linear_unex_error(overall_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD)  
-                overall_linear_error = (overall_linear_error / (modcount * 2.0))
+                overall_linear_error = overall_linear_error / modcount
                 linear_error += overall_linear_error
                 linear_by_mod["overall"] = overall_linear_error
-                #if overall_linear_error > new_worstmod_linear_error:
-                    #new_worstmod_linear_error = overall_linear_error
-                    #new_worstmod = "overall"                   
-                    #best_plusname = ""
-                #if overall_max_linear_error > max_linear_error:
-                #    max_linear_error = overall_max_linear_error
-                #    max_error_value = overall_max_error_value
-                #    max_error_mod = "overall"
-                #if overall_min_linear_error < min_linear_error:
-                #    min_linear_error = overall_min_linear_error                    
-                #    min_error_value = overall_min_error_value
-                #    min_error_mod = "overall"
+                if overall_linear_error > new_worstmod_linear_error:
+                    new_worstmod_linear_error = overall_linear_error
+                    new_worstmod = "overall"                   
+                    best_plusname = ""
+                if overall_max_linear_error > max_linear_error:
+                    max_linear_error = overall_max_linear_error
+                    max_error_value = overall_max_error_value
+                    max_error_mod = "overall"
+                if overall_min_linear_error < min_linear_error:
+                    min_linear_error = overall_min_linear_error                    
+                    min_error_value = overall_min_error_value
+                    min_error_mod = "overall"
                 #if new_worstmod_linear_error < BROAD_ERROR_THRESHOLD:
                 linear_error = new_worstmod_linear_error
             #linear_points = (linear_error + ((max_linear_error + max_error_value) ** 2) + ((min_linear_error - min_error_value) ** 2) + (sum(errors) ** 2)) * 2.5

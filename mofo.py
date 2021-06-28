@@ -327,7 +327,7 @@ def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, adjustment
         swing_strike_chance = log_transform(moxie_log, 100.0) * strike_chance        
 
         connect_log = (20 - patheticism) / (10.0 + path_adjust)
-        connect_chance = log_transform(moxie_log, 100.0) * swing_strike_chance
+        connect_chance = log_transform(connect_log, 100.0) * swing_strike_chance
         
         base_hit_log = ((thwackability - unthwackability - omniscience) - 20.0) / (10.0 + thwack_adjust + unthwack_adjust + omni_adjust)
         base_hit_chance = log_transform(base_hit_log, 100.0) * connect_chance         
