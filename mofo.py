@@ -3,6 +3,7 @@ from __future__ import print_function
 
 import collections
 import statistics
+from scipy.stats import hmean
 
 import helpers
 import math
@@ -21,8 +22,7 @@ def calc_team(terms, termset, mods, skip_mods=False):
         multiplier = 1.0 
         if not skip_mods:            
             modterms = (mods or {}).get(termname, [])             
-            #multiplier *= statistics.harmonic_mean(modterms)      
-            multiplier *= math.prod(modterms)
+            multiplier *= statistics.harmonic_mean(modterms)                  
         total += term.calc(val) * multiplier
     return total
 
@@ -32,7 +32,10 @@ def calc_player(terms, stlatname, stlatvalue, mods, skip_mods=False):
     if not skip_mods:            
         modterms = (mods or {}).get(stlatname, [])             
         if len(modterms) > 0:
-            multiplier = statistics.harmonic_mean(modterms)                
+            #multiplier = statistics.harmonic_mean(modterms)
+            multiplier = len(modterms) / sum(modterms)
+            #multiplier = hmean(modterms)     
+            #multiplier *= math.prod(modterms)
     total = term.calc(stlatvalue) * multiplier
     return total
 
@@ -144,12 +147,10 @@ def calc_stlatmod(name, pitcher_data, team_data, stlatterm):
         if stlatname == "groundfriction":
             stlatname = "groundFriction"
         value = max(team_data[stlatname])
-    normalized_value = stlatterm.calc(value)
-    try:
-        base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))                
-    except OverflowError:
-        base_multiplier = 1.0
-    multiplier = 2.0 * base_multiplier
+    normalized_value = stlatterm.calc(value)    
+    base_multiplier = log_transform(normalized_value, 100.0)    
+    #forcing harmonic mean with quicker process time?
+    multiplier = 1.0 / (2.0 * base_multiplier)
     return multiplier
 
 def calc_player_stlatmod(name, player_data, stlatterm):    
@@ -171,12 +172,17 @@ def calc_player_stlatmod(name, player_data, stlatterm):
             return None
         value = player_data[stlatname]    
     normalized_value = stlatterm.calc(value)
-    try:
-        base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))                
-    except OverflowError:
-        base_multiplier = 1.0
-    multiplier = 2.0 * base_multiplier
+    base_multiplier = log_transform(normalized_value, 100.0)    
+    #forcing harmonic mean with quicker process time?
+    multiplier = 1.0 / (2.0 * base_multiplier)
     return multiplier
+
+def log_transform(value, base):
+    try:
+        transformed_value = (1.0 / (1.0 + (base ** (-1.0 * value))))
+    except OverflowError:
+        transformed_value = 1.0 if (value > 0) else 0.0
+    return transformed_value
 
 def get_player_mods(mods, awayAttrs, homeAttrs, playerMods, weather, away_home, player_stat_data):            
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
@@ -224,15 +230,13 @@ def get_park_mods(ballpark, ballpark_mods):
         for playerstlat, stlatterm in stlatterms.items():
             if type(stlatterm) == ParkTerm:            
                 value = ballpark[ballparkstlat]                
-                normalized_value = stlatterm.calc(value)
-                try:
-                    base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
-                except OverflowError:
-                    base_multiplier = 1.0
+                normalized_value = stlatterm.calc(value)                
+                base_multiplier = log_transform(normalized_value, 100.0)
+                #forcing harmonic mean with quicker process time?
                 if value > 0.5:
-                    multiplier = 2.0 * base_multiplier
+                    multiplier = 1.0 / (2.0 * base_multiplier)
                 elif value < 0.5:
-                    multiplier = 2.0 - (2.0 * base_multiplier)                
+                    multiplier = 1.0 / (2.0 - (2.0 * base_multiplier))
                 else:
                     multiplier = 1.0
                 if ballparkstlat != "hype":
@@ -296,7 +300,7 @@ def calc_pitching(terms, pitcher_mods, pitcher_stat_data):
     return player_unthwackability, player_ruthlessness, player_overpowerment, player_shakespearianism, player_coldness
 
 def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, adjustments):
-    team_score = 0.0
+    team_score, runners_advance_score = 0.0, 0.0
         
     unthwack_adjust, ruth_adjust, overp_adjust, shakes_adjust, cold_adjust, path_adjust, trag_adjust, thwack_adjust, div_adjust, moxie_adjust, muscl_adjust, martyr_adjust, omni_adjust, watch_adjust, tenacious_adjust, chasi_adjust, anticap_adjust, laser_adjust, basethirst_adjust, groundfriction_adjust, continuation_adjust, indulgence_adjust, max_thwack, max_moxie, max_ruth = adjustments
 
@@ -304,25 +308,49 @@ def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, adjustment
     unthwackability, ruthlessness, overpowerment, shakespearianism, coldness = pitcher_stat_data["unthwackability"], pitcher_stat_data["ruthlessness"], pitcher_stat_data["overpowerment"], pitcher_stat_data["shakespearianism"], pitcher_stat_data["coldness"]
 
     omni, watch, anti, chasi, tenacious = (omniscience - omni_adjust), (watchfulness - watch_adjust), (anticap - anticap_adjust), (chasiness - chasi_adjust), (tenaciousness - tenacious_adjust)
-    unthwack, overp, shakes, cold = (unthwackability - unthwack_adjust), (overpowerment - overp_adjust), (shakespearianism - shakes_adjust), (coldness - cold_adjust)
+    ruth, unthwack, overp, shakes, cold = (ruthlessness - ruth_adjust), (unthwackability - unthwack_adjust), (overpowerment - overp_adjust), (shakespearianism - shakes_adjust), (coldness - cold_adjust)
 
-    strike_chance = (ruthlessness - ruth_adjust) / (max_ruth - ruth_adjust)
+
+    strike_log = (ruthlessness - 20.0) / (10.0 + ruth_adjust)
+    strike_chance = log_transform(strike_log, 100.0)
+    runners_advance_points, runners_advance_chance = [], []    
     
     for playerid in team_stat_data:                
         patheticism, tragicness, thwackability, divinity, moxie, musclitude, martyrdom = team_stat_data[playerid]["patheticism"], team_stat_data[playerid]["tragicness"], team_stat_data[playerid]["thwackability"], team_stat_data[playerid]["divinity"], team_stat_data[playerid]["moxie"], team_stat_data[playerid]["musclitude"], team_stat_data[playerid]["martyrdom"]
         laserlikeness, basethirst, continuation, groundfriction, indulgence = team_stat_data[playerid]["laserlikeness"], team_stat_data[playerid]["basethirst"], team_stat_data[playerid]["continuation"], team_stat_data[playerid]["groundfriction"], team_stat_data[playerid]["indulgence"]
             
-        path, tragic, thwack, div, muscl, martyr = (patheticism - path_adjust), (tragicness - trag_adjust), (thwackability - thwack_adjust), (divinity - div_adjust), (musclitude - muscl_adjust), (martyrdom - martyr_adjust)
+        path, tragic, thwack, div, mox, muscl, martyr = (patheticism - path_adjust), (tragicness - trag_adjust), (thwackability - thwack_adjust), (divinity - div_adjust), (moxie - moxie_adjust), (musclitude - muscl_adjust), (martyrdom - martyr_adjust)
         laser, baset, cont, ground, indulg = (laserlikeness - laser_adjust), (basethirst - basethirst_adjust), (continuation - continuation_adjust), (groundfriction - groundfriction_adjust), (indulgence - indulgence_adjust)                        
 
-        base_hit_chance = (max((thwack - unthwack - path - omni), 0.0) / (max_thwack - thwack_adjust)) * strike_chance                  
-        walk_chance = ((moxie - moxie_adjust) / (max_moxie - moxie_adjust)) * (1.0 - strike_chance)  
-            
+        moxie_log = (moxie - 20.0) / (10.0 + moxie_adjust)
+        walk_chance = log_transform(moxie_log, 100.0) * (1.0 - strike_chance)
+        swing_strike_chance = log_transform(moxie_log, 100.0) * strike_chance        
+
+        connect_log = (20 - patheticism) / (10.0 + path_adjust)
+        connect_chance = log_transform(moxie_log, 100.0) * swing_strike_chance
+        
+        base_hit_log = ((thwackability - unthwackability - omniscience) - 20.0) / (10.0 + thwack_adjust + unthwack_adjust + omni_adjust)
+        base_hit_chance = log_transform(base_hit_log, 100.0) * connect_chance         
+        
+        runners_advance_log = (20 + martyrdom - musclitude) / (10.0 + martyr_adjust + muscl_adjust)
+        runner_advance_chance = log_transform(runners_advance_log, 100.0) * (1.0 - base_hit_chance)
+        runners_advance_chance.append(runner_advance_chance)
+        
         base_steal_score = (baset + laser - watch - anti) * min((base_hit_chance + walk_chance), 1.0)
-        on_base_score = (laser + cont + indulg - tragic - cold - tenacious) * min(base_hit_chance + walk_chance, 1.0)
-        hit_score = (ground + muscl + martyr - overp - chasi - shakes) * base_hit_chance
-        homerun_score = max((thwack + div - path - overp - unthwack), 0.0) * strike_chance
-        team_score += base_steal_score + on_base_score + hit_score + homerun_score
+        walk_score = max((mox - ruth), 0.0) * walk_chance
+        hit_score = (ground + muscl - overp - chasi - shakes) * base_hit_chance
+        homerun_score = max((div - overp), 0.0) * base_hit_chance
+        team_score += base_steal_score + hit_score + homerun_score
+
+        #runners advancing is tricky, since we have to do this based on runners being on base already, but use the batter's martyrdom                
+        runner_advance_points = max((laser + cont + indulg - tragic - cold - tenacious), 0.0) * min((base_hit_chance + walk_chance), 1.0)
+        runners_advance_points.append(runner_advance_points)    
+    
+    for idx, val in enumerate(runners_advance_chance):
+        runners_advance_batter = max(sum(runners_advance_points) - runners_advance_points[idx], 0.0)
+        runners_advance_score += val * runners_advance_batter
+
+    team_score += runners_advance_score
 
     return team_score
 
@@ -397,11 +425,8 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
     denominator = abs(away_score + home_score)
     if not denominator:
         return .5, .5    
-    away_formula = numerator / denominator    
-    try:
-        away_odds = (1 / (1 + (100 ** (-1 * away_formula))))
-    except OverflowError:
-        away_odds = 1.0
+    away_formula = numerator / denominator        
+    away_odds = log_transform(away_formula, 100.0)
     return away_odds, 1.0 - away_odds
 
 def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data):
@@ -435,11 +460,12 @@ def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
             if type(stlatterm) == ParkTerm:            
                 value = ballpark[ballparkstlat]                
                 normalized_value = stlatterm.calc(value)
-                base_multiplier = (1.0 / (1.0 + (2.0 ** (-1.0 * normalized_value))))
+                base_multiplier = log_transform(normalized_value, 100.0)
+                #forcing harmonic mean with quicker process time?
                 if value > 0.5:
-                    multiplier = 2.0 * base_multiplier
+                    multiplier = 1.0 / (2.0 * base_multiplier)
                 elif value < 0.5:
-                    multiplier = 2.0 - (2.0 * base_multiplier)                
+                    multiplier = 1.0 / (2.0 - (2.0 * base_multiplier))
                 else:
                     multiplier = 1.0
                 if ballparkstlat != "hype":
@@ -483,8 +509,5 @@ def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitch
     if not denominator:
         return .5, .5    
     away_formula = numerator / denominator    
-    try:
-        away_odds = (1 / (1 + (100 ** (-1 * away_formula))))
-    except OverflowError:
-        away_odds = 1.0
+    away_odds = log_transform(away_formula, 100.0)    
     return away_odds, 1.0 - away_odds

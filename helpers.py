@@ -297,12 +297,14 @@ def adjust_by_pct(row, pct, stlats, star_func):
     while op(new_stars, original_stars * (1.0 + pct)):
         for stlat in stlats:
             if pct >= 0.0:
-                if stlat in INVERSE_STLATS and stlat != "tragicness":
+                #if stlat in INVERSE_STLATS and stlat != "tragicness":
+                if stlat in INVERSE_STLATS:
                     new_row[stlat] = max(float(new_row[stlat]) - .01, .001)
                 elif stlat not in INVERSE_STLATS:
                     new_row[stlat] = float(new_row[stlat]) + .01
             else:
-                if stlat in INVERSE_STLATS and stlat != "tragicness":
+                #if stlat in INVERSE_STLATS and stlat != "tragicness":
+                if stlat in INVERSE_STLATS:
                     new_row[stlat] = float(new_row[stlat]) + .01
                 elif stlat not in INVERSE_STLATS:
                     new_row[stlat] = max(float(new_row[stlat]) - .01, .001)

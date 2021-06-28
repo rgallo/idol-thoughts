@@ -57,6 +57,7 @@ LAST_UNMOD = 1000000000.0
 LAST_SPAN = 1000000.0
 LAST_BESTS = {}
 PREVIOUS_LAST_BEST = 1000000000.0
+BROAD_ERROR_THRESHOLD = 25000000.0
 ERROR_THRESHOLD = 35.0
 POS_HITS = 0
 POS_HRS = 0
@@ -451,6 +452,7 @@ def minimize_func(parameters, *data):
     global EARLY_REJECT
     global MIN_DAY
     global MAX_DAY
+    global BROAD_ERROR_THRESHOLD
     calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, final_solution, debug, debug2, debug3, outputdir = data    
     debug_print("func start: {}".format(starttime), debug3, run_id)
     if number_to_beat is not None:
@@ -512,9 +514,9 @@ def minimize_func(parameters, *data):
     continuation_adjust = terms["continuation"].calc(0.0)
     indulgence_adjust = terms["indulgence"].calc(0.0)
 
-    max_thwack = terms["thwackability"].calc(2.5)
-    max_moxie = terms["moxie"].calc(2.5)
-    max_ruth = terms["moxie"].calc(2.5)
+    max_thwack = terms["thwackability"].calc(0.8)
+    max_moxie = terms["moxie"].calc(0.8)
+    max_ruth = terms["ruthlessness"].calc(0.8)
 
     adjustments = [unthwack_adjust, ruth_adjust, overp_adjust, shakes_adjust, cold_adjust, path_adjust, trag_adjust, thwack_adjust, div_adjust, moxie_adjust, muscl_adjust, martyr_adjust, omni_adjust, 
                    watch_adjust, tenacious_adjust, chasi_adjust, anticap_adjust, laser_adjust, basethirst_adjust, groundfriction_adjust, continuation_adjust, indulgence_adjust, max_thwack, max_moxie, max_ruth]
@@ -1249,10 +1251,12 @@ def minimize_func(parameters, *data):
                     sorted_win_loss = [x for _,x in sorted(zip(mod_vals, mod_win_loss))]
                     sorted_gameids = [x for _,x in sorted(zip(mod_vals, mod_gameids))]
                     mod_vals.sort()                    
-                    mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value, mod_errors, mod_max_error_game, mod_other_errors = calc_linear_unex_error(mod_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD)  
-                    linear_error += mod_linear_error
+                    mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value, mod_errors, mod_max_error_game, mod_other_errors = calc_linear_unex_error(mod_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD)                      
                     if modname == "unmod":
-                        unmod_linear_error = mod_linear_error
+                        #we really do need to prioritize unmod being right before we can be happy to mod error counts
+                        mod_linear_error *= 10.0
+                        unmod_linear_error = mod_linear_error                        
+                    linear_error += mod_linear_error
                     linear_by_mod[modname] = mod_linear_error
                     if mod_linear_error > new_worstmod_linear_error:
                         new_worstmod_linear_error = mod_linear_error
@@ -1276,18 +1280,27 @@ def minimize_func(parameters, *data):
                 sorted_gameids = [x for _,x in sorted(zip(overall_vals, overall_gameids))]
                 overall_vals.sort()                    
                 overall_linear_error, overall_max_linear_error, overall_min_linear_error, overall_max_error_value, overall_min_error_value, overall_errors, overall_max_error_game, overall_other_errors = calc_linear_unex_error(overall_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD)  
-                overall_linear_error = (overall_linear_error / (modcount * 2))
+                overall_linear_error = (overall_linear_error / (modcount * 2.0))
                 linear_error += overall_linear_error
                 linear_by_mod["overall"] = overall_linear_error
-                if overall_linear_error > new_worstmod_linear_error:
-                    new_worstmod_linear_error = overall_linear_error
-                    new_worstmod = "overall"                   
-                    best_plusname = ""
+                #if overall_linear_error > new_worstmod_linear_error:
+                    #new_worstmod_linear_error = overall_linear_error
+                    #new_worstmod = "overall"                   
+                    #best_plusname = ""
+                #if overall_max_linear_error > max_linear_error:
+                #    max_linear_error = overall_max_linear_error
+                #    max_error_value = overall_max_error_value
+                #    max_error_mod = "overall"
+                #if overall_min_linear_error < min_linear_error:
+                #    min_linear_error = overall_min_linear_error                    
+                #    min_error_value = overall_min_error_value
+                #    min_error_mod = "overall"
+                #if new_worstmod_linear_error < BROAD_ERROR_THRESHOLD:
                 linear_error = new_worstmod_linear_error
             #linear_points = (linear_error + ((max_linear_error + max_error_value) ** 2) + ((min_linear_error - min_error_value) ** 2) + (sum(errors) ** 2)) * 2.5
             #major_errors = sum(errors) ** 2
             major_errors = 0.0           
-            #linear_points = linear_error + major_errors
+            #linear_points = linear_error + major_errors            
             linear_points = linear_error
             if not mod_mode:
                 fail_points = ((fail_rate * 1000.0) ** 2) * 2.5        
@@ -1565,14 +1578,14 @@ def minimize_func(parameters, *data):
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1           
     now = datetime.datetime.now()
-    if CURRENT_ITERATION % 100 == 0:
-        time.sleep(6)
-    if ((now - LAST_CHECKTIME).total_seconds()) > 2700:    
-        print("{} Taking our state-mandated 4 minute long rest per 45 minutes of work".format(datetime.datetime.now()))
+    if CURRENT_ITERATION % 25 == 0:
+        time.sleep(7)
+    if ((now - LAST_CHECKTIME).total_seconds()) > 1800:    
+        print("{} Taking our state-mandated 5 minute long rest per 30 minutes of work".format(datetime.datetime.now()))
         sleeptime, sleepmins = 0.0, 0.0         
-        while sleeptime < 4:
-            time.sleep(30)          
-            sleeptime += 0.50            
+        while sleeptime < 5:
+            time.sleep(300)          
+            sleeptime += 5.00            
         LAST_CHECKTIME = datetime.datetime.now()        
         print("{} BACK TO WORK".format(datetime.datetime.now()))       
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
