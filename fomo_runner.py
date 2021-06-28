@@ -12,7 +12,8 @@ import helpers
 import fomo
 
 FOMOData = namedtuple("FOMOData", ["pitchername", "pitcherid", "pitcherteam", "gameid", "defemoji", "vsteam",
-                                   "offemoji", "pitcherteamnickname", "vsteamnickname", "websiteodds", "fomoodds"])
+                                   "offemoji", "pitcherteamnickname", "vsteamnickname", "websiteodds", "fomoodds",
+                                   "ishome"])
 
 FOMOPair = namedtuple("FOMOPair", ["awayFOMOData", "homeFOMOData"])
 
@@ -34,7 +35,8 @@ def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players
                          f"(https://www.blaseball.com/player/{pitcher.pitcherid}), {pitcher.pitcherteamnickname}** "
                          f"(FOMO {((pitcher.fomoodds - fomo_error) * 100.0):.2f}% - {((pitcher.fomoodds + fomo_error) * 100.0):.2f}%, "
                          f"Webodds {(pitcher.websiteodds * 100.0):.2f}%) "
-                         f"{':fax:' if helpers.get_team_id(pitcher.pitcherteam) in fax_teams else ''}" for pitcher in pitchers if pitcher.pitcherid not in unidolable)
+                         f"{':fax:' if (pitcher.ishome and helpers.get_team_id(pitcher.pitcherteam) in fax_teams) else ''}"
+                         f"" for pitcher in pitchers if pitcher.pitcherid not in unidolable)
         webhook.add_embed(Embed(title=f"{title} Pitchers:", description=desc))
     if mismatches:
         odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, FOMO: **{}** {:.2f}%".format(
@@ -65,9 +67,9 @@ def process_fomo(game, team_stat_data, pitcher_stat_data, day):
     awayAttrs, homeAttrs = get_team_attributes()[awayTeam], get_team_attributes()[homeTeam]
     awayFOMO, homeFOMO = fomo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs, day, game["weather"])
     results.append(FOMOData(awayPitcher, awayPitcherId, awayTeam, gameId, awayEmoji, homeTeam, homeEmoji,
-                               game["awayTeamNickname"], game["homeTeamNickname"], game["awayOdds"], awayFOMO))
+                               game["awayTeamNickname"], game["homeTeamNickname"], game["awayOdds"], awayFOMO, False))
     results.append(FOMOData(homePitcher, homePitcherId, homeTeam, gameId, homeEmoji, awayTeam, awayEmoji,
-                               game["homeTeamNickname"], game["awayTeamNickname"], game["homeOdds"], homeFOMO))
+                               game["homeTeamNickname"], game["awayTeamNickname"], game["homeOdds"], homeFOMO, True))
     return results
 
 
