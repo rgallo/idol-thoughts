@@ -17,7 +17,7 @@ FOMOData = namedtuple("FOMOData", ["pitchername", "pitcherid", "pitcherteam", "g
 FOMOPair = namedtuple("FOMOPair", ["awayFOMOData", "homeFOMOData"])
 
 
-def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players, bonus_multiplier, mismatches, unidolable, screen=False):
+def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players, bonus_multiplier, mismatches, unidolable, fax_teams, screen=False):
     Webhook, Embed = (helpers.PrintWebhook, helpers.PrintEmbed) if screen else (DiscordWebhook, DiscordEmbed)
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL").split(";")
     notify_role = os.getenv("NOTIFY_ROLE")
@@ -33,7 +33,8 @@ def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players
         desc = "\n".join(f"{helpers.get_emoji(pitcher.defemoji)} **[{pitcher.pitchername}]"
                          f"(https://www.blaseball.com/player/{pitcher.pitcherid}), {pitcher.pitcherteamnickname}** "
                          f"(FOMO {((pitcher.fomoodds - fomo_error) * 100.0):.2f}% - {((pitcher.fomoodds + fomo_error) * 100.0):.2f}%, "
-                         f"Webodds {(pitcher.websiteodds * 100.0):.2f}%)" for pitcher in pitchers if pitcher.pitcherid not in unidolable)
+                         f"Webodds {(pitcher.websiteodds * 100.0):.2f}%) "
+                         f"{':fax:' if helpers.get_team_id(pitcher.pitcherteam) in fax_teams else ''}" for pitcher in pitchers if pitcher.pitcherid not in unidolable)
         webhook.add_embed(Embed(title=f"{title} Pitchers:", description=desc))
     if mismatches:
         odds_description = "\n".join(["{} @ {} - Website: {} {:.2f}%, FOMO: **{}** {:.2f}%".format(
@@ -150,11 +151,18 @@ def get_unidolable(player_data):
     return [player["id"] for player in player_data if any(attr in ("NON_IDOLIZED", "COFFEE_EXIT", "STATIC", "LEGENDARY") for attr in helpers.get_player_attrs(player))]
 
 
+def get_fax_teams():
+    ballparks_url = os.getenv("BALLPARKS")
+    ballparks = helpers.load_ballparks(ballparks_url)
+    return {teamid for teamid, attrs in ballparks.items() if "FAX_MACHINE" in attrs["mods"]}
+
+
 def main():
     args = helpers.handle_args()
     load_dotenv(dotenv_path=args.env)
     game_schedule, streamdata, season_number, day, all_pitcher_ids, team_stat_data, team_pid_stat_data, pitcher_stat_data = helpers.do_init(args)
     pair_results, pitchers = [], {}
+    fax_teams = get_fax_teams()
     for game in game_schedule:
         awayFOMO, homeFOMO = process_fomo(game, team_stat_data, pitcher_stat_data, day)
         pitchers.update({awayFOMO.pitcherid: awayFOMO.pitchername, homeFOMO.pitcherid: homeFOMO.pitchername})
@@ -167,9 +175,9 @@ def main():
         fomo_error = float(list(helpers.load_data(os.getenv("FOMO_ERROR")).keys())[0]) / 100.0
         best, worst = get_games_to_output(pair_results, fomo_error)
         if args.discord:
-            output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, mismatches, unidolable)
+            output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, mismatches, unidolable, fax_teams)
         if args.discordprint:
-            output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, mismatches, unidolable, screen=True)
+            output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, mismatches, unidolable, fax_teams, screen=True)
         if args.print:
             print_fomo(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, mismatches, unidolable)
     else:

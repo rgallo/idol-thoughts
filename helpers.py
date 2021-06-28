@@ -141,7 +141,7 @@ def load_ballparks(ballparks_url):
         stadiums = requests.get(ballparks_url).json()["data"]
         stadium_stlats = {
             row["data"]["teamId"]: {
-                key: value for key, value in row["data"].items() if type(value) in (float, int)
+                key: value for key, value in row["data"].items() if (type(value) in (float, int) or key == "mods")
             } for row in stadiums
         }
         WEB_CACHE[ballparks_url] = stadium_stlats
