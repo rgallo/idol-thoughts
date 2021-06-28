@@ -321,11 +321,14 @@ def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitc
               day, weather, skip_mods=False):
     terms, awayMods, homeMods = setup(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data)
     return get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods,
-                    homeMods, skip_mods=skip_mods)
+                    homeMods, weather, skip_mods=skip_mods)
 
 
 def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods,
-             skip_mods=False):
+             weather, skip_mods=False):
+    polarity_plus, polarity_minus = helpers.get_weather_idx("Polarity +"), helpers.get_weather_idx("Polarity -")
+    if weather == polarity_plus or weather == polarity_minus:
+        return .5, .5
     away_offense = abs(team_offense(terms, awayTeam, awayMods, team_stat_data, skip_mods=skip_mods))
     away_defense = abs(team_defense(terms, awayPitcher, awayTeam, awayMods, team_stat_data, pitcher_stat_data,
                                     skip_mods=skip_mods))

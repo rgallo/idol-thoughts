@@ -27,4 +27,4 @@ def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitc
               day, weather, skip_mods=False):
     terms, awayMods, homeMods = setup(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data)
     return mofo.get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods,
-                    homeMods, skip_mods=skip_mods)
+                    homeMods, weather, skip_mods=skip_mods)
