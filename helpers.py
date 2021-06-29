@@ -368,45 +368,39 @@ def get_team_attributes(attributes={}):
 
 def adjust_stlats(row, game, day, player_attrs, team_attrs=None):
     new_row = row.copy()
-    if "UNDERPERFORMING" in player_attrs:
-        new_row = adjust_by_pct(new_row, -0.2, PITCHING_STLATS, pitching_stars)
-        new_row = adjust_by_pct(new_row, -0.2, BATTING_STLATS, batting_stars)
-        new_row = adjust_by_pct(new_row, -0.2, BASERUNNING_STLATS, baserunning_stars)
-        new_row = adjust_by_pct(new_row, -0.2, DEFENSE_STLATS, defense_stars)
-    if "OVERPERFORMING" in player_attrs:
-        new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, pitching_stars)
-        new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, batting_stars)
-        new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, baserunning_stars)
-        new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, defense_stars)
     if game:
+        team = row["team"]
         coffee_weathers = [get_weather_idx("Coffee"), get_weather_idx("Coffee 2"), get_weather_idx("Coffee 3s")]
-        if "PERK" in player_attrs and game["weather"] in coffee_weathers:
+        bird_weather = get_weather_idx("Birds")
+        current_team_attrs = (team_attrs if team_attrs is not None else get_team_attributes()).get(team, {})
+
+        overperforming = ("EARLBIRDS" in current_team_attrs and 1 <= day <= 27) or (("MIDDLING" in current_team_attrs or "MIDDLING" in player_attrs) and 28 <= day <= 72) or (("LATE_TO_PARTY" in current_team_attrs or "LATE_TO_PARTY" in player_attrs) and 73 <= day <= 99) or ("OVERPERFORMING" in current_team_attrs) or ("OVERPERFORMING" in player_attrs) or (("AMBITIOUS" in current_team_attrs or "AMBITIOUS" in player_attrs) and day > 99) or ("PERK" in player_attrs and game["weather"] in coffee_weathers) or ("HOMEBODY" in player_attrs and team == game["homeTeamName"])
+        underperforming = (("COASTING" in current_team_attrs or "COASTING" in player_attrs) and 28 <= day <= 72) or ("EARLY_TO_PARTY" in current_team_attrs and 73 <= day <= 99) or ("UNDERPERFORMING" in current_team_attrs) or ("UNDERPERFORMING" in player_attrs) or (("UNAMBITIOUS" in current_team_attrs or "UNAMBITIOUS" in player_attrs) and day > 99) or ("HOMEBODY" in player_attrs and team == game["awayTeamName"])
+    
+        if underperforming:
+            new_row = adjust_by_pct(new_row, -0.2, PITCHING_STLATS, pitching_stars)
+            new_row = adjust_by_pct(new_row, -0.2, BATTING_STLATS, batting_stars)
+            new_row = adjust_by_pct(new_row, -0.2, BASERUNNING_STLATS, baserunning_stars)
+            new_row = adjust_by_pct(new_row, -0.2, DEFENSE_STLATS, defense_stars)
+        if overperforming:
             new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, pitching_stars)
             new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, batting_stars)
             new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, baserunning_stars)
             new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, defense_stars)
-        team = row["team"]
-        current_team_attrs = (team_attrs if team_attrs is not None else get_team_attributes()).get(team, {})
         if "GROWTH" in current_team_attrs:
             growth_pct = .05 * min(day / 99, 1.0)
             new_row = adjust_by_pct(new_row, growth_pct, PITCHING_STLATS, pitching_stars)
             new_row = adjust_by_pct(new_row, growth_pct, BATTING_STLATS, batting_stars)
             new_row = adjust_by_pct(new_row, growth_pct, BASERUNNING_STLATS, baserunning_stars)
-            new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, defense_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, defense_stars)                       
         if "TRAVELING" in current_team_attrs and team == game["awayTeamName"]:
             new_row = adjust_by_pct(new_row, 0.05, PITCHING_STLATS, pitching_stars)
             new_row = adjust_by_pct(new_row, 0.05, BATTING_STLATS, batting_stars)
             new_row = adjust_by_pct(new_row, 0.05, BASERUNNING_STLATS, baserunning_stars)
-            new_row = adjust_by_pct(new_row, 0.05, DEFENSE_STLATS, defense_stars)
-        bird_weather = get_weather_idx("Birds")
+            new_row = adjust_by_pct(new_row, 0.05, DEFENSE_STLATS, defense_stars)        
         if "AFFINITY_FOR_CROWS" in current_team_attrs and game["weather"] == bird_weather:
             new_row = adjust_by_pct(new_row, 0.50, PITCHING_STLATS, pitching_stars)
-            new_row = adjust_by_pct(new_row, 0.50, BATTING_STLATS, batting_stars)
-        if ("EARLBIRDS" in current_team_attrs and 1 <= day <= 27) or ("LATE_TO_PARTY" in current_team_attrs and 73 <= day <= 99):
-            new_row = adjust_by_pct(new_row, 0.2, PITCHING_STLATS, pitching_stars)
-            new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, batting_stars)
-            new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, baserunning_stars)
-            new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, defense_stars)
+            new_row = adjust_by_pct(new_row, 0.50, BATTING_STLATS, batting_stars)        
     return new_row
 
 
@@ -465,6 +459,7 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
             for key in (PITCHING_STLATS + ["pitchingStars"]):
                 pitcherstatdata[new_row["name"]][key] = float(new_row[key])
             pitcherstatdata[new_row["name"]]["ispitcher"] = True
+            pitcherstatdata[new_row["name"]]["attrs"] = player_attrs
         elif new_row["position"] == "lineup":            
             if "SHELLED" not in player_attrs and "ELSEWHERE" not in player_attrs:
                 for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):

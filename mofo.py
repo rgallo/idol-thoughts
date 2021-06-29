@@ -299,8 +299,8 @@ def calc_pitching(terms, pitcher_mods, pitcher_stat_data):
     player_coldness = calc_player(terms, "coldness", pitcher_stat_data["coldness"], pitcher_mods, False)
     return player_unthwackability, player_ruthlessness, player_overpowerment, player_shakespearianism, player_coldness
 
-def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, adjustments):
-    team_score, runners_advance_score = 0.0, 0.0
+def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, adjustments):
+    team_score, runners_advance_score, homerun_score = 0.0, 0.0, 0.0
         
     unthwack_adjust, ruth_adjust, overp_adjust, shakes_adjust, cold_adjust, path_adjust, trag_adjust, thwack_adjust, div_adjust, moxie_adjust, muscl_adjust, martyr_adjust, omni_adjust, watch_adjust, tenacious_adjust, chasi_adjust, anticap_adjust, laser_adjust, basethirst_adjust, groundfriction_adjust, continuation_adjust, indulgence_adjust, max_thwack, max_moxie, max_ruth = adjustments
 
@@ -309,11 +309,12 @@ def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, adjustment
 
     omni, watch, anti, chasi, tenacious = (omniscience - omni_adjust), (watchfulness - watch_adjust), (anticap - anticap_adjust), (chasiness - chasi_adjust), (tenaciousness - tenacious_adjust)
     ruth, unthwack, overp, shakes, cold = (ruthlessness - ruth_adjust), (unthwackability - unthwack_adjust), (overpowerment - overp_adjust), (shakespearianism - shakes_adjust), (coldness - cold_adjust)
-
+        
+    homer_multiplier = -1.0 if "UNDERHANDED" in pitcher_data["attrs"] else 1.0
 
     strike_log = (ruthlessness - 20.0) / (10.0 + ruth_adjust)
     strike_chance = log_transform(strike_log, 100.0)
-    runners_advance_points, runners_advance_chance = [], []    
+    runners_advance_points, runners_advance_chance, runners_on_base, homerun_multipliers = [], [], [], []
     
     for playerid in team_stat_data:                
         patheticism, tragicness, thwackability, divinity, moxie, musclitude, martyrdom = team_stat_data[playerid]["patheticism"], team_stat_data[playerid]["tragicness"], team_stat_data[playerid]["thwackability"], team_stat_data[playerid]["divinity"], team_stat_data[playerid]["moxie"], team_stat_data[playerid]["musclitude"], team_stat_data[playerid]["martyrdom"]
@@ -334,13 +335,18 @@ def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, adjustment
         
         runners_advance_log = (20 + martyrdom - musclitude) / (10.0 + martyr_adjust + muscl_adjust)
         runner_advance_chance = log_transform(runners_advance_log, 100.0) * (1.0 - base_hit_chance)
-        runners_advance_chance.append(runner_advance_chance)
+        runners_advance_chance.append(runner_advance_chance)        
         
         base_steal_score = (baset + laser - watch - anti) * min((base_hit_chance + walk_chance), 1.0)
         walk_score = max((mox - ruth), 0.0) * walk_chance
+        strike_score = min((mox - ruth), 0.0) * (1.0 - swing_strike_chance)
         hit_score = (ground + muscl - overp - chasi - shakes) * base_hit_chance
-        homerun_score = max((div - overp), 0.0) * base_hit_chance
-        team_score += base_steal_score + hit_score + homerun_score
+        
+        team_score += base_steal_score + walk_score + hit_score + strike_score
+
+        #homeruns needs to care about how many other runners are on base for how valuable they are, with a floor of "1x"
+        homerun_multipliers.append(max((div - overp), 0.0) * base_hit_chance * homer_multiplier)
+        runners_on_base.append(min((base_hit_chance + walk_chance), 1.0))
 
         #runners advancing is tricky, since we have to do this based on runners being on base already, but use the batter's martyrdom                
         runner_advance_points = max((laser + cont + indulg - tragic - cold - tenacious), 0.0) * min((base_hit_chance + walk_chance), 1.0)
@@ -348,9 +354,16 @@ def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, adjustment
     
     for idx, val in enumerate(runners_advance_chance):
         runners_advance_batter = max(sum(runners_advance_points) - runners_advance_points[idx], 0.0)
-        runners_advance_score += val * runners_advance_batter
+        runners_advance_score += val * runners_advance_batter                
+        
+        if len(runners_on_base) < 4:            
+            average_runners_on_base = max(sum(runners_on_base), 0.0) / len(runners_on_base)     
+        else:
+            average_runners_on_base = max(sum(runners_on_base) - runners_on_base[idx], 0.0) / (len(runners_on_base) - 1)             
 
-    team_score += runners_advance_score
+        homerun_score += homerun_multipliers[idx] * (1.0 + max(average_runners_on_base, 3.0))
+
+    team_score += runners_advance_score + homerun_score
 
     return team_score
 
@@ -397,7 +410,7 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
     away_team_defense["chasiness"] = away_team_defense["chasiness"] / away_lineup
     away_team_defense["anticapitalism"] = away_team_defense["anticapitalism"] / away_lineup
     away_team_defense["tenaciousness"] = away_team_defense["tenaciousness"] / away_lineup
-    awayPitcherStlats = calc_pitcher_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, "away", pitcher_stat_data[awayPitcher])
+    awayPitcherStlats = calc_pitcher_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, "away", pitcher_stat_data[awayPitcher])    
 
     for playerid in team_stat_data[homeTeam]:
         if not team_stat_data[homeTeam][playerid]["shelled"]:
@@ -418,8 +431,8 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
     home_team_defense["tenaciousness"] = home_team_defense["tenaciousness"] / home_lineup
     homePitcherStlats = calc_pitcher_stlats(terms, mods, awayAttrs, homeAttrs, homeMods, weather, "home", pitcher_stat_data[homePitcher])   
     
-    away_score = calc_team_score(away_team_stlats, home_team_defense, homePitcherStlats, adjustments)
-    home_score = calc_team_score(home_team_stlats, away_team_defense, awayPitcherStlats, adjustments)   
+    away_score = calc_team_score(away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, adjustments)
+    home_score = calc_team_score(home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, adjustments)   
 
     numerator = away_score - home_score
     denominator = abs(away_score + home_score)
