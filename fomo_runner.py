@@ -37,7 +37,7 @@ def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players
                          f"(FOMO {((pitcher.fomoodds - fomo_error) * 100.0):.2f}% - {((pitcher.fomoodds + fomo_error) * 100.0):.2f}%, "
                          f"Webodds {(pitcher.websiteodds * 100.0):.2f}%)"
                          f"{' :fax:' if (pitcher.ishome and helpers.get_team_id(pitcher.pitcherteam) in fax_teams) else ''}"
-                         f"{' :glove:' if 'UNDERHANDED' in pitcher_attrs.get(pitcher.pitcherid) else ''}"
+                         f"{' :gloves:' if 'UNDERHANDED' in pitcher_attrs.get(pitcher.pitcherid) else ''}"
                          f"" for pitcher in pitchers if pitcher.pitcherid not in unidolable)
         webhook.add_embed(Embed(title=f"{title} Pitchers:", description=desc))
     if mismatches:
