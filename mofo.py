@@ -187,9 +187,13 @@ def log_transform(value, base):
 def get_player_mods(mods, awayAttrs, homeAttrs, playerMods, weather, away_home, player_stat_data):            
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
     lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
+    playerAttrs = [attr.lower() for attr in player_stat_data["attrs"].split(";")]    
+    applied_mods = []
     bird_weather = helpers.get_weather_idx("Birds")    
     flood_weather = helpers.get_weather_idx("Flooding")   
     for attr in lowerAwayAttrs:    
+        if attr == "fiery":
+            continue
         if attr == "affinity_for_crows" and weather != bird_weather:
             continue
         if attr == "high_pressure" and weather != flood_weather:
@@ -200,13 +204,17 @@ def get_player_mods(mods, awayAttrs, homeAttrs, playerMods, weather, away_home, 
                     multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
                     if multiplier is not None:
                         playerMods[name].append(multiplier)
+                        applied_mods.append(attr)
             if away_home == "home":
                 for name, stlatterm in mods[attr]["opp"].items():                
                     multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
                     if multiplier is not None:
                         playerMods[name].append(multiplier)
+                        applied_mods.append(attr)
 
     for attr in lowerHomeAttrs:
+        if attr == "fiery":
+            continue
         if attr == "affinity_for_crows" and weather != bird_weather:
             continue
         if attr == "high_pressure" and weather != flood_weather:
@@ -217,11 +225,27 @@ def get_player_mods(mods, awayAttrs, homeAttrs, playerMods, weather, away_home, 
                     multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
                     if multiplier is not None:
                         playerMods[name].append(multiplier)
+                        applied_mods.append(attr)
             if away_home == "away":
                 for name, stlatterm in mods[attr]["opp"].items():                
                     multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
                     if multiplier is not None:
                         playerMods[name].append(multiplier)
+                        applied_mods.append(attr)    
+
+    for attr in playerAttrs:    
+        if attr == "fiery":
+            continue
+        if attr == "affinity_for_crows" and weather != bird_weather:
+            continue
+        if attr == "high_pressure" and weather != flood_weather:
+            continue                
+        if (attr in mods) and (attr not in applied_mods):                        
+            for name, stlatterm in mods[attr]["same"].items():                
+                multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
+                if multiplier is not None:
+                    playerMods[name].append(multiplier)            
+
     return playerMods
 
 def get_park_mods(ballpark, ballpark_mods):
@@ -299,8 +323,9 @@ def calc_pitching(terms, pitcher_mods, pitcher_stat_data):
     player_coldness = calc_player(terms, "coldness", pitcher_stat_data["coldness"], pitcher_mods, False)
     return player_unthwackability, player_ruthlessness, player_overpowerment, player_shakespearianism, player_coldness
 
-def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, adjustments):
+def calc_team_score(mods, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, adjustments):
     team_score, runners_advance_score, homerun_score = 0.0, 0.0, 0.0
+    opponentAttrs = [attr.lower() for attr in oppAttrs]
         
     unthwack_adjust, ruth_adjust, overp_adjust, shakes_adjust, cold_adjust, path_adjust, trag_adjust, thwack_adjust, div_adjust, moxie_adjust, muscl_adjust, martyr_adjust, omni_adjust, watch_adjust, tenacious_adjust, chasi_adjust, anticap_adjust, laser_adjust, basethirst_adjust, groundfriction_adjust, continuation_adjust, indulgence_adjust, max_thwack, max_moxie, max_ruth = adjustments
 
@@ -311,6 +336,10 @@ def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, team_data,
     ruth, unthwack, overp, shakes, cold = (ruthlessness - ruth_adjust), (unthwackability - unthwack_adjust), (overpowerment - overp_adjust), (shakespearianism - shakes_adjust), (coldness - cold_adjust)
         
     homer_multiplier = -1.0 if "UNDERHANDED" in pitcher_data["attrs"] else 1.0
+    strike_mod = 1.0
+    if "fiery" in opponentAttrs:        
+        normalized_value = mods["fiery"]["same"]["ruthlessness"].calc(ruthlessness)        
+        strike_mod += log_transform(normalized_value, 100.0)
 
     strike_log = (ruthlessness - 20.0) / (10.0 + ruth_adjust)
     strike_chance = log_transform(strike_log, 100.0)
@@ -324,8 +353,9 @@ def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, team_data,
         laser, baset, cont, ground, indulg = (laserlikeness - laser_adjust), (basethirst - basethirst_adjust), (continuation - continuation_adjust), (groundfriction - groundfriction_adjust), (indulgence - indulgence_adjust)                        
 
         moxie_log = (moxie - 20.0) / (10.0 + moxie_adjust)
-        walk_chance = log_transform(moxie_log, 100.0) * (1.0 - strike_chance)
-        swing_strike_chance = log_transform(moxie_log, 100.0) * strike_chance        
+        swing_correct_chance = log_transform(moxie_log, 100.0)
+        walk_chance = swing_correct_chance * (1.0 - strike_chance)
+        swing_strike_chance = swing_correct_chance * strike_chance        
 
         connect_log = (20 - patheticism) / (10.0 + path_adjust)
         connect_chance = log_transform(connect_log, 100.0) * swing_strike_chance
@@ -339,7 +369,9 @@ def calc_team_score(team_stat_data, opp_stat_data, pitcher_stat_data, team_data,
         
         base_steal_score = (baset + laser - watch - anti) * min((base_hit_chance + walk_chance), 1.0)
         walk_score = max((mox - ruth), 0.0) * walk_chance
-        strike_score = min((mox - ruth), 0.0) * (1.0 - swing_strike_chance)
+        strike_count_chance = (1.0 - swing_correct_chance) + (1.0 - connect_chance)
+        
+        strike_score = min((mox - ruth), 0.0) * max(strike_count_chance, 1.0) * strike_mod        
         hit_score = (ground + muscl - overp - chasi - shakes) * base_hit_chance
         
         team_score += base_steal_score + walk_score + hit_score + strike_score
@@ -386,7 +418,7 @@ def calc_pitcher_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, aw
 def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods, adjustments, skip_mods=False):          
     polarity_plus, polarity_minus = helpers.get_weather_idx("Polarity +"), helpers.get_weather_idx("Polarity -")
     if weather == polarity_plus or weather == polarity_minus:
-        return .5, .5
+        return .5, .5    
     
     away_team_stlats, home_team_stlats, away_team_defense, home_team_defense = {}, {}, {}, {}
     away_lineup, home_lineup = 0, 0
@@ -431,8 +463,8 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
     home_team_defense["tenaciousness"] = home_team_defense["tenaciousness"] / home_lineup
     homePitcherStlats = calc_pitcher_stlats(terms, mods, awayAttrs, homeAttrs, homeMods, weather, "home", pitcher_stat_data[homePitcher])   
     
-    away_score = calc_team_score(away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, adjustments)
-    home_score = calc_team_score(home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, adjustments)   
+    away_score = calc_team_score(mods, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, adjustments)
+    home_score = calc_team_score(mods, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, adjustments)   
 
     numerator = away_score - home_score
     denominator = abs(away_score + home_score)

@@ -469,7 +469,7 @@ def minimize_func(parameters, *data):
     for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
         mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(a, b, c)      
     for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):        
-        ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(a, b, c)           
+        ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(a, b, c)               
     special_cases = parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)] if special_case_list else []
     game_counter, fail_counter, season_game_counter, half_fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 1000000000, 0, 0, 0, 0, 0
     quarter_fail = 100.0
@@ -1254,7 +1254,7 @@ def minimize_func(parameters, *data):
                     mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value, mod_errors, mod_max_error_game, mod_other_errors = calc_linear_unex_error(mod_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD)                      
                     if modname == "unmod":
                         #we really do need to prioritize unmod being right before we can be happy to mod error counts
-                        mod_linear_error *= 10.0
+                        mod_linear_error *= 12.0
                         unmod_linear_error = mod_linear_error                        
                     linear_error += mod_linear_error
                     linear_by_mod[modname] = mod_linear_error
@@ -1287,16 +1287,16 @@ def minimize_func(parameters, *data):
                     new_worstmod_linear_error = overall_linear_error
                     new_worstmod = "overall"                   
                     best_plusname = ""
-                if overall_max_linear_error > max_linear_error:
-                    max_linear_error = overall_max_linear_error
-                    max_error_value = overall_max_error_value
-                    max_error_mod = "overall"
-                if overall_min_linear_error < min_linear_error:
-                    min_linear_error = overall_min_linear_error                    
-                    min_error_value = overall_min_error_value
-                    min_error_mod = "overall"
-                #if new_worstmod_linear_error < BROAD_ERROR_THRESHOLD:
-                linear_error = new_worstmod_linear_error
+                #if overall_max_linear_error > max_linear_error:
+                #    max_linear_error = overall_max_linear_error
+                #    max_error_value = overall_max_error_value
+                #    max_error_mod = "overall"
+                #if overall_min_linear_error < min_linear_error:
+                #    min_linear_error = overall_min_linear_error                    
+                #    min_error_value = overall_min_error_value
+                #    min_error_mod = "overall"
+                if unmod_linear_error < BROAD_ERROR_THRESHOLD:
+                    linear_error = new_worstmod_linear_error
             #linear_points = (linear_error + ((max_linear_error + max_error_value) ** 2) + ((min_linear_error - min_error_value) ** 2) + (sum(errors) ** 2)) * 2.5
             #major_errors = sum(errors) ** 2
             major_errors = 0.0           

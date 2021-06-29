@@ -42,7 +42,7 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     if away_rbi == home_rbi:        
         return 0, 0, 0, 0        
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
-    homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
+    homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])    
     awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)                          
     awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, away_game["weather"], team_stat_data, pitcher_stat_data, terms,
                            awayMods, homeMods, adjustments)        
@@ -134,7 +134,7 @@ def main():
     game_list = base_solver.get_games(cmd_args.gamefile)
     current_season = 1
     for row in game_list:
-        current_season = int(row["season"]) if (int(row["season"]) > current_season) else current_season
+        current_season = int(row["season"]) if (int(row["season"]) > current_season) else current_season    
     previous_season = current_season - 1    
     solve_for_ev = cmd_args.ev
     with open('team_attrs.json') as f:
@@ -142,8 +142,8 @@ def main():
     team_mod_terms = [modterm for modterm in MOFO_MOD_TERMS if modterm.attr in (get_season_team_attrs(team_attrs, current_season) + get_season_team_attrs(team_attrs, previous_season))]    
     bounds_team_mods = [modterm.bounds for modterm in team_mod_terms]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]
-    bounds = bounds_terms + bounds_team + bounds_park    
-   
+    bounds = bounds_terms + bounds_team + bounds_park      
+    
     #establish our baseline    
     if not cmd_args.init or not solve_for_ev:
         number_to_beat = None

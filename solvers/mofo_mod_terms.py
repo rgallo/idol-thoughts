@@ -2,6 +2,8 @@ from collections import namedtuple
 
 MofoModTerm = namedtuple("MofoModTerm", ["attr", "team", "stat", "bounds"])
 DefaultBounds = [[-3, 3], [0, 1], [1, 1.5]]
+BuffOnlyBounds = [[0, 3], [0, 1], [1, 1.5]]
+DebuffOnlyBounds = [[-3, 0], [0, 1], [1, 1.5]]
 
 MOFO_MOD_TERMS = [    
     MofoModTerm("LOVE", "opp", "Ruthlessness", DefaultBounds),
@@ -147,29 +149,8 @@ MOFO_MOD_TERMS = [
     MofoModTerm("H20", "same", "BaseThirst", DefaultBounds),
     MofoModTerm("H20", "same", "Continuation", DefaultBounds),
     MofoModTerm("H20", "same", "GroundFriction", DefaultBounds),
-    MofoModTerm("H20", "same", "Indulgence", DefaultBounds),    
+    MofoModTerm("H20", "same", "Indulgence", DefaultBounds),
     MofoModTerm("FIERY", "same", "Ruthlessness", DefaultBounds),
-    MofoModTerm("FIERY", "same", "Unthwackability", DefaultBounds),
-    MofoModTerm("FIERY", "same", "Overpowerment", DefaultBounds),
-    MofoModTerm("FIERY", "same", "Shakespearianism", DefaultBounds),
-    MofoModTerm("FIERY", "same", "Coldness", DefaultBounds),
-    MofoModTerm("FIERY", "same", "Omniscience", DefaultBounds),
-    MofoModTerm("FIERY", "same", "Tenaciousness", DefaultBounds),
-    MofoModTerm("FIERY", "same", "Watchfulness", DefaultBounds),
-    MofoModTerm("FIERY", "same", "Anticapitalism", DefaultBounds),
-    MofoModTerm("FIERY", "same", "Chasiness", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "Tragicness", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "Patheticism", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "Thwackability", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "Divinity", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "Moxie", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "Musclitude", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "Martyrdom", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "Laserlikeness", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "BaseThirst", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "Continuation", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "GroundFriction", DefaultBounds),
-    MofoModTerm("FIERY", "opp", "Indulgence", DefaultBounds),    
     MofoModTerm("AAA", "same", "Omniscience", DefaultBounds),
     MofoModTerm("AAA", "same", "Tenaciousness", DefaultBounds),
     MofoModTerm("AAA", "same", "Watchfulness", DefaultBounds),
