@@ -162,7 +162,7 @@ def get_games_to_output(pair_results, fomo_error, unidolable, bonus_playerids):
 
 
 def get_bonus_players(player_data):
-    players, bonus = None, 0
+    players, bonus = set(), 0
     credits_to_the_team, double_payouts = get_payout_bonuses(player_data)
     if credits_to_the_team & double_payouts:
         players, bonus = credits_to_the_team & double_payouts, 10
