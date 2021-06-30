@@ -123,7 +123,7 @@ def print_fomo(day, best, worst, fomo_error, pitchers, bonus_players, bonus_mult
             for result in sorted(mismatches, key=lambda result: max(result.awayFOMOData.websiteodds, result.homeFOMOData.websiteodds), reverse=True)]))
 
 
-def get_games_to_output(pair_results, fomo_error, unidolable, bonus_playerids):
+def get_games_to_output(pair_results, fomo_error, unidolable, bonus_playerids, pitcher_data):
     best, worst = [], []
     webodds_sorted_results = sort_results(pair_results, "websiteodds")
     top_webodds_game_id = webodds_sorted_results[0].awayFOMOData.gameid
@@ -132,6 +132,7 @@ def get_games_to_output(pair_results, fomo_error, unidolable, bonus_playerids):
     min_fomo = max(fomo_top_game.awayFOMOData.fomoodds, fomo_top_game.homeFOMOData.fomoodds) - fomo_error
     output_enough = False
     gameids = set()
+    pitcher_attrs = {player['id']: helpers.get_player_attrs(player) for player in pitcher_data}
     for idx, pair in enumerate(fomo_sorted_results):
         if (
                 pair.awayFOMOData.gameid == top_webodds_game_id
@@ -139,7 +140,13 @@ def get_games_to_output(pair_results, fomo_error, unidolable, bonus_playerids):
                 or pair.homeFOMOData.pitcherid in bonus_playerids
                 or (max(pair.awayFOMOData.fomoodds, pair.homeFOMOData.fomoodds) + fomo_error) > min_fomo
         ):
-            if pair.awayFOMOData.pitcherid not in unidolable and pair.homeFOMOData.pitcherid not in unidolable and not pair.homeFOMOData.faxable:
+            if (
+                    pair.awayFOMOData.pitcherid not in unidolable
+                    and pair.homeFOMOData.pitcherid not in unidolable
+                    and not pair.homeFOMOData.faxable
+                    and 'UNDERHANDED' not in pitcher_attrs.get(pair.awayFOMOData.pitcherid)
+                    and 'UNDERHANDED' not in pitcher_attrs.get(pair.homeFOMOData.pitcherid)
+            ):
                 output_enough = True
             gameids.add(pair.awayFOMOData.gameid)
             if pair.awayFOMOData.fomoodds >= .5:
@@ -150,7 +157,14 @@ def get_games_to_output(pair_results, fomo_error, unidolable, bonus_playerids):
                 worst.append(pair.awayFOMOData)
     if not output_enough:
         for pair in fomo_sorted_results:
-            if pair.awayFOMOData.gameid not in gameids and pair.awayFOMOData.pitcherid not in unidolable and pair.homeFOMOData.pitcherid not in unidolable and not pair.homeFOMOData.isfaxable:
+            if (
+                    pair.awayFOMOData.gameid not in gameids
+                    and pair.awayFOMOData.pitcherid not in unidolable
+                    and pair.homeFOMOData.pitcherid not in unidolable
+                    and not pair.homeFOMOData.faxable
+                    and 'UNDERHANDED' not in pitcher_attrs.get(pair.awayFOMOData.pitcherid)
+                    and 'UNDERHANDED' not in pitcher_attrs.get(pair.homeFOMOData.pitcherid)
+            ):
                 if pair.awayFOMOData.fomoodds >= .5:
                     best.append(pair.awayFOMOData)
                     worst.append(pair.homeFOMOData)
@@ -199,7 +213,7 @@ def main():
         bonus_playerids, bonus_multiplier = get_bonus_players(player_data)
         unidolable = get_unidolable(player_data)
         fomo_error = float(list(helpers.load_data(os.getenv("FOMO_ERROR")).keys())[0]) / 100.0
-        best, worst = get_games_to_output(pair_results, fomo_error, unidolable, bonus_playerids)
+        best, worst = get_games_to_output(pair_results, fomo_error, unidolable, bonus_playerids, player_data)
         if args.discord:
             output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, mismatches, unidolable, player_data)
         if args.discordprint:
