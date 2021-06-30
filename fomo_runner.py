@@ -123,7 +123,7 @@ def print_fomo(day, best, worst, fomo_error, pitchers, bonus_players, bonus_mult
             for result in sorted(mismatches, key=lambda result: max(result.awayFOMOData.websiteodds, result.homeFOMOData.websiteodds), reverse=True)]))
 
 
-def get_games_to_output(pair_results, fomo_error, unidolable):
+def get_games_to_output(pair_results, fomo_error, unidolable, bonus_playerids):
     best, worst = [], []
     webodds_sorted_results = sort_results(pair_results, "websiteodds")
     top_webodds_game_id = webodds_sorted_results[0].awayFOMOData.gameid
@@ -133,7 +133,12 @@ def get_games_to_output(pair_results, fomo_error, unidolable):
     output_enough = False
     gameids = set()
     for idx, pair in enumerate(fomo_sorted_results):
-        if (pair.awayFOMOData.gameid == top_webodds_game_id or (max(pair.awayFOMOData.fomoodds, pair.homeFOMOData.fomoodds) + fomo_error) > min_fomo):
+        if (
+                pair.awayFOMOData.gameid == top_webodds_game_id
+                or pair.awayFOMOData.pitcherid in bonus_playerids
+                or pair.homeFOMOData.pitcherid in bonus_playerids
+                or (max(pair.awayFOMOData.fomoodds, pair.homeFOMOData.fomoodds) + fomo_error) > min_fomo
+        ):
             if pair.awayFOMOData.pitcherid not in unidolable and pair.homeFOMOData.pitcherid not in unidolable and not pair.homeFOMOData.faxable:
                 output_enough = True
             gameids.add(pair.awayFOMOData.gameid)
@@ -194,7 +199,7 @@ def main():
         bonus_playerids, bonus_multiplier = get_bonus_players(player_data)
         unidolable = get_unidolable(player_data)
         fomo_error = float(list(helpers.load_data(os.getenv("FOMO_ERROR")).keys())[0]) / 100.0
-        best, worst = get_games_to_output(pair_results, fomo_error, unidolable)
+        best, worst = get_games_to_output(pair_results, fomo_error, unidolable, bonus_playerids)
         if args.discord:
             output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_playerids, bonus_multiplier, mismatches, unidolable, player_data)
         if args.discordprint:
