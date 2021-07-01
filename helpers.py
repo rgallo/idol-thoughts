@@ -485,8 +485,9 @@ def do_init(args):
         streamdata = load_test_data(args.testfile)
     else:
         streamdata = get_stream_snapshot()
+    is_today = args.today
     season_number = streamdata['value']['games']['season']['seasonNumber']  # 0-indexed
-    day = streamdata['value']['games']['sim']['day'] + (1 if args.today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
+    day = streamdata['value']['games']['sim']['day'] + (1 if is_today else 2)  # 0-indexed, make 1-indexed and add another if tomorrow
     if already_ran_for_day(args.dayfile, season_number, day) and not args.forcerun:
         print("Already ran for Season {} Day {}, exiting.".format(season_number+1, day))
         sys.exit(0)
@@ -499,12 +500,15 @@ def do_init(args):
     if all([(game["day"] == 0 and game["gameStart"] is False) for game in today_schedule]):
         print("This season's games haven't started yet")
         sys.exit(0)
-    if not args.today and not args.forcerun and not args.testfile and retry_count > 0:
+    if all([(game["day"] in (27, 72) and game["gameStart"] is False) for game in today_schedule]):
+        is_today = True
+        day -= 1
+    if not is_today and not args.forcerun and not args.testfile and retry_count > 0:
         first_try = True
         for _ in range(retry_count):
             games_complete = all([game["finalized"] for game in today_schedule])
             is_postseason = any([game["isPostseason"] for game in today_schedule])
-            keep_trying = (not games_complete or (is_postseason and not args.today and not streamdata['value']['games']['tomorrowSchedule']))
+            keep_trying = (not games_complete or (is_postseason and not is_today and not streamdata['value']['games']['tomorrowSchedule']))
             if keep_trying and first_try:
                 total_seconds = sleep_interval * retry_count
                 if show_waiting_message:
@@ -527,8 +531,8 @@ def do_init(args):
                 send_discord_message("Warning!", message)
             else:
                 print(message)
-    game_schedule = today_schedule if args.today else streamdata['value']['games']['tomorrowSchedule']
-    if not game_schedule and day >= 100 and not args.today:
+    game_schedule = today_schedule if is_today else streamdata['value']['games']['tomorrowSchedule']
+    if not game_schedule and day >= 100 and not is_today:
         time.sleep(30)
         game_schedule = get_stream_snapshot()['value']['games']['tomorrowSchedule']
     if not game_schedule and not args.lineupfile:
@@ -545,7 +549,7 @@ def do_init(args):
         sys.exit(0)
     outcomes = [outcome for game in streamdata['value']['games']['schedule'] if game["outcomes"] for outcome in game['outcomes'] if outcome_matters(outcome)]
     stat_file_exists = os.path.isfile(args.statfile)
-    if (outcomes or not stat_file_exists or args.forceupdate or ((day == 1 and args.today) or day == 2)) and not args.skipupdate:
+    if (outcomes or not stat_file_exists or args.forceupdate or ((day == 1 and is_today) or day == 2)) and not args.skipupdate:
         if args.discord and os.getenv("SHOW_STAT_CHANGES", "true") == "true":
             message = "Generating new stat file, please stand by.\n\n{}".format("\n".join("`{}`".format(outcome) for outcome in outcomes))
             send_discord_message("One sec!", message[:DISCORD_SPLIT_LIMIT])
