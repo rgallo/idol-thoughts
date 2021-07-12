@@ -42,9 +42,11 @@ class ParkTerm(StlatTerm):
         super().__init__(a, b, c)
 
     def calc(self, val):
-        b_val = abs(val - 0.5) + self.b
-        c_val = self.c        
-        return self.a * (b_val ** c_val)
+        b_val = val + self.b
+        c_val = self.c       
+        calc_val = self.a * (b_val ** c_val)
+        neutral_val = self.a * ((0.5 + self.b) ** self.c)
+        return calc_val - neutral_val
 
 
 def geomean(numbers):
@@ -366,7 +368,8 @@ def get_team_attributes(attributes={}):
     return attributes
 
 
-def adjust_stlats(row, game, day, player_attrs, team_attrs=None):
+def adjust_stlats(row, game, day, raw_player_attrs, team_attrs=None):
+    player_attrs = [attr.upper() for attr in raw_player_attrs.split(";")]      
     new_row = row.copy()
     if game:
         team = row["team"]
@@ -447,11 +450,11 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
     pitcherstatdata = collections.defaultdict(lambda: {})
     teamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: {}))
     for row in filedata:
-        player_attrs = row["permAttr"] + row["seasAttr"] + row["weekAttr"] + row["gameAttr"]
+        player_attrs = row["permAttr"] + ";" + row["seasAttr"] + ";" + row["weekAttr"] + ";" + row["gameAttr"]
         team = row["team"]
         player_id = row["id"]
         if games:
-            game = games.get(team)
+            game = games.get(team)            
             new_row = adjust_stlats(row, game, day, player_attrs, team_attrs)
         else:
             new_row = row
@@ -460,6 +463,13 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
                 pitcherstatdata[new_row["name"]][key] = float(new_row[key])
             pitcherstatdata[new_row["name"]]["ispitcher"] = True
             pitcherstatdata[new_row["name"]]["attrs"] = player_attrs
+            if game:                
+                if team == game["homeTeamName"]:
+                    pitcherstatdata[new_row["name"]]["innings"] = game["homeInningsPitched"]                    
+                if team == game["awayTeamName"]:
+                    pitcherstatdata[new_row["name"]]["innings"] = game["awayInningsPitched"]                    
+            else:
+                pitcherstatdata[new_row["name"]]["innings"] = 9                
         elif new_row["position"] == "lineup":            
             if "SHELLED" not in player_attrs and "ELSEWHERE" not in player_attrs:
                 for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):

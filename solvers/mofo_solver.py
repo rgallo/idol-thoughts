@@ -18,6 +18,7 @@ from helpers import parse_mods
 from solvers.mofo_ballpark_terms import BALLPARK_TERMS
 from solvers.mofo_mod_terms import MOFO_MOD_TERMS
 from solvers.mofo_solver_terms import MOFO_TERMS
+from solvers.mofo_half_terms import MOFO_HALF_TERMS
 import mofo
 
 
@@ -30,7 +31,7 @@ import mofo
 #                   "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 
-def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, special_cases, mods, ballpark, ballpark_mods, adjustments):    
+def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjustments):    
     awayMods, homeMods = [], []
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
     special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
@@ -38,17 +39,18 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
         return 0, 0, 0, 0
     awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]
     away_game, home_game = game["away"], game["home"]
-    home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])
-    if away_rbi == home_rbi:        
-        return 0, 0, 0, 0        
+    home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])           
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])    
-    awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)                          
+    awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods) 
+    print("ballpark mods for tragicness = {}".format(len(awayMods["tragicness"])))
     awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, away_game["weather"], team_stat_data, pitcher_stat_data, terms,
                            awayMods, homeMods, adjustments)        
     if awayodds == .5:
         return 1, 0, awayodds, homeodds
-    fail = 1 if ((awayodds < .5 and away_rbi > home_rbi) or (awayodds > .5 and away_rbi < home_rbi)) else 0
+    if away_rbi == home_rbi and abs(awayodds - homeodds) <= 0.04:        
+        return 1, 0, awayodds, homeodds 
+    fail = 0 if ((awayodds > .5 and away_rbi > home_rbi) or (awayodds < .5 and away_rbi < home_rbi)) else 1
     return 1, fail, awayodds, homeodds
 
 def get_season_team_attrs(team_attrs, season):
@@ -92,17 +94,21 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
             termsplitdata = [d.split(",") for d in terms_file.readlines()[1:] if d]
         for row in termsplitdata:
             params.extend([float(row[1]), float(row[2]), float(row[3])])
+        with open(os.path.join(init_dir, "{}-halfterms.csv".format(job_id))) as halfterms_file:            
+            halftermsplitdata = [d.split(",") for d in halfterms_file.readlines()[1:] if d]
+        for row in halftermsplitdata:
+            params.extend([float(row[1])])
         with open(os.path.join(init_dir, "{}-mods.csv".format(job_id))) as mod_file:            
             modsplitdata = [d.split(",") for d in mod_file.readlines()[1:] if d]
         for row in modsplitdata:
             attr, team, stat = [val for val in row[:3]]                
-            mods[attr][stat] = [float(row[3]), float(row[4]), float(row[5])]        
-        for modterm in team_mod_terms:                
-            if modterm.attr in mods:                
-                for stlatname in mods[modterm.attr]:
-                    if stlatname == modterm.stat:                                                
+            mods[attr][stat] = [float(row[3]), float(row[4]), float(row[5])]            
+        for modterm in team_mod_terms:                    
+            if modterm.attr in mods:                                
+                for stlatname in mods[modterm.attr]:                    
+                    if stlatname == modterm.stat:                                                                        
                         params.extend(mods[modterm.attr][stlatname])
-            else:              
+            else:                   
                 multiplier = random.uniform(0.0, 10.0) - 5.0
                 additive = random.uniform(0.0, 1.0)
                 exponent = random.uniform(1.0, 1.5)
@@ -112,12 +118,12 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
         for row in parksplitdata:
             params.extend([float(row[2]), float(row[3]), float(row[4])])        
         with open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:                            
-            results.append((float(pattern.findall(details_file.read())[0][2]), params))               
+            results.append((float(pattern.findall(details_file.read())[0][0]), params))               
     if is_random:
         random.shuffle(results)
     else:
-        results.sort(key=lambda x: x[0], reverse=is_worst)     
-    final_list = [result[1] for result in results[:popsize]]    
+        results.sort(key=lambda x: x[0], reverse=is_worst)       
+    final_list = [result[1] for result in results[:popsize]]        
     return np.array(final_list)
 
 def main():
@@ -128,7 +134,9 @@ def main():
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
     bounds_mofo_terms = [term.bounds for term in MOFO_TERMS]
     bounds_terms = [item for sublist in bounds_mofo_terms for item in sublist]
-    #bounds_terms = ([(-8, 0), (0, 3), (0, 4)] * 2) + ([(0, 8), (0, 3), (0, 4)] * 20) + ([(0, 10), (0, 3), (0, 4)] * 5) + ([(0, 8), (0, 3), (0, 4)] * (len(MOFO_STLAT_LIST) - 27))    
+    halfbase_terms = [term.stat for term in MOFO_HALF_TERMS]
+    bounds_half_terms = [term.bounds for term in MOFO_HALF_TERMS]
+    half_terms = [item for sublist in bounds_half_terms for item in sublist]
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     game_list = base_solver.get_games(cmd_args.gamefile)
@@ -142,7 +150,7 @@ def main():
     team_mod_terms = [modterm for modterm in MOFO_MOD_TERMS if modterm.attr in (get_season_team_attrs(team_attrs, current_season) + get_season_team_attrs(team_attrs, previous_season))]    
     bounds_team_mods = [modterm.bounds for modterm in team_mod_terms]
     bounds_team = [item for sublist in bounds_team_mods for item in sublist]
-    bounds = bounds_terms + bounds_team + bounds_park      
+    bounds = bounds_terms + half_terms + bounds_team + bounds_park      
     
     #establish our baseline    
     if not cmd_args.init or not solve_for_ev:
@@ -187,24 +195,25 @@ def main():
     popsize = 25     
     init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'latinhypercube'
     #print(len(init), ",".join(str(len(s)) for s in init))
-    recombination = 0.7 if solve_for_ev else 0.5
-    #recombination = 0.7 if (type(init) == str) else 0.4
-    if (workers > 2 and solve_for_ev) or (type(init) != str and not solve_for_ev):
-        recombination = 0.5
-    args = (get_mofo_results, mofo_base_terms, None, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
+    recombination = 0.7 if solve_for_ev else 0.7
+    recombination = 0.5 if (type(init) == str or workers > 2) else 0.7
+    print("Using recombination of {}".format(recombination))
+    #if (workers > 2 and solve_for_ev) or (type(init) != str and not solve_for_ev):
+    #    recombination = 0.5
+    args = (get_mofo_results, mofo_base_terms, halfbase_terms, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, number_to_beat, solve_for_ev, False, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
                                     mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000,
                                     init=init)
     print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms,
                                                                                    zip(*[iter(result.x)] * 3))))
-    result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, mofo_base_terms, None, team_mod_terms,
+    result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, mofo_base_terms, halfbase_terms, team_mod_terms,
                                                  BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
                                                  team_attrs, None, solve_for_ev, True, cmd_args.debug, False, False, cmd_args.output)
     #screw it, final file output stuff in here to try and make sure it actually happens
     park_mod_list_size = len(BALLPARK_TERMS) * 3
     team_mod_list_size = len(team_mod_terms) * 3
-    special_cases_count = 0
+    special_cases_count = len(halfbase_terms)
     base_mofo_list_size = len(mofo_base_terms) * 3
     terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms, zip(*[iter(result.x[:(base_mofo_list_size)])] * 3)))  
     #need to set unused mods to 0, 0, 1

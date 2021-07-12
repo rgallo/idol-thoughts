@@ -22,7 +22,7 @@ def delete_solutions(dir_path, threshold, patternchoice):
                 underestimate, overestimate, unexvar = pattern.findall(details_file.read())[0]
                 fail_rate = max(abs(float(underestimate)), abs(float(overestimate)))                
             else:
-                fail_rate = float(pattern.findall(details_file.read())[0][2])                
+                fail_rate = float(pattern.findall(details_file.read())[0][0])                
             if fail_rate > threshold:
                 to_delete.append((job_id, fail_rate, "under {}".format(threshold)))
             elif fail_rate in fail_rates:
