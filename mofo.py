@@ -2,6 +2,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import copy
 import statistics
 from scipy.stats import hmean
 
@@ -195,7 +196,7 @@ def get_player_mods(mods, awayAttrs, homeAttrs, teamMods, weather, away_home, pl
     lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
     lowerHomeAttrs = [attr.lower() for attr in homeAttrs]    
     playerAttrs = [attr.lower() for attr in player_stat_data["attrs"].split(";")]    
-    playerMods = teamMods
+    playerMods = copy.deepcopy(teamMods)
     applied_mods = []
     bird_weather = helpers.get_weather_idx("Birds")    
     flood_weather = helpers.get_weather_idx("Flooding")   
@@ -473,7 +474,7 @@ def calc_team_score(mods, team_stat_data, opp_stat_data, pitcher_stat_data, team
     return team_score
 
 def get_blood_mod(mods, bloodMod, opp_same, allMods, player_stat_data):                         
-    playerMods = allMods
+    playerMods = copy.deepcopy(allMods)
     for name, stlatterm in mods[bloodMod][opp_same].items():                
         multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
         if multiplier is not None:
@@ -533,11 +534,8 @@ def calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMo
             player_laserlikeness, player_basethirst, player_continuation, player_groundfriction, player_indulgence = (player_laserlikeness + ((blood_laserlikeness - base_laserlikeness) * a_blood_factor)),  (player_basethirst + ((blood_basethirst - base_basethirst) * a_blood_factor)), (player_continuation + ((blood_continuation - base_continuation) * a_blood_factor)), (player_groundfriction + ((blood_groundfriction - base_groundfriction) * a_blood_factor)), (player_indulgence + ((blood_indulgence - base_indulgence) * a_blood_factor))            
         return player_patheticism, player_tragicness, player_thwackability, player_divinity, player_moxie, player_musclitude, player_martyrdom, player_laserlikeness, player_basethirst, player_continuation, player_groundfriction, player_indulgence
 
-def calc_player_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, player_stat_data):    
-    tempTeamMods = teamMods
-    playerMods = get_player_mods(mods, awayAttrs, homeAttrs, tempTeamMods, weather, away_home, player_stat_data)    
-    print("Tragicness player mods = {}".format(len(playerMods["tragicness"])))
-    print("Traginess team mods = {}".format(len(teamMods["tragicness"])))    
+def calc_player_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, player_stat_data):        
+    playerMods = get_player_mods(mods, awayAttrs, homeAttrs, teamMods, weather, away_home, player_stat_data)        
     calced_stlats = {}    
     if ("A" in awayAttrs) or ("A" in homeAttrs):        
         player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness = calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMods, player_stat_data, "defense")    
@@ -552,9 +550,8 @@ def calc_player_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, awa
         return calced_stlats, player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness
     return player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness
 
-def calc_pitcher_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, player_stat_data):
-    tempTeamMods = teamMods
-    playerMods = get_player_mods(mods, awayAttrs, homeAttrs, tempTeamMods, weather, away_home, player_stat_data)    
+def calc_pitcher_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, player_stat_data):    
+    playerMods = get_player_mods(mods, awayAttrs, homeAttrs, teamMods, weather, away_home, player_stat_data)    
     calced_stlats = {}    
     if ("A" in awayAttrs) or ("A" in homeAttrs):
         calced_stlats["unthwackability"], calced_stlats["ruthlessness"], calced_stlats["overpowerment"], calced_stlats["shakespearianism"], calced_stlats["coldness"] = calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMods, player_stat_data, "pitching")

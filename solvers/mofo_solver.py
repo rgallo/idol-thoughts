@@ -42,8 +42,7 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])           
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])    
-    awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods) 
-    print("ballpark mods for tragicness = {}".format(len(awayMods["tragicness"])))
+    awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)     
     awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, away_game["weather"], team_stat_data, pitcher_stat_data, terms,
                            awayMods, homeMods, adjustments)        
     if awayodds == .5:
