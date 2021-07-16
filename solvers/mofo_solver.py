@@ -34,9 +34,9 @@ import mofo
 def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjustments):    
     awayMods, homeMods = [], []
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
-    special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
-    if special_game_attrs:        
-        return 0, 0, 0, 0
+    #special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
+    #if special_game_attrs:        
+    #    return 0, 0, 0, 0
     awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]
     away_game, home_game = game["away"], game["home"]
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])           
@@ -68,6 +68,7 @@ def handle_args():
     parser.add_argument('--debug3', help="print output", action='store_true')
     parser.add_argument('--output', required=False, help="file output directory")
     parser.add_argument('--workers', default="1", help="number of workers to use")
+    parser.add_argument('--rec', default="0.7", help="recombination to use")
     parser.add_argument('--init', required=False, help="directory to use for init")
     parser.add_argument('--ev', help="solve for best ev instead of fail rate", action="store_true")
     parser.add_argument('--random', help="use random files instead of top", action='store_true')
@@ -194,8 +195,7 @@ def main():
     popsize = 25     
     init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'latinhypercube'
     #print(len(init), ",".join(str(len(s)) for s in init))
-    recombination = 0.7 if solve_for_ev else 0.7
-    recombination = 0.5 if (type(init) == str or workers > 2) else 0.7
+    recombination = float(cmd_args.rec)    
     print("Using recombination of {}".format(recombination))
     #if (workers > 2 and solve_for_ev) or (type(init) != str and not solve_for_ev):
     #    recombination = 0.5

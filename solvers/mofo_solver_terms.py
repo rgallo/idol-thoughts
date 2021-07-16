@@ -1,28 +1,29 @@
 from collections import namedtuple
 
 MOFOTerm = namedtuple("MOFOTerm", ["stat", "bounds"])
+DefaultBounds = [[1, 3], [1, 3], [1, 3]]
 
 MOFO_TERMS = [        
-    MOFOTerm("tragicness", [[0, 3], [0, 3], [0, 3]]),
-    MOFOTerm("patheticism", [[0, 3], [0, 3], [0, 3]]),
-    MOFOTerm("thwackability", [[0, 3], [0, 3], [0, 3]]),
-    MOFOTerm("divinity", [[0, 3], [0, 3], [0, 3]]),
-    MOFOTerm("moxie", [[0, 3], [0, 3], [0, 3]]),
-    MOFOTerm("musclitude", [[0, 3], [0, 3], [0, 3]]),    
-    MOFOTerm("martyrdom", [[0, 3], [0, 3], [0, 3]]),
-    MOFOTerm("laserlikeness", [[0, 3], [0, 3], [0, 3]]), 
-    MOFOTerm("basethirst", [[0, 3], [0, 3], [0, 3]]),    
-    MOFOTerm("continuation", [[0, 3], [0, 3], [0, 3]]),    
-    MOFOTerm("groundfriction", [[0, 3], [0, 3], [0, 3]]),    
-    MOFOTerm("indulgence", [[0, 3], [0, 3], [0, 3]]),        
-    MOFOTerm("unthwackability", [[0, 3], [0, 3], [0, 3]]),
-    MOFOTerm("ruthlessness", [[0, 3], [0, 3], [0, 3]]),
-    MOFOTerm("overpowerment", [[0, 3], [0, 3], [0, 3]]),    
-    MOFOTerm("shakespearianism", [[0, 3], [0, 3], [0, 3]]),    
-    MOFOTerm("coldness", [[0, 3], [0, 3], [0, 3]]),
-    MOFOTerm("omniscience", [[0, 3], [0, 3], [0, 3]]),           
-    MOFOTerm("tenaciousness", [[0, 3], [0, 3], [0, 3]]),    
-    MOFOTerm("watchfulness", [[0, 3], [0, 3], [0, 3]]),    
-    MOFOTerm("anticapitalism", [[0, 3], [0, 3], [0, 3]]),
-    MOFOTerm("chasiness", [[0, 3], [0, 3], [0, 3]])    
+    MOFOTerm("tragicness", DefaultBounds),
+    MOFOTerm("patheticism", DefaultBounds),
+    MOFOTerm("thwackability", DefaultBounds),
+    MOFOTerm("divinity", DefaultBounds),
+    MOFOTerm("moxie", DefaultBounds),
+    MOFOTerm("musclitude", DefaultBounds),    
+    MOFOTerm("martyrdom", DefaultBounds),
+    MOFOTerm("laserlikeness", DefaultBounds), 
+    MOFOTerm("basethirst", DefaultBounds),    
+    MOFOTerm("continuation", DefaultBounds),    
+    MOFOTerm("groundfriction", DefaultBounds),    
+    MOFOTerm("indulgence", DefaultBounds),        
+    MOFOTerm("unthwackability", DefaultBounds),
+    MOFOTerm("ruthlessness", DefaultBounds),
+    MOFOTerm("overpowerment", DefaultBounds),    
+    MOFOTerm("shakespearianism", DefaultBounds),    
+    MOFOTerm("coldness", DefaultBounds),
+    MOFOTerm("omniscience", DefaultBounds),           
+    MOFOTerm("tenaciousness", DefaultBounds),    
+    MOFOTerm("watchfulness", DefaultBounds),    
+    MOFOTerm("anticapitalism", DefaultBounds),
+    MOFOTerm("chasiness", DefaultBounds)    
 ]

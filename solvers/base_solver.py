@@ -20,11 +20,11 @@ BALLPARK_CACHE = {}
 GAME_CACHE = {}
 BATTER_CACHE = {}
 
-MIN_SEASON = 14
+MIN_SEASON = 19
 MAX_SEASON = 20
 
-BEST_RESULT = 8000000000000.0
-BEST_SEASON = 8000000000000.0
+BEST_RESULT = 80000000000000.0
+BEST_SEASON = 80000000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
 MIN_DAY = 1
@@ -73,9 +73,10 @@ HAS_GAMES = {}
 WORST_ERROR_GAME = {}
 LAST_ITERATION_TIME = datetime.datetime.now()
 
-ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "A", "ACIDIC", "FIERY", "PSYCHIC"}
+ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "A", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
 ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
-FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING"}
+FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING", "SINKING_SHIP"}
+DIRECT_MOD_SOLVES = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electric", "fiery", "love", "high_pressure"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
 FLOOD_WEATHER = get_weather_idx("Flooding")
@@ -285,12 +286,8 @@ def check_rejects(min_condition, max_condition, eventlist, stages, batman_unexva
 def calc_linear_unex_error(vals, wins_losses, gameids, threshold, modname=None):
     idx = 0
     max_error_game = ""
-    error, max_error, min_error, max_error_val, min_error_val, current_val = 0.0, 0.0, 150.0, 0.0, 0.0, 0.0
-    exponent = 2
-    if modname == "unmod":
-        exponent = 4
-    #else:
-    #    exponent = 4
+    error, max_error, min_error, max_error_val, min_error_val, current_val = 0.0, 0.0, 150.0, 0.0, 0.0, 0.0    
+    exponent = 4 if (modname in DIRECT_MOD_SOLVES or modname == "overall") else 6    
     wins, major_errors = [], []
     other_errors = {}
     win_threshold = False    
@@ -305,7 +302,9 @@ def calc_linear_unex_error(vals, wins_losses, gameids, threshold, modname=None):
                 win_threshold = False
             if win_threshold:
                 actual_val = total_wins            
-                current_error = max(abs(current_val - actual_val), 2.0) - 2.0
+                current_error = max(abs(current_val - actual_val), 1.0) - 1.0
+                if ((actual_val > 50.0) and (current_val < 50.0)) or ((actual_val < 50.0) and (current_val > 50.0)):
+                    current_error *= 2.0
                 error += current_error ** exponent                               
                 if ((current_val - actual_val) > max_error):
                     max_error = (current_val - actual_val)
@@ -321,6 +320,7 @@ def calc_linear_unex_error(vals, wins_losses, gameids, threshold, modname=None):
                         other_errors[gameids[idx]]["actual"] = actual_val            
         idx += 1    
     error += (max_error ** (exponent + 2)) + (abs(min_error ** (exponent + 2)))
+    error *= 0.01
     return error, max_error, min_error, max_error_val, min_error_val, major_errors, max_error_game, other_errors
 
 def store_ev_by_team(ev_by_team, hometeam, awayteam, web_ev, mofo_ev):
@@ -537,7 +537,7 @@ def minimize_func(parameters, *data):
     if ALL_GAMES > 0:       
         games_available = ALL_GAMES - len(LINE_JUMP_GAMES)
     else:
-        games_available = 600    
+        games_available = 1188    
 
     if solve_for_ev and (ALL_GAMES > 0):
         fail_threshold = BEST_FAILCOUNT        
@@ -878,6 +878,7 @@ def minimize_func(parameters, *data):
             break
         # if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
         if (season in HAS_GAMES and not HAS_GAMES[season]):
+            print("Season {} has no games".format(season))
             continue
         season_start = datetime.datetime.now()
         debug_print("season {} start: {}".format(season, season_start), debug3, run_id)
@@ -888,6 +889,7 @@ def minimize_func(parameters, *data):
             for day in dayrange:                
                 games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
                 if not games:
+                    print("Found no games for day {}".format(day))
                     if day == 1:
                         MAX_DAY = 0
                     break
@@ -925,6 +927,7 @@ def minimize_func(parameters, *data):
                     continue
                 games = [row for row in game_list if row["season"] == str(season) and row["day"] == str(day)]
                 if not games:
+                    print("No games found day {}".format(day))
                     GAME_CACHE[(season, day)] = []                    
                     continue                            
             paired_games = pair_games(games)
@@ -950,6 +953,7 @@ def minimize_func(parameters, *data):
                     stats_regened = False
                 STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)                
             if not pitchers:
+                print("Failed to have pitchers for day {}".format(day))
                 raise Exception("No stat file found")
             cached_ballparks = BALLPARK_CACHE.get((season, day))
             if cached_ballparks is None:
@@ -975,12 +979,15 @@ def minimize_func(parameters, *data):
             good_game_list = []
             for game in paired_games:
                 if game["away"]["game_id"] in LINE_JUMP_GAMES:
+                    print("Should never see this at this point; no games are being line jumped")
                     continue
                 ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
                 game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjustments)                
                 if not is_cached and game_game_counter:
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
+                elif game_game_counter == 0:
+                    print("Game being omitted somehow, {}".format(game))
                 game_counter += game_game_counter                
                 if game_game_counter == 1:   
                     ev_set[game["away"]["game_id"]] = {}
@@ -1181,8 +1188,7 @@ def minimize_func(parameters, *data):
     fail_points, linear_points = 10000000000.0, 10000000000.0    
     max_fail_rate, expected_average = 0.0, 0.25
     #new_worstmod_linear_error = max(worstmod_linear_error, unmod_linear_error)    
-    new_worstmod_linear_error = 0.0
-    linear_error = 0.0
+    new_worstmod_linear_error, unmod_linear_error, linear_error = 0.0, 0.0, 0.0     
     max_mod_unmod, max_error_game, new_plusname = "", "", ""
     new_worstmod = WORST_MOD
     best_plusname = PLUS_NAME
@@ -1217,29 +1223,11 @@ def minimize_func(parameters, *data):
                 for val in all_vals:
                     if val >= 0.5:
                         pos_vals.append(val)
-                expected_average = sum(pos_vals) / len(pos_vals)
+                expected_average = sum(pos_vals) / len(pos_vals)                
                 sorted_vals_by_mod = sorted(vals_by_mod, key=lambda k: len(vals_by_mod[k]))
-                modcount = 0
-                for modname in sorted_vals_by_mod:                    
-                    modcount += 1
-                    #if (modname == "unmod") and (unmod_linear_error > 0.0):
-                    #    linear_error += unmod_linear_error
-                    #    linear_by_mod[modname] = unmod_linear_error
-                    #    if unmod_linear_error >= new_worstmod_linear_error:
-                    #        new_worstmod = modname
-                    #    continue
-                    #if (modname == WORST_MOD) and (worstmod_linear_error > 0.0):                
-                    #    linear_error += worstmod_linear_error
-                    #    linear_by_mod[modname] = worstmod_linear_error
-                    #    if worstmod_linear_error >= new_worstmod_linear_error:
-                    #        new_worstmod = modname
-                    #    continue
-                    #if (modname == PLUS_NAME) and (worstmod_linear_error > 0.0):
-                    #    linear_by_mod[modname] = 0.0
-                    #    continue
-                    #print("Mod order reporting, {}".format(modname))
-                    if (len(mod_vals) >= 150):
-                        #print("Clearing mod_vals, mod = {}, {} mod_vals".format(modname, len(mod_vals)))
+                modcount = len(DIRECT_MOD_SOLVES)
+                for modname in sorted_vals_by_mod:                                                            
+                    if (len(mod_vals) >= 150):                        
                         mod_vals.clear()
                         mod_win_loss.clear()
                         mod_gameids.clear()                                        
@@ -1258,8 +1246,7 @@ def minimize_func(parameters, *data):
                             overall_win_loss.append(vals_by_mod[modname][thisgame]["home_win"])
                             overall_gameids.append(thisgame)
                             overall_gameids.append(thisgame)
-                    if len(mod_vals) < 150:
-                        #print("Continuing for having too few values, mod = {}".format(modname))
+                    if len(mod_vals) < 150:                        
                         new_plusname = modname
                         linear_by_mod[modname] = 0.0
                         continue
@@ -1267,13 +1254,11 @@ def minimize_func(parameters, *data):
                     sorted_gameids = [x for _,x in sorted(zip(mod_vals, mod_gameids))]
                     mod_vals.sort()                        
                     mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value, mod_errors, mod_max_error_game, mod_other_errors = calc_linear_unex_error(mod_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD, modname)                    
-                    if modname == "unmod":
-                        #we really do need to prioritize unmod being right before we can be happy to mod error counts; trying bigger exponent                        
-                        unmod_linear_error = mod_linear_error                                                             
+                    if modname not in DIRECT_MOD_SOLVES:                        
+                        unmod_linear_error += mod_linear_error                                                             
                     linear_error += mod_linear_error                    
                     linear_by_mod[modname] = mod_linear_error
-                    if mod_linear_error > new_worstmod_linear_error:
-                        #if not (modname == "unmod"):
+                    if mod_linear_error > new_worstmod_linear_error:                        
                         new_worstmod_linear_error = mod_linear_error
                         new_worstmod = modname
                         if not new_plusname == "":
@@ -1294,27 +1279,16 @@ def minimize_func(parameters, *data):
                 sorted_win_loss = [x for _,x in sorted(zip(overall_vals, overall_win_loss))]
                 sorted_gameids = [x for _,x in sorted(zip(overall_vals, overall_gameids))]
                 overall_vals.sort()                    
-                overall_linear_error, overall_max_linear_error, overall_min_linear_error, overall_max_error_value, overall_min_error_value, overall_errors, overall_max_error_game, overall_other_errors = calc_linear_unex_error(overall_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD, "overall")  
-                #trying different exponent instead of division
-                overall_linear_error = overall_linear_error / (0.5 * modcount)
+                overall_linear_error, overall_max_linear_error, overall_min_linear_error, overall_max_error_value, overall_min_error_value, overall_errors, overall_max_error_game, overall_other_errors = calc_linear_unex_error(overall_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD, "overall")                  
                 linear_error += overall_linear_error
                 linear_by_mod["overall"] = overall_linear_error
                 if overall_linear_error > new_worstmod_linear_error:  
                     new_worstmod_linear_error = overall_linear_error
                     new_worstmod = "overall"                   
-                    best_plusname = ""   
-                if unmod_linear_error == new_worstmod_linear_error:
-                    linear_error = (unmod_linear_error * modcount) + (overall_linear_error * modcount)
-                else:
-                    linear_error += max(unmod_linear_error, overall_linear_error) * (modcount - 1)
-                #if unmod_linear_error < overall_linear_error:
-                #    linear_error += unmod_linear_error + (overall_linear_error * 2.0)
-                #else:
-                #    linear_error += (unmod_linear_error * 2.0) + overall_linear_error
-            #linear_points = (linear_error + ((max_linear_error + max_error_value) ** 2) + ((min_linear_error - min_error_value) ** 2) + (sum(errors) ** 2)) * 2.5
-            #major_errors = sum(errors) ** 2
-            major_errors = 0.0           
-            #linear_points = linear_error + major_errors            
+                    best_plusname = ""                   
+                #any overall improvements on the back of an unmod reduction right now are net neutral... we want them to be net negative, so make unmod weigh more
+                linear_error += (unmod_linear_error * (modcount ** 1.5)) + (overall_linear_error * modcount)                                
+            major_errors = 0.0                       
             linear_points = linear_error
             if not mod_mode:
                 fail_points = ((fail_rate * 1000.0) ** 2) * 2.5        
@@ -1580,7 +1554,7 @@ def minimize_func(parameters, *data):
                 WORST_ERROR = (k9_max_err - k9_min_err)
         debug_print("-" * 20 + "\n", debug, run_id)             
  
-    if ((CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 1000) or (CURRENT_ITERATION % 500 == 0 and CURRENT_ITERATION < 2500) or (CURRENT_ITERATION % 1000 == 0 and CURRENT_ITERATION < 10000) or (CURRENT_ITERATION % 5000 == 0 and CURRENT_ITERATION < 50000) or (CURRENT_ITERATION % 10000 == 0 and CURRENT_ITERATION < 250000) or (CURRENT_ITERATION % 50000 == 0 and CURRENT_ITERATION < 1000000) or (CURRENT_ITERATION % 100000 == 0)):
+    if (CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 1000) or (CURRENT_ITERATION % 500 == 0):
         if len(win_loss) > 0:
             now = datetime.datetime.now()
             if solve_for_ev:
@@ -1593,22 +1567,16 @@ def minimize_func(parameters, *data):
         else:
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1           
-    now = datetime.datetime.now()
-    time.sleep(0.25)
-    #if (CURRENT_ITERATION % 25 == 0) and (workers > 1):   
+    now = datetime.datetime.now()    
     #if (((now - LAST_CHECKTIME).total_seconds()) > 1800) and (workers > 1):    
-    if (((now - LAST_CHECKTIME).total_seconds()) > 7200):    
-        print("{} Taking our state-mandated 15 minute long rest per 2 hours of work".format(datetime.datetime.now()))
+    if (((now - LAST_CHECKTIME).total_seconds()) > 300):    
+        #print("{} Taking our state-mandated 3 minute long rest per half hour of work".format(datetime.datetime.now()))
         sleeptime, sleepmins = 0.0, 0.0         
-        while sleeptime < 15:
-            time.sleep(30)          
-            sleeptime += 0.50       
-            if sleeptime == 5:
-                print("Five minutes elapsed")
-            elif sleeptime == 10:
-                print("Ten minutes elapsed")
+        while sleeptime < 0.5:
+            time.sleep(6)          
+            sleeptime += 0.10            
         LAST_CHECKTIME = datetime.datetime.now()        
-        print("{} BACK TO WORK".format(datetime.datetime.now()))       
+        #print("{} BACK TO WORK".format(datetime.datetime.now()))       
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)

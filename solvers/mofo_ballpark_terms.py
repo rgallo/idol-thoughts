@@ -1,9 +1,9 @@
 from collections import namedtuple
 
 BallParkTerm = namedtuple("BallParkTerm", ["ballparkstat", "playerstat", "bounds"])
-DefaultBounds = [[-3, 3], [0, 1.5], [1, 2]]
-BuffOnlyBounds = [[0, 3], [0, 1.5], [1, 2]]
-DebuffOnlyBounds = [[-3, 0], [0, 1.5], [1, 2]]
+DefaultBounds = [[-2, 2], [1, 2], [1, 2]]
+BuffOnlyBounds = [[0, 2], [1, 2], [1, 2]]
+DebuffOnlyBounds = [[-2, 0], [1, 2], [1, 2]]
 
 BALLPARK_TERMS = [    
     BallParkTerm("grandiosity", "Ruthlessness", DefaultBounds),

@@ -20,6 +20,7 @@ PITCHING_STLATS = ["overpowerment", "ruthlessness", "unthwackability", "shakespe
 BATTING_STLATS = ["divinity", "martyrdom", "moxie", "musclitude", "patheticism", "thwackability", "tragicness"]
 DEFENSE_STLATS = ["anticapitalism", "chasiness", "omniscience", "tenaciousness", "watchfulness"]
 BASERUNNING_STLATS = ["baseThirst", "continuation", "groundFriction", "indulgence", "laserlikeness"]
+OFFENSE_STLATS = ["divinity", "martyrdom", "moxie", "musclitude", "patheticism", "thwackability", "tragicness", "basethirst", "continuation", "groundfriction", "indulgence", "laserlikeness"]
 INVERSE_STLATS = ["tragicness", "patheticism"]  # These stlats are better for the target the smaller they are
 
 LAST_SEASON_STAT_CUTOFF = 11
@@ -44,9 +45,8 @@ class ParkTerm(StlatTerm):
     def calc(self, val):
         b_val = val + self.b
         c_val = self.c       
-        calc_val = self.a * (b_val ** c_val)
-        neutral_val = self.a * ((0.5 + self.b) ** self.c)
-        return calc_val - neutral_val
+        calc_val = self.a * (b_val ** c_val)        
+        return calc_val
 
 
 def geomean(numbers):
@@ -368,7 +368,8 @@ def get_team_attributes(attributes={}):
     return attributes
 
 
-def adjust_stlats(row, game, day, raw_player_attrs, team_attrs=None):
+def adjust_stlats(row, game, day, roster_size, raw_player_attrs, team_attrs=None):
+    blood_count = 12.0
     player_attrs = [attr.upper() for attr in raw_player_attrs.split(";")]      
     new_row = row.copy()
     if game:
@@ -390,12 +391,24 @@ def adjust_stlats(row, game, day, raw_player_attrs, team_attrs=None):
             new_row = adjust_by_pct(new_row, 0.2, BATTING_STLATS, batting_stars)
             new_row = adjust_by_pct(new_row, 0.2, BASERUNNING_STLATS, baserunning_stars)
             new_row = adjust_by_pct(new_row, 0.2, DEFENSE_STLATS, defense_stars)
+        if "SINKING_SHIP" in current_team_attrs:
+            growth_pct = .01 * (14 - roster_size)
+            new_row = adjust_by_pct(new_row, growth_pct, PITCHING_STLATS, pitching_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, BATTING_STLATS, batting_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, BASERUNNING_STLATS, baserunning_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, defense_stars)
         if "GROWTH" in current_team_attrs:
             growth_pct = .05 * min(day / 99, 1.0)
             new_row = adjust_by_pct(new_row, growth_pct, PITCHING_STLATS, pitching_stars)
             new_row = adjust_by_pct(new_row, growth_pct, BATTING_STLATS, batting_stars)
             new_row = adjust_by_pct(new_row, growth_pct, BASERUNNING_STLATS, baserunning_stars)
             new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, defense_stars)                       
+        if "A" in current_team_attrs:
+            growth_pct = (.05 * min(day / 99, 1.0)) * (1.0 / blood_count)
+            new_row = adjust_by_pct(new_row, growth_pct, PITCHING_STLATS, pitching_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, BATTING_STLATS, batting_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, BASERUNNING_STLATS, baserunning_stars)
+            new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, defense_stars)
         if "TRAVELING" in current_team_attrs and team == game["awayTeamName"]:
             new_row = adjust_by_pct(new_row, 0.05, PITCHING_STLATS, pitching_stars)
             new_row = adjust_by_pct(new_row, 0.05, BATTING_STLATS, batting_stars)
@@ -453,9 +466,10 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
         player_attrs = row["permAttr"] + ";" + row["seasAttr"] + ";" + row["weekAttr"] + ";" + row["gameAttr"]
         team = row["team"]
         player_id = row["id"]
+        roster_size = sum(1 for player in filedata if player["team"] == team)        
         if games:
             game = games.get(team)            
-            new_row = adjust_stlats(row, game, day, player_attrs, team_attrs)
+            new_row = adjust_stlats(row, game, day, roster_size, player_attrs, team_attrs)
         else:
             new_row = row
         if new_row["position"] == "rotation":
