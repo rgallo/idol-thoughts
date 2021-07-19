@@ -316,8 +316,7 @@ def adjust_by_pct(row, pct, stlats, star_func):
 
 def batting_stars(player):
     return (
-        ((1 - float(player["tragicness"])) ** 0.01)
-        * (float(player["buoyancy"]) ** 0)
+        ((1 - float(player["tragicness"])) ** 0.01)        
         * (float(player["thwackability"]) ** 0.35)
         * (float(player["moxie"]) ** 0.075)
         * (float(player["divinity"]) ** 0.35)
@@ -330,8 +329,7 @@ def batting_stars(player):
 
 def pitching_stars(player):
     return (
-        (float(player["shakespearianism"]) ** 0.1)
-        * (float(player["suppression"]) ** 0)
+        (float(player["shakespearianism"]) ** 0.1)        
         * (float(player["unthwackability"]) ** 0.5)
         * (float(player["coldness"]) ** 0.025)
         * (float(player["overpowerment"]) ** 0.15)
@@ -501,7 +499,7 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
             if player_id in teamstatdata[team]:  # these are defaultdicts so we don't want to add skipped players                
                 teamstatdata[team][player_id]["team"] = team
                 teamstatdata[team][player_id]["name"] = new_row["name"]
-                teamstatdata[team][player_id]["attrs"] = player_attrs
+                teamstatdata[team][player_id]["attrs"] = player_attrs                
     return teamstatdata, pitcherstatdata
 
 

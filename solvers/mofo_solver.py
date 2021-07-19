@@ -14,13 +14,12 @@ from dotenv import load_dotenv
 sys.path.append("..")
 import requests
 from solvers import base_solver
-from helpers import parse_mods
+from helpers import parse_mods, adjust_by_pct
 from solvers.mofo_ballpark_terms import BALLPARK_TERMS
 from solvers.mofo_mod_terms import MOFO_MOD_TERMS
 from solvers.mofo_solver_terms import MOFO_TERMS
 from solvers.mofo_half_terms import MOFO_HALF_TERMS
 import mofo
-
 
 #MOFO_STLAT_LIST = ("meantragicness", "meanpatheticism", "meanthwackability", "meandivinity", "meanmoxie",
 #                   "meanmusclitude", "meanmartyrdom", "maxthwackability", "maxdivinity", "maxmoxie", "maxmusclitude",
@@ -31,20 +30,20 @@ import mofo
 #                   "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 
-def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjustments):    
+def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments):    
     awayMods, homeMods = [], []
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
     #special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
     #if special_game_attrs:        
-    #    return 0, 0, 0, 0
-    awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]
+    #    return 0, 0, 0, 0    
+    awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]    
     away_game, home_game = game["away"], game["home"]
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])           
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])    
     awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)     
     awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, away_game["weather"], team_stat_data, pitcher_stat_data, terms,
-                           awayMods, homeMods, adjustments)        
+                           awayMods, homeMods, adjusted_stat_data, adjustments)        
     if awayodds == .5:
         return 1, 0, awayodds, homeodds
     if away_rbi == home_rbi and abs(awayodds - homeodds) <= 0.04:        

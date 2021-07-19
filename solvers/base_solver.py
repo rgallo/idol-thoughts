@@ -12,13 +12,15 @@ import math
 from glob import glob
 
 from helpers import StlatTerm, ParkTerm, get_weather_idx
-from helpers import load_stat_data, load_stat_data_pid
+from helpers import load_stat_data, load_stat_data_pid, adjust_by_pct
+from helpers import DEFENSE_STLATS, defense_stars, BATTING_STLATS, batting_stars, BASERUNNING_STLATS, baserunning_stars
 from batman import get_team_atbats, get_batman_mods
 
 STAT_CACHE = {}
 BALLPARK_CACHE = {}
 GAME_CACHE = {}
 BATTER_CACHE = {}
+ADJUSTED_STAT_CACHE = {}
 
 MIN_SEASON = 19
 MAX_SEASON = 20
@@ -76,7 +78,8 @@ LAST_ITERATION_TIME = datetime.datetime.now()
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "A", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
 ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING", "SINKING_SHIP"}
-DIRECT_MOD_SOLVES = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electric", "fiery", "love", "high_pressure"}
+DIRECT_MOD_SOLVES = {"psychic", "acidic", "base_instincts", "electric", "fiery", "love", "high_pressure"}
+CALC_MOD_SUCCESS = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electric", "fiery", "love", "high_pressure", "a", "0", "o_no", "h20"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
 FLOOD_WEATHER = get_weather_idx("Flooding")
@@ -104,6 +107,51 @@ def get_batters(filename):
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
     return filedata
 
+def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_stat_data):    
+    adjusted_stat_data = {}
+    adjusted_stat_data["away"], adjusted_stat_data["home"] = {}, {}      
+
+    for playerid in team_stat_data[awayTeam]:                
+        adjusted_stat_data["away"][playerid] = {}        
+        adjusted_defense_stlats = {"omniscience": team_stat_data[awayTeam][playerid]["omniscience"], "watchfulness": team_stat_data[awayTeam][playerid]["watchfulness"], "chasiness": team_stat_data[awayTeam][playerid]["chasiness"], "anticapitalism": team_stat_data[awayTeam][playerid]["anticapitalism"], "tenaciousness": team_stat_data[awayTeam][playerid]["tenaciousness"]} 
+        if not team_stat_data[awayTeam][playerid]["shelled"]:
+            adjusted_batting_stlats = {"patheticism": team_stat_data[awayTeam][playerid]["patheticism"], "tragicness": team_stat_data[awayTeam][playerid]["tragicness"], "thwackability": team_stat_data[awayTeam][playerid]["thwackability"], "divinity": team_stat_data[awayTeam][playerid]["divinity"], "moxie": team_stat_data[awayTeam][playerid]["moxie"], "musclitude": team_stat_data[awayTeam][playerid]["musclitude"], "martyrdom": team_stat_data[awayTeam][playerid]["martyrdom"]}
+            adjusted_running_stlats = {"laserlikeness": team_stat_data[awayTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[awayTeam][playerid]["baseThirst"], "continuation": team_stat_data[awayTeam][playerid]["continuation"], "groundFriction": team_stat_data[awayTeam][playerid]["groundFriction"], "indulgence": team_stat_data[awayTeam][playerid]["indulgence"]}
+        if "A" in awayAttrs or "AA" in awayAttrs or "AAA" in awayAttrs:
+            adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
+            if not team_stat_data[awayTeam][playerid]["shelled"]:
+                adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
+                adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)                  
+        if not team_stat_data[awayTeam][playerid]["shelled"]:
+            adjusted_stat_data["away"][playerid] = {**adjusted_defense_stlats, **adjusted_batting_stlats, **adjusted_running_stlats}        
+        else:
+            adjusted_stat_data["away"][playerid] = {**adjusted_defense_stlats}
+        adjusted_defense_stlats.clear() 
+        if not team_stat_data[awayTeam][playerid]["shelled"]:
+            adjusted_batting_stlats.clear() 
+            adjusted_running_stlats.clear()   
+        
+    for playerid in team_stat_data[homeTeam]:            
+        adjusted_stat_data["home"][playerid] = {}
+        adjusted_defense_stlats = {"omniscience": team_stat_data[homeTeam][playerid]["omniscience"], "watchfulness": team_stat_data[homeTeam][playerid]["watchfulness"], "chasiness": team_stat_data[homeTeam][playerid]["chasiness"], "anticapitalism": team_stat_data[homeTeam][playerid]["anticapitalism"], "tenaciousness": team_stat_data[homeTeam][playerid]["tenaciousness"]} 
+        if not team_stat_data[homeTeam][playerid]["shelled"]:
+            adjusted_batting_stlats = {"patheticism": team_stat_data[homeTeam][playerid]["patheticism"], "tragicness": team_stat_data[homeTeam][playerid]["tragicness"], "thwackability": team_stat_data[homeTeam][playerid]["thwackability"], "divinity": team_stat_data[homeTeam][playerid]["divinity"], "moxie": team_stat_data[homeTeam][playerid]["moxie"], "musclitude": team_stat_data[homeTeam][playerid]["musclitude"], "martyrdom": team_stat_data[homeTeam][playerid]["martyrdom"]}
+            adjusted_running_stlats = {"laserlikeness": team_stat_data[homeTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[homeTeam][playerid]["baseThirst"], "continuation": team_stat_data[homeTeam][playerid]["continuation"], "groundFriction": team_stat_data[homeTeam][playerid]["groundFriction"], "indulgence": team_stat_data[homeTeam][playerid]["indulgence"]}
+        if "A" in homeAttrs or "AA" in homeAttrs or "AAA" in homeAttrs:
+            adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
+            if not team_stat_data[homeTeam][playerid]["shelled"]:
+                adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
+                adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)        
+        if not team_stat_data[homeTeam][playerid]["shelled"]:
+            adjusted_stat_data["home"][playerid] = {**adjusted_defense_stlats, **adjusted_batting_stlats, **adjusted_running_stlats}        
+        else:
+            adjusted_stat_data["home"][playerid] = {**adjusted_defense_stlats}
+        adjusted_defense_stlats.clear() 
+        if not team_stat_data[homeTeam][playerid]["shelled"]:
+            adjusted_batting_stlats.clear() 
+            adjusted_running_stlats.clear()        
+    
+    return adjusted_stat_data
 
 def get_ballpark_map(ballpark_folder):
     filelist = [f for f in os.listdir(ballpark_folder) if os.path.isfile(os.path.join(ballpark_folder, f))]
@@ -981,8 +1029,17 @@ def minimize_func(parameters, *data):
                 if game["away"]["game_id"] in LINE_JUMP_GAMES:
                     print("Should never see this at this point; no games are being line jumped")
                     continue
+                game_attrs = get_attrs_from_paired_game(season_team_attrs, game)                        
+                awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]     
+                gamehomeTeam = get_team_name(game["home"]["team_id"], season, day)
+                gameawayTeam = get_team_name(game["away"]["team_id"], season, day)
+                if game["away"]["game_id"] in ADJUSTED_STAT_CACHE:                    
+                    adjusted_stat_data = ADJUSTED_STAT_CACHE[game["away"]["game_id"]]
+                else:
+                    adjusted_stat_data = calculate_adjusted_stat_data(awayAttrs, homeAttrs, gameawayTeam, gamehomeTeam, team_stat_data)
+                    ADJUSTED_STAT_CACHE[game["away"]["game_id"]] = adjusted_stat_data
                 ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
-                game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjustments)                
+                game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments)                
                 if not is_cached and game_game_counter:
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
@@ -1011,9 +1068,7 @@ def minimize_func(parameters, *data):
                     game_ev, game_mismatch, game_dadbets, game_web_ev, season_ev, season_web_ev = game_ev_calculate(ev_set, game["away"]["game_id"])    
                     if solve_for_ev:
                         game_fail_counter = -game_ev   
-                        web_margin -= game_web_ev                        
-                        gamehomeTeam = get_team_name(game["home"]["team_id"], season, day)
-                        gameawayTeam = get_team_name(game["away"]["team_id"], season, day)
+                        web_margin -= game_web_ev                                                
                         ev_by_team = store_ev_by_team(ev_by_team, gamehomeTeam, gameawayTeam, game_web_ev, game_ev) 
                         hometeam_ev = ev_by_team[gamehomeTeam]["mofo_ev"] - ev_by_team[gamehomeTeam]["web_ev"] 
                         awayteam_ev = ev_by_team[gameawayTeam]["mofo_ev"] - ev_by_team[gameawayTeam]["web_ev"]
@@ -1049,14 +1104,15 @@ def minimize_func(parameters, *data):
                                 #print("Solution rejected for too large a span. {:.2f} this run, {:.2f} last best, {} games".format((max_team_ev - min_team_ev), LAST_SPAN, game_counter))
                                 break
                                                    
-                    if mod_mode:
-                        game_attrs = get_attrs_from_paired_game(season_team_attrs, game)                        
-                        awayAttrs = game_attrs["away"]
-                        homeAttrs = game_attrs["home"]
+                    if mod_mode:                        
                         awayMods, homeMods = 0, 0
                         lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
                         lowerHomeAttrs = [attr.lower() for attr in homeAttrs]
-                        for name in lowerAwayAttrs:  
+                        allAttrs_lol = [lowerAwayAttrs, lowerHomeAttrs]
+                        allAttrs_set = set().union(*allAttrs_lol)                        
+                        allModAttrs_set = allAttrs_set.intersection(CALC_MOD_SUCCESS)
+                        modAttrs = list(allModAttrs_set)
+                        for name in modAttrs:  
                             if name.upper() in FORCE_REGEN:
                                 continue
                             if name not in mod_games:
@@ -1080,42 +1136,15 @@ def minimize_func(parameters, *data):
                                     vals_by_mod[name][game["away"]["game_id"]]["away_win"] = 0
                                     vals_by_mod[name][game["away"]["game_id"]]["home_win"] = 1
                             if solve_for_ev:
-                                mod_web_fails[name] -= game_web_ev   
-                            awayMods += 1  
+                                mod_web_fails[name] -= game_web_ev
+                            if name in DIRECT_MOD_SOLVES:
+                                if name in lowerAwayAttrs:
+                                    awayMods += 1  
+                                if name in lowerHomeAttrs:
+                                    homeMods += 1
                         if reject_solution:
-                            break
-                        if awayMods > 1:
-                            multi_mod_fails += game_fail_counter
-                            multi_mod_games += game_game_counter
-                        for name in lowerHomeAttrs:
-                            if name.upper() in FORCE_REGEN:
-                                continue
-                            if name not in mod_games:
-                                mod_fails[name] = 0
-                                mod_games[name] = 0
-                                mod_web_fails[name] = 0
-                            if name not in games_by_mod:
-                                games_by_mod[name] = {}
-                                vals_by_mod[name] = {}
-                            mod_fails[name] += game_fail_counter
-                            mod_games[name] += game_game_counter                            
-                            if game["away"]["game_id"] not in games_by_mod[name]:
-                                games_by_mod[name][game["away"]["game_id"]] = game
-                                vals_by_mod[name][game["away"]["game_id"]] = {}
-                                vals_by_mod[name][game["away"]["game_id"]]["mofo_away"] = game_away_val
-                                vals_by_mod[name][game["away"]["game_id"]]["mofo_home"] = game_home_val
-                                if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
-                                    vals_by_mod[name][game["away"]["game_id"]]["away_win"] = 1
-                                    vals_by_mod[name][game["away"]["game_id"]]["home_win"] = 0
-                                else:
-                                    vals_by_mod[name][game["away"]["game_id"]]["away_win"] = 0
-                                    vals_by_mod[name][game["away"]["game_id"]]["home_win"] = 1
-                            if solve_for_ev:
-                                mod_web_fails[name] -= game_web_ev                            
-                            homeMods += 1      
-                        if reject_solution:
-                            break
-                        if homeMods > 1:
+                            break                       
+                        if (homeMods > 1) or (awayMods > 1):
                             multi_mod_fails += game_fail_counter
                             multi_mod_games += game_game_counter
                             if solve_for_ev:
@@ -1254,8 +1283,8 @@ def minimize_func(parameters, *data):
                     sorted_gameids = [x for _,x in sorted(zip(mod_vals, mod_gameids))]
                     mod_vals.sort()                        
                     mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value, mod_errors, mod_max_error_game, mod_other_errors = calc_linear_unex_error(mod_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD, modname)                    
-                    if modname not in DIRECT_MOD_SOLVES:                        
-                        unmod_linear_error += mod_linear_error                                                             
+                    if modname == "unmod":
+                        unmod_linear_error = mod_linear_error                                                             
                     linear_error += mod_linear_error                    
                     linear_by_mod[modname] = mod_linear_error
                     if mod_linear_error > new_worstmod_linear_error:                        
@@ -1287,7 +1316,7 @@ def minimize_func(parameters, *data):
                     new_worstmod = "overall"                   
                     best_plusname = ""                   
                 #any overall improvements on the back of an unmod reduction right now are net neutral... we want them to be net negative, so make unmod weigh more
-                linear_error += (unmod_linear_error * (modcount ** 1.5)) + (overall_linear_error * modcount)                                
+                linear_error += (overall_linear_error * modcount)                                
             major_errors = 0.0                       
             linear_points = linear_error
             if not mod_mode:
