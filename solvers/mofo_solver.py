@@ -133,9 +133,8 @@ def main():
     bounds_park = [item for sublist in bounds_park_mods for item in sublist]
     bounds_mofo_terms = [term.bounds for term in MOFO_TERMS]
     bounds_terms = [item for sublist in bounds_mofo_terms for item in sublist]
-    halfbase_terms = [term.stat for term in MOFO_HALF_TERMS]
-    bounds_half_terms = [term.bounds for term in MOFO_HALF_TERMS]
-    half_terms = [item for sublist in bounds_half_terms for item in sublist]
+    bounds_half_terms = [halfterm.bounds for halfterm in MOFO_HALF_TERMS]
+    half_terms = [item for sublist in bounds_half_terms for item in sublist]    
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     game_list = base_solver.get_games(cmd_args.gamefile)
@@ -198,7 +197,7 @@ def main():
     print("Using recombination of {}".format(recombination))
     #if (workers > 2 and solve_for_ev) or (type(init) != str and not solve_for_ev):
     #    recombination = 0.5
-    args = (get_mofo_results, mofo_base_terms, halfbase_terms, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
+    args = (get_mofo_results, mofo_base_terms, MOFO_HALF_TERMS, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, number_to_beat, solve_for_ev, False, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
                                     mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000,

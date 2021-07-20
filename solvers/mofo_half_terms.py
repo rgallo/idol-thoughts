@@ -1,29 +1,39 @@
 from collections import namedtuple
 
-MOFOHalfTerm = namedtuple("MOFOHalfTerm", ["stat", "bounds"])
-DefaultBounds = [[0.1, 0.9]]
+MOFOHalfTerm = namedtuple("MOFOHalfTerm", ["stat", "event", "bounds"])
+DefaultBounds = [[0, 2]]
 
 MOFO_HALF_TERMS = [        
-    MOFOHalfTerm("tragicness", DefaultBounds),
-    MOFOHalfTerm("patheticism", DefaultBounds),
-    MOFOHalfTerm("thwackability", DefaultBounds),
-    MOFOHalfTerm("divinity", DefaultBounds),
-    MOFOHalfTerm("moxie", DefaultBounds),
-    MOFOHalfTerm("musclitude", DefaultBounds),
-    MOFOHalfTerm("martyrdom", DefaultBounds),
-    MOFOHalfTerm("laserlikeness", DefaultBounds),
-    MOFOHalfTerm("basethirst", DefaultBounds),
-    MOFOHalfTerm("continuation", DefaultBounds),
-    MOFOHalfTerm("groundfriction", DefaultBounds),
-    MOFOHalfTerm("indulgence", DefaultBounds),
-    MOFOHalfTerm("unthwackability", DefaultBounds),
-    MOFOHalfTerm("ruthlessness", DefaultBounds),
-    MOFOHalfTerm("overpowerment", DefaultBounds),
-    MOFOHalfTerm("shakespearianism", DefaultBounds),
-    MOFOHalfTerm("coldness", DefaultBounds),
-    MOFOHalfTerm("omniscience", DefaultBounds),
-    MOFOHalfTerm("tenaciousness", DefaultBounds),
-    MOFOHalfTerm("watchfulness", DefaultBounds),
-    MOFOHalfTerm("anticapitalism", DefaultBounds),
-    MOFOHalfTerm("chasiness", DefaultBounds)
+    MOFOHalfTerm("tragicness", "trag_runner_advances", DefaultBounds),
+    MOFOHalfTerm("patheticism", "path_connect", DefaultBounds),
+    MOFOHalfTerm("thwackability", "thwack_base_hit", DefaultBounds),
+    MOFOHalfTerm("divinity", "div_homer", DefaultBounds),
+    MOFOHalfTerm("moxie", "moxie_swing_correct", DefaultBounds),
+    MOFOHalfTerm("musclitude", "muscl_caught_out", DefaultBounds),
+    MOFOHalfTerm("musclitude", "muscl_triple", DefaultBounds),
+    MOFOHalfTerm("musclitude", "muscl_double", DefaultBounds),    
+    MOFOHalfTerm("martyrdom", "martyr_sacrifice", DefaultBounds),
+    MOFOHalfTerm("laserlikeness", "laser_attempt_steal", DefaultBounds),
+    MOFOHalfTerm("laserlikeness", "laser_caught_steal", DefaultBounds),
+    MOFOHalfTerm("laserlikeness", "laser_runner_advances", DefaultBounds),
+    MOFOHalfTerm("basethirst", "baset_attempt_steal", DefaultBounds),
+    MOFOHalfTerm("basethirst", "baset_caught_steal", DefaultBounds),
+    MOFOHalfTerm("continuation", "cont_triple", DefaultBounds),
+    MOFOHalfTerm("continuation", "cont_double", DefaultBounds),
+    MOFOHalfTerm("groundfriction", "ground_triple", DefaultBounds),
+    MOFOHalfTerm("indulgence", "indulg_runner_advances", DefaultBounds),
+    MOFOHalfTerm("unthwackability", "unthwack_base_hit", DefaultBounds),
+    MOFOHalfTerm("ruthlessness", "ruth_strike", DefaultBounds),
+    MOFOHalfTerm("overpowerment", "overp_homer", DefaultBounds),
+    MOFOHalfTerm("overpowerment", "overp_triple", DefaultBounds),
+    MOFOHalfTerm("overpowerment", "overp_double", DefaultBounds),
+    MOFOHalfTerm("shakespearianism", "shakes_runner_advances", DefaultBounds),
+    MOFOHalfTerm("coldness", "cold_caught_steal", DefaultBounds),
+    MOFOHalfTerm("omniscience", "omni_base_hit", DefaultBounds),
+    MOFOHalfTerm("omniscience", "omni_caught_out", DefaultBounds),
+    MOFOHalfTerm("tenaciousness", "tenacious_runner_advances", DefaultBounds),
+    MOFOHalfTerm("watchfulness", "watch_attempt_steal", DefaultBounds),
+    MOFOHalfTerm("anticapitalism", "anticap_caught_steal", DefaultBounds),
+    MOFOHalfTerm("chasiness", "chasi_triple", DefaultBounds),
+    MOFOHalfTerm("chasiness", "chasi_double", DefaultBounds)
 ]

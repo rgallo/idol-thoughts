@@ -12,7 +12,7 @@ import math
 from glob import glob
 
 from helpers import StlatTerm, ParkTerm, get_weather_idx
-from helpers import load_stat_data, load_stat_data_pid, adjust_by_pct
+from helpers import load_stat_data, load_stat_data_pid, adjust_by_pct, calculate_adjusted_stat_data
 from helpers import DEFENSE_STLATS, defense_stars, BATTING_STLATS, batting_stars, BASERUNNING_STLATS, baserunning_stars
 from batman import get_team_atbats, get_batman_mods
 
@@ -22,8 +22,8 @@ GAME_CACHE = {}
 BATTER_CACHE = {}
 ADJUSTED_STAT_CACHE = {}
 
-MIN_SEASON = 19
-MAX_SEASON = 20
+MIN_SEASON = 22
+MAX_SEASON = 23
 
 BEST_RESULT = 80000000000000.0
 BEST_SEASON = 80000000000000.0
@@ -107,52 +107,6 @@ def get_batters(filename):
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
     return filedata
 
-def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_stat_data):    
-    adjusted_stat_data = {}
-    adjusted_stat_data["away"], adjusted_stat_data["home"] = {}, {}      
-
-    for playerid in team_stat_data[awayTeam]:                
-        adjusted_stat_data["away"][playerid] = {}        
-        adjusted_defense_stlats = {"omniscience": team_stat_data[awayTeam][playerid]["omniscience"], "watchfulness": team_stat_data[awayTeam][playerid]["watchfulness"], "chasiness": team_stat_data[awayTeam][playerid]["chasiness"], "anticapitalism": team_stat_data[awayTeam][playerid]["anticapitalism"], "tenaciousness": team_stat_data[awayTeam][playerid]["tenaciousness"]} 
-        if not team_stat_data[awayTeam][playerid]["shelled"]:
-            adjusted_batting_stlats = {"patheticism": team_stat_data[awayTeam][playerid]["patheticism"], "tragicness": team_stat_data[awayTeam][playerid]["tragicness"], "thwackability": team_stat_data[awayTeam][playerid]["thwackability"], "divinity": team_stat_data[awayTeam][playerid]["divinity"], "moxie": team_stat_data[awayTeam][playerid]["moxie"], "musclitude": team_stat_data[awayTeam][playerid]["musclitude"], "martyrdom": team_stat_data[awayTeam][playerid]["martyrdom"]}
-            adjusted_running_stlats = {"laserlikeness": team_stat_data[awayTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[awayTeam][playerid]["baseThirst"], "continuation": team_stat_data[awayTeam][playerid]["continuation"], "groundFriction": team_stat_data[awayTeam][playerid]["groundFriction"], "indulgence": team_stat_data[awayTeam][playerid]["indulgence"]}
-        if "A" in awayAttrs or "AA" in awayAttrs or "AAA" in awayAttrs:
-            adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
-            if not team_stat_data[awayTeam][playerid]["shelled"]:
-                adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
-                adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)                  
-        if not team_stat_data[awayTeam][playerid]["shelled"]:
-            adjusted_stat_data["away"][playerid] = {**adjusted_defense_stlats, **adjusted_batting_stlats, **adjusted_running_stlats}        
-        else:
-            adjusted_stat_data["away"][playerid] = {**adjusted_defense_stlats}
-        adjusted_defense_stlats.clear() 
-        if not team_stat_data[awayTeam][playerid]["shelled"]:
-            adjusted_batting_stlats.clear() 
-            adjusted_running_stlats.clear()   
-        
-    for playerid in team_stat_data[homeTeam]:            
-        adjusted_stat_data["home"][playerid] = {}
-        adjusted_defense_stlats = {"omniscience": team_stat_data[homeTeam][playerid]["omniscience"], "watchfulness": team_stat_data[homeTeam][playerid]["watchfulness"], "chasiness": team_stat_data[homeTeam][playerid]["chasiness"], "anticapitalism": team_stat_data[homeTeam][playerid]["anticapitalism"], "tenaciousness": team_stat_data[homeTeam][playerid]["tenaciousness"]} 
-        if not team_stat_data[homeTeam][playerid]["shelled"]:
-            adjusted_batting_stlats = {"patheticism": team_stat_data[homeTeam][playerid]["patheticism"], "tragicness": team_stat_data[homeTeam][playerid]["tragicness"], "thwackability": team_stat_data[homeTeam][playerid]["thwackability"], "divinity": team_stat_data[homeTeam][playerid]["divinity"], "moxie": team_stat_data[homeTeam][playerid]["moxie"], "musclitude": team_stat_data[homeTeam][playerid]["musclitude"], "martyrdom": team_stat_data[homeTeam][playerid]["martyrdom"]}
-            adjusted_running_stlats = {"laserlikeness": team_stat_data[homeTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[homeTeam][playerid]["baseThirst"], "continuation": team_stat_data[homeTeam][playerid]["continuation"], "groundFriction": team_stat_data[homeTeam][playerid]["groundFriction"], "indulgence": team_stat_data[homeTeam][playerid]["indulgence"]}
-        if "A" in homeAttrs or "AA" in homeAttrs or "AAA" in homeAttrs:
-            adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
-            if not team_stat_data[homeTeam][playerid]["shelled"]:
-                adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
-                adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)        
-        if not team_stat_data[homeTeam][playerid]["shelled"]:
-            adjusted_stat_data["home"][playerid] = {**adjusted_defense_stlats, **adjusted_batting_stlats, **adjusted_running_stlats}        
-        else:
-            adjusted_stat_data["home"][playerid] = {**adjusted_defense_stlats}
-        adjusted_defense_stlats.clear() 
-        if not team_stat_data[homeTeam][playerid]["shelled"]:
-            adjusted_batting_stlats.clear() 
-            adjusted_running_stlats.clear()        
-    
-    return adjusted_stat_data
-
 def get_ballpark_map(ballpark_folder):
     filelist = [f for f in os.listdir(ballpark_folder) if os.path.isfile(os.path.join(ballpark_folder, f))]
     results = {}
@@ -162,7 +116,6 @@ def get_ballpark_map(ballpark_folder):
             season, day = match.groups()
             results[(int(season), int(day))] = os.path.join(ballpark_folder, filename)
     return results
-
 
 def pair_games(games):
     gamelist = collections.defaultdict(lambda: [])
@@ -331,25 +284,28 @@ def check_rejects(min_condition, max_condition, eventlist, stages, batman_unexva
                 return True                                                             
     return False
 
-def calc_linear_unex_error(vals, wins_losses, gameids, threshold, modname=None):
-    idx = 0
+def calc_linear_unex_error(vals, wins_losses, gameids, threshold, modname=None):    
     max_error_game = ""
     error, max_error, min_error, max_error_val, min_error_val, current_val = 0.0, 0.0, 150.0, 0.0, 0.0, 0.0    
-    exponent = 4 if (modname in DIRECT_MOD_SOLVES or modname == "overall") else 6    
+    exponent = 4 if (modname in DIRECT_MOD_SOLVES or modname == "overall") else 6
+    window_size = 300 if (modname == "unmod" or modname == "overall") else 100
+    half_window = 150 if (modname == "unmod" or modname == "overall") else 50
     wins, major_errors = [], []
     other_errors = {}
     win_threshold = False    
+    idx = (window_size - 1)
+    wins = wins_losses[:idx]    
     while (idx < len(vals)):                 
         wins.append(wins_losses[idx])                
-        if len(wins) >= 100:
-            current_val = vals[idx - 50] * 100.0            
-            total_wins = sum(wins[-100:])
-            if ((total_wins > 1) and (total_wins < 99)):
+        if len(wins) >= window_size:
+            current_val = vals[idx - half_window] * 100.0
+            total_wins = sum(wins[-window_size:])
+            if ((total_wins > 1) and (total_wins < (window_size - 1))):
                 win_threshold = True
-            elif total_wins >= 99:
+            elif total_wins >= (window_size - 1):
                 win_threshold = False
             if win_threshold:
-                actual_val = total_wins            
+                actual_val = total_wins * (100.0 / window_size)
                 current_error = max(abs(current_val - actual_val), 1.0) - 1.0
                 if ((actual_val > 50.0) and (current_val < 50.0)) or ((actual_val < 50.0) and (current_val > 50.0)):
                     current_error *= 2.0
@@ -522,7 +478,7 @@ def minimize_func(parameters, *data):
     terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_mofo_list_size])] * 3))}
     mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
     ballpark_mods = collections.defaultdict(lambda: {"bpterm": {}})
-    half_stlats = {}
+    half_stlats = collections.defaultdict(lambda: {})
     mod_mode = True        
     for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                  
         use_a = 0.0 if (math.isnan(a)) else a            
@@ -533,9 +489,10 @@ def minimize_func(parameters, *data):
         use_a = 0.0 if (math.isnan(a)) else a            
         use_b = 0.0 if (math.isnan(b)) else b            
         use_c = 0.0 if (math.isnan(c)) else c
-        ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(use_a, use_b, use_c)               
-    for stlat, a in zip(special_case_list, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]):
-        half_stlats[stlat] = a
+        ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(use_a, use_b, use_c)                   
+    for halfterm, a in zip(special_case_list, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]):        
+        use_a = 0.0 if (math.isnan(a)) else a            
+        half_stlats[halfterm.stat.lower()][halfterm.event.lower()] = use_a        
     game_counter, fail_counter, season_game_counter, half_fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 1000000000, 0, 0, 0, 0, 0
     quarter_fail = 100.0
     linear_fail = 100.0
@@ -552,35 +509,11 @@ def minimize_func(parameters, *data):
     line_jumpers, reorder_failsfirst, reorder_keys, ev_set, ev_by_team, games_by_mod, vals_by_mod = {}, {}, {}, {}, {}, {}, {}
     all_vals, win_loss, gameids, early_vals, early_sorted, pos_vals = [], [], [], [], [], []
     worst_vals, worst_win_loss, worst_gameids, overall_vals, overall_win_loss, overall_gameids = [], [], [], [], [], []
-    
-    unthwack_adjust = terms["unthwackability"].calc(half_stlats["unthwackability"])    
-    ruth_adjust = terms["ruthlessness"].calc(half_stlats["ruthlessness"])
-    overp_adjust = terms["overpowerment"].calc(half_stlats["overpowerment"])    
-    shakes_adjust = terms["shakespearianism"].calc(half_stlats["shakespearianism"])
-    cold_adjust = terms["coldness"].calc(half_stlats["coldness"])
 
-    path_adjust = terms["patheticism"].calc(half_stlats["patheticism"])
-    trag_adjust = terms["tragicness"].calc(half_stlats["tragicness"])
-    thwack_adjust = terms["thwackability"].calc(half_stlats["thwackability"])
-    div_adjust = terms["divinity"].calc(half_stlats["divinity"])
-    moxie_adjust = terms["moxie"].calc(half_stlats["moxie"])
-    muscl_adjust = terms["musclitude"].calc(half_stlats["musclitude"])
-    martyr_adjust = terms["martyrdom"].calc(half_stlats["martyrdom"])    
-        
-    omni_adjust = terms["omniscience"].calc(half_stlats["omniscience"])
-    watch_adjust = terms["watchfulness"].calc(half_stlats["watchfulness"])
-    tenacious_adjust = terms["tenaciousness"].calc(half_stlats["tenaciousness"])
-    chasi_adjust = terms["chasiness"].calc(half_stlats["chasiness"])
-    anticap_adjust = terms["anticapitalism"].calc(half_stlats["anticapitalism"])
-
-    laser_adjust = terms["laserlikeness"].calc(half_stlats["laserlikeness"])
-    basethirst_adjust = terms["basethirst"].calc(half_stlats["basethirst"])
-    groundfriction_adjust = terms["groundfriction"].calc(half_stlats["groundfriction"])
-    continuation_adjust = terms["continuation"].calc(half_stlats["continuation"])
-    indulgence_adjust = terms["indulgence"].calc(half_stlats["indulgence"])    
-
-    adjustments = [unthwack_adjust, ruth_adjust, overp_adjust, shakes_adjust, cold_adjust, path_adjust, trag_adjust, thwack_adjust, div_adjust, moxie_adjust, muscl_adjust, martyr_adjust, omni_adjust, 
-                   watch_adjust, tenacious_adjust, chasi_adjust, anticap_adjust, laser_adjust, basethirst_adjust, groundfriction_adjust, continuation_adjust, indulgence_adjust]
+    adjustments = {}
+    for stlat in half_stlats:
+        for event in half_stlats[stlat]:                        
+            adjustments[event] = terms[stlat].calc(half_stlats[stlat][event])    
 
     if ALL_GAMES > 0:       
         games_available = ALL_GAMES - len(LINE_JUMP_GAMES)
@@ -1002,7 +935,7 @@ def minimize_func(parameters, *data):
                 STAT_CACHE[(season, day)] = (team_stat_data, pitcher_stat_data, pitchers)                
             if not pitchers:
                 print("Failed to have pitchers for day {}".format(day))
-                raise Exception("No stat file found")
+                raise Exception("No stat file found")            
             cached_ballparks = BALLPARK_CACHE.get((season, day))
             if cached_ballparks is None:
                 ballpark_filename = ballpark_file_map.get((season, day))
@@ -1243,7 +1176,7 @@ def minimize_func(parameters, *data):
                     web_ev += game_web_ev
                     current_mofo_ev += game_season_ev
                     current_web_ev += game_season_web_ev
-                    debug_print("Net EV = {:.4f}, web = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(expected_val, web_ev, mismatches, dadbets), debug2, "::::::::  ")                                    
+                    debug_print("Net EV = {:.4f}, web = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(expected_val, web_ev, mismatches, dadbets), debug2, "::::::::  ")  
                 sorted_win_loss = [x for _,x in sorted(zip(all_vals, win_loss))]
                 sorted_gameids = [x for _,x in sorted(zip(all_vals, gameids))]
                 all_vals.sort()

@@ -68,6 +68,13 @@ def parse_terms(data, special_case_list):
             results[name] = StlatTerm(float(row[1]), float(row[2]), float(row[3]))
     return results, special
 
+def parse_half_terms(data):
+    results = collections.defaultdict(lambda: {})
+    splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
+    for row in splitdata:
+        name, event = row[0].lower(), row[1].lower()        
+        results[name][event] = float(row[2])
+    return results
 
 def parse_bp_terms(data):
     results = collections.defaultdict(lambda: {"bpterm": {}})
@@ -77,7 +84,6 @@ def parse_bp_terms(data):
         results[bpstlat][stlat] = ParkTerm(float(row[2]), float(row[3]), float(row[4]))
     return results
 
-
 def load_terms(term_url, special_cases=None):
     if term_url not in WEB_CACHE:
         special_case_list = [case.lower() for case in special_cases] if special_cases else []
@@ -86,6 +92,12 @@ def load_terms(term_url, special_cases=None):
         WEB_CACHE[term_url] = (results, special)
     return WEB_CACHE[term_url]
 
+def load_half_terms(term_url):
+    if term_url not in WEB_CACHE:        
+        data = requests.get(term_url, headers={"Authorization": "token {}".format(os.getenv("GITHUB_TOKEN"))}).text
+        results = parse_half_terms(data)
+        WEB_CACHE[term_url] = results
+    return WEB_CACHE[term_url]
 
 def load_bp_terms(term_url):
     if term_url not in WEB_CACHE:
@@ -313,6 +325,14 @@ def adjust_by_pct(row, pct, stlats, star_func):
         new_stars = star_func(new_row)
     return new_row
 
+def adjust_by_blood_pct(row, pct, stlats, star_func, bloodpct):
+    new_row = row.copy()
+    adjusted_stlats = row.copy()
+    adjusted_stlats = adjust_by_pct(adjusted_stlats, pct, stlats, star_func)
+    for stlat in stlats:
+        new_row[stlat] = float(row[stlat]) + ((float(adjusted_stlats[stlat]) - float(row[stlat])) * bloodpct)
+    return new_row
+
 
 def batting_stars(player):
     return (
@@ -368,6 +388,7 @@ def get_team_attributes(attributes={}):
 
 def adjust_stlats(row, game, day, roster_size, raw_player_attrs, team_attrs=None):
     blood_count = 12.0
+    blood_pct = 1.0 / blood_count
     player_attrs = [attr.upper() for attr in raw_player_attrs.split(";")]      
     new_row = row.copy()
     if game:
@@ -401,21 +422,67 @@ def adjust_stlats(row, game, day, roster_size, raw_player_attrs, team_attrs=None
             new_row = adjust_by_pct(new_row, growth_pct, BATTING_STLATS, batting_stars)
             new_row = adjust_by_pct(new_row, growth_pct, BASERUNNING_STLATS, baserunning_stars)
             new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, defense_stars)                       
-        if "A" in current_team_attrs:
-            growth_pct = (.05 * min(day / 99, 1.0)) * (1.0 / blood_count)
-            new_row = adjust_by_pct(new_row, growth_pct, PITCHING_STLATS, pitching_stars)
-            new_row = adjust_by_pct(new_row, growth_pct, BATTING_STLATS, batting_stars)
-            new_row = adjust_by_pct(new_row, growth_pct, BASERUNNING_STLATS, baserunning_stars)
-            new_row = adjust_by_pct(new_row, growth_pct, DEFENSE_STLATS, defense_stars)
         if "TRAVELING" in current_team_attrs and team == game["awayTeamName"]:
             new_row = adjust_by_pct(new_row, 0.05, PITCHING_STLATS, pitching_stars)
             new_row = adjust_by_pct(new_row, 0.05, BATTING_STLATS, batting_stars)
             new_row = adjust_by_pct(new_row, 0.05, BASERUNNING_STLATS, baserunning_stars)
             new_row = adjust_by_pct(new_row, 0.05, DEFENSE_STLATS, defense_stars)        
+        if "A" in current_team_attrs:
+            growth_pct = .05 * min(day / 99, 1.0)
+            new_row = adjust_by_blood_pct(new_row, growth_pct, PITCHING_STLATS, pitching_stars, blood_pct)
+            new_row = adjust_by_blood_pct(new_row, growth_pct, BATTING_STLATS, batting_stars, blood_pct)
+            new_row = adjust_by_blood_pct(new_row, growth_pct, BASERUNNING_STLATS, baserunning_stars, blood_pct)
+            new_row = adjust_by_blood_pct(new_row, growth_pct, DEFENSE_STLATS, defense_stars, blood_pct)
         if "AFFINITY_FOR_CROWS" in current_team_attrs and game["weather"] == bird_weather:
             new_row = adjust_by_pct(new_row, 0.50, PITCHING_STLATS, pitching_stars)
             new_row = adjust_by_pct(new_row, 0.50, BATTING_STLATS, batting_stars)        
     return new_row
+
+def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_stat_data):    
+    adjusted_stat_data = {}
+    adjusted_stat_data["away"], adjusted_stat_data["home"] = {}, {}      
+
+    for playerid in team_stat_data[awayTeam]:                
+        adjusted_stat_data["away"][playerid] = {}        
+        adjusted_defense_stlats = {"omniscience": team_stat_data[awayTeam][playerid]["omniscience"], "watchfulness": team_stat_data[awayTeam][playerid]["watchfulness"], "chasiness": team_stat_data[awayTeam][playerid]["chasiness"], "anticapitalism": team_stat_data[awayTeam][playerid]["anticapitalism"], "tenaciousness": team_stat_data[awayTeam][playerid]["tenaciousness"]} 
+        if not team_stat_data[awayTeam][playerid]["shelled"]:
+            adjusted_batting_stlats = {"patheticism": team_stat_data[awayTeam][playerid]["patheticism"], "tragicness": team_stat_data[awayTeam][playerid]["tragicness"], "thwackability": team_stat_data[awayTeam][playerid]["thwackability"], "divinity": team_stat_data[awayTeam][playerid]["divinity"], "moxie": team_stat_data[awayTeam][playerid]["moxie"], "musclitude": team_stat_data[awayTeam][playerid]["musclitude"], "martyrdom": team_stat_data[awayTeam][playerid]["martyrdom"]}
+            adjusted_running_stlats = {"laserlikeness": team_stat_data[awayTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[awayTeam][playerid]["baseThirst"], "continuation": team_stat_data[awayTeam][playerid]["continuation"], "groundFriction": team_stat_data[awayTeam][playerid]["groundFriction"], "indulgence": team_stat_data[awayTeam][playerid]["indulgence"]}
+        if "A" in awayAttrs or "AA" in awayAttrs or "AAA" in awayAttrs:
+            adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
+            if not team_stat_data[awayTeam][playerid]["shelled"]:
+                adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
+                adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)                  
+        if not team_stat_data[awayTeam][playerid]["shelled"]:
+            adjusted_stat_data["away"][playerid] = {**adjusted_defense_stlats, **adjusted_batting_stlats, **adjusted_running_stlats}        
+        else:
+            adjusted_stat_data["away"][playerid] = {**adjusted_defense_stlats}
+        adjusted_defense_stlats.clear() 
+        if not team_stat_data[awayTeam][playerid]["shelled"]:
+            adjusted_batting_stlats.clear() 
+            adjusted_running_stlats.clear()   
+        
+    for playerid in team_stat_data[homeTeam]:            
+        adjusted_stat_data["home"][playerid] = {}
+        adjusted_defense_stlats = {"omniscience": team_stat_data[homeTeam][playerid]["omniscience"], "watchfulness": team_stat_data[homeTeam][playerid]["watchfulness"], "chasiness": team_stat_data[homeTeam][playerid]["chasiness"], "anticapitalism": team_stat_data[homeTeam][playerid]["anticapitalism"], "tenaciousness": team_stat_data[homeTeam][playerid]["tenaciousness"]} 
+        if not team_stat_data[homeTeam][playerid]["shelled"]:
+            adjusted_batting_stlats = {"patheticism": team_stat_data[homeTeam][playerid]["patheticism"], "tragicness": team_stat_data[homeTeam][playerid]["tragicness"], "thwackability": team_stat_data[homeTeam][playerid]["thwackability"], "divinity": team_stat_data[homeTeam][playerid]["divinity"], "moxie": team_stat_data[homeTeam][playerid]["moxie"], "musclitude": team_stat_data[homeTeam][playerid]["musclitude"], "martyrdom": team_stat_data[homeTeam][playerid]["martyrdom"]}
+            adjusted_running_stlats = {"laserlikeness": team_stat_data[homeTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[homeTeam][playerid]["baseThirst"], "continuation": team_stat_data[homeTeam][playerid]["continuation"], "groundFriction": team_stat_data[homeTeam][playerid]["groundFriction"], "indulgence": team_stat_data[homeTeam][playerid]["indulgence"]}
+        if "A" in homeAttrs or "AA" in homeAttrs or "AAA" in homeAttrs:
+            adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
+            if not team_stat_data[homeTeam][playerid]["shelled"]:
+                adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
+                adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)        
+        if not team_stat_data[homeTeam][playerid]["shelled"]:
+            adjusted_stat_data["home"][playerid] = {**adjusted_defense_stlats, **adjusted_batting_stlats, **adjusted_running_stlats}        
+        else:
+            adjusted_stat_data["home"][playerid] = {**adjusted_defense_stlats}
+        adjusted_defense_stlats.clear() 
+        if not team_stat_data[homeTeam][playerid]["shelled"]:
+            adjusted_batting_stlats.clear() 
+            adjusted_running_stlats.clear()        
+    
+    return adjusted_stat_data
 
 
 def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):

@@ -19,8 +19,11 @@ BLOOD_LIST_OFFENSE = ["LOVE", "PSYCHIC"]
 
 MODS_CALCED_DIFFERENTLY = {"aaa", "aa", "a", "fiery", "base_instincts", "o_no", "electric", "h20", "0", "acidic"}
 
-def instantiate_adjustments(terms):    
-    adjustments = [terms["unthwackability"].calc(0.0), terms["ruthlessness"].calc(0.0), terms["overpowerment"].calc(0.0), terms["shakespearianism"].calc(0.0), terms["coldness"].calc(0.0), terms["patheticism"].calc(0.0), terms["tragicness"].calc(0.0), terms["thwackability"].calc(0.0), terms["divinity"].calc(0.0), terms["moxie"].calc(0.0), terms["musclitude"].calc(0.0), terms["martyrdom"].calc(0.0), terms["omniscience"].calc(0.0), terms["watchfulness"].calc(0.0), terms["tenaciousness"].calc(0.0), terms["chasiness"].calc(0.0), terms["anticapitalism"].calc(0.0), terms["laserlikeness"].calc(0.0), terms["basethirst"].calc(0.0), terms["groundfriction"].calc(0.0), terms["continuation"].calc(0.0), terms["indulgence"].calc(0.0)]
+def instantiate_adjustments(terms, halfterms): 
+    adjustments = {}
+    for stlat in halfterms:
+        for event in halfterms[stlat]:        
+            adjustments[event] = terms[stlat].calc(halfterms[stlat][event])    
     return adjustments
 
 def calc_team(terms, termset, mods, skip_mods=False):
@@ -202,82 +205,6 @@ def log_transform(value, base):
         transformed_value = 1.0 if (value > 0) else 0.0
     return transformed_value
 
-def get_player_mods(mods, awayAttrs, homeAttrs, weather, away_home, player_stat_data):            
-    lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
-    lowerHomeAttrs = [attr.lower() for attr in homeAttrs]        
-    playerAttrs = [attr.lower() for attr in player_stat_data["attrs"].split(";")]       
-    allAttrs_lol = [lowerAwayAttrs, lowerHomeAttrs, playerAttrs]
-    allAttrs_set = set().union(*allAttrs_lol)
-    modAttrs_set = set(mods.keys())
-    allModAttrs_set = allAttrs_set.intersection(modAttrs_set) - MODS_CALCED_DIFFERENTLY
-    allAttrs = list(allAttrs_set)   
-    modAttrs = list(allModAttrs_set)    
-    playerMods = collections.defaultdict(lambda: [])
-    #applied_mods = []
-    bird_weather = helpers.get_weather_idx("Birds")    
-    flood_weather = helpers.get_weather_idx("Flooding")   
-
-    for attr in modAttrs:        
-        if attr == "affinity_for_crows" and weather != bird_weather:
-            continue
-        if attr == "high_pressure" and weather != flood_weather:
-            continue    
-        if away_home == "home" and attr == "traveling":
-            continue
-        if attr in mods:            
-            if (away_home == "home" and attr in lowerHomeAttrs) or (away_home == "away" and attr in lowerAwayAttrs) or (attr in playerAttrs):
-                for name, stlatterm in mods[attr]["same"].items():                
-                    multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
-                    if multiplier is not None:
-                        playerMods[name].append(multiplier)                        
-            if (away_home == "away" and attr in lowerHomeAttrs) or (away_home == "home" and attr in lowerAwayAttrs):
-                for name, stlatterm in mods[attr]["opp"].items():                
-                    multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
-                    if multiplier is not None:
-                        playerMods[name].append(multiplier)                           
-
-    return playerMods
-
-def get_park_mods(ballpark, ballpark_mods):
-    awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])    
-    for ballparkstlat, stlatterms in ballpark_mods.items():        
-        for playerstlat, stlatterm in stlatterms.items():
-            if type(stlatterm) == ParkTerm:            
-                value = ballpark[ballparkstlat]        
-                if ballparkstlat != "hype":
-                    normalized_value = stlatterm.calc(value) - stlatterm.calc(0.5)
-                else:
-                    normalized_value = stlatterm.calc(value) - stlatterm.calc(0.0)
-                base_multiplier = log_transform(normalized_value, 100.0)
-                #forcing harmonic mean with quicker process time?                
-                multiplier = 1.0 / (2.0 * base_multiplier)
-                if ballparkstlat != "hype":                                                    
-                    awayMods[playerstlat].append(multiplier)
-                    homeMods[playerstlat].append(multiplier)
-                else:                                        
-                    homeMods[playerstlat].append(multiplier)
-    return awayMods, homeMods
-
-def setup_playerbased(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data):
-    terms_url = os.getenv("MOFO_TERMS")
-    terms, _ = helpers.load_terms(terms_url)
-    mods_url = os.getenv("MOFO_MODS")
-    mods = helpers.load_mods(mods_url)
-    ballparks_url = os.getenv("BALLPARKS")
-    ballparks = helpers.load_ballparks(ballparks_url)
-    ballpark_mods_url = os.getenv("MOFO_BALLPARK_TERMS")
-    ballpark_mods = helpers.load_bp_terms(ballpark_mods_url)
-    homeTeamId = helpers.get_team_id(homeTeam)
-    ballpark = ballparks.get(homeTeamId, collections.defaultdict(lambda: 0.5))
-    awayMods, homeMods = get_park_mods(ballpark, ballpark_mods)
-    return mods, terms, awayMods, homeMods
-
-def calculate_playerbased(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs,
-              day, weather, skip_mods=False):    
-    mods, terms, awayMods, homeMods = setup_playerbased(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data)
-    adjustments = instantiate_adjustments(terms)
-    return get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods, adjustments, skip_mods=skip_mods)
-
 def calc_defense(terms, player_mods, park_mods, player_stat_data, adjusted_stlats, bloodMods=None, overperform_pct=0):
     if overperform_pct > 0.01:                
         player_stat_data["omniscience"] += (adjusted_stlats["omniscience"] - player_stat_data["omniscience"]) * overperform_pct
@@ -336,19 +263,26 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
     battingAttrs = [attr.lower() for attr in teamAttrs]
     opponentAttrs = [attr.lower() for attr in oppAttrs]
     pitcherAttrs = [attr.lower() for attr in pitcher_data["attrs"].split(";")]    
-    strike_out_chance, caught_out_chance, base_steal_score, walk_score, hit_modifier, runner_advance_chance, runner_advance_points, homerun_multipliers, caught_steal_outs = {}, {}, {}, {}, {}, {}, {}, {}, {}
+    strike_out_chance, caught_out_chance, base_steal_score, walk_score, hit_modifier, sacrifice_chance, runner_advance_points, homerun_multipliers, caught_steal_outs = {}, {}, {}, {}, {}, {}, {}, {}, {}
     single_chance, double_chance, triple_chance, homerun_chance, score_multiplier = {}, {}, {}, {}, {}
 
     blood_count = 12.0
-    a_blood_multiplier = 1.0 / blood_count
-
-    unthwack_adjust, ruth_adjust, overp_adjust, shakes_adjust, cold_adjust, path_adjust, trag_adjust, thwack_adjust, div_adjust, moxie_adjust, muscl_adjust, martyr_adjust, omni_adjust, watch_adjust, tenacious_adjust, chasi_adjust, anticap_adjust, laser_adjust, basethirst_adjust, groundfriction_adjust, continuation_adjust, indulgence_adjust = adjustments
+    a_blood_multiplier = 1.0 / blood_count    
 
     omniscience, watchfulness, chasiness, anticap, tenaciousness = opp_stat_data["omniscience"], opp_stat_data["watchfulness"], opp_stat_data["chasiness"], opp_stat_data["anticapitalism"], opp_stat_data["tenaciousness"]
     unthwackability, ruthlessness, overpowerment, shakespearianism, coldness = pitcher_stat_data["unthwackability"], pitcher_stat_data["ruthlessness"], pitcher_stat_data["overpowerment"], pitcher_stat_data["shakespearianism"], pitcher_stat_data["coldness"]    
         
     homer_multiplier = -1.0 if "UNDERHANDED" in pitcherAttrs else 1.0  
     hit_multiplier = 1.0
+    score_mult_pitcher = 1.0
+    if "magnify_2x" in pitcherAttrs:
+        score_mult_pitcher *= 2.0
+    if "magnify_3x" in pitcherAttrs:
+        score_mult_pitcher *= 3.0
+    if "magnify_4x" in pitcherAttrs:
+        score_mult_pitcher *= 4.0
+    if "magnify_5x" in pitcherAttrs:
+        score_mult_pitcher *= 5.0
     strike_mod, walk_mod, steal_mod, score_mod = 1.0, 1.0, 1.0, 0.0
     if "fiery" in opponentAttrs:                
         strike_mod += mods["fiery"]["same"]["multiplier"].calc(1.0)    
@@ -367,7 +301,7 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
     if "blaserunning" in battingAttrs:
         steal_mod += 0.2
 
-    strike_log = (ruthlessness - ruth_adjust)
+    strike_log = (ruthlessness - adjustments["ruth_strike"])
     strike_chance = log_transform(strike_log, 100.0)
     runners_on_base, playerAttrs = [], []
         
@@ -378,41 +312,41 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
         homer_multiplier *= -1.0 if "SUBTRACTOR" in playerAttrs else 1.0
         homer_multiplier *= -1.0 if "UNDERACHIEVER" in playerAttrs else 1.0
         hit_multiplier *= -1.0 if "SUBTRACTOR" in playerAttrs else 1.0
-        score_multiplier[playerid] = 1.0
-        if "magnify_2x" in playerAttrs or "magnify_2x" in pitcherAttrs:
+        score_multiplier[playerid] = score_mult_pitcher
+        if "magnify_2x" in playerAttrs:
             score_multiplier[playerid] *= 2.0
-        if "magnify_3x" in playerAttrs or "magnify_3x" in pitcherAttrs:
+        if "magnify_3x" in playerAttrs:
             score_multiplier[playerid] *= 3.0
-        if "magnify_4x" in playerAttrs or "magnify_4x" in pitcherAttrs:
+        if "magnify_4x" in playerAttrs:
             score_multiplier[playerid] *= 4.0
-        if "magnify_5x" in playerAttrs or "magnify_5x" in pitcherAttrs:
+        if "magnify_5x" in playerAttrs:
             score_multiplier[playerid] *= 5.0
         patheticism, tragicness, thwackability, divinity, moxie, musclitude, martyrdom = team_stat_data[playerid]["patheticism"], team_stat_data[playerid]["tragicness"], team_stat_data[playerid]["thwackability"], team_stat_data[playerid]["divinity"], team_stat_data[playerid]["moxie"], team_stat_data[playerid]["musclitude"], team_stat_data[playerid]["martyrdom"]
         laserlikeness, basethirst, continuation, groundfriction, indulgence = team_stat_data[playerid]["laserlikeness"], team_stat_data[playerid]["basethirst"], team_stat_data[playerid]["continuation"], team_stat_data[playerid]["groundfriction"], team_stat_data[playerid]["indulgence"]
         
-        moxie_log = (moxie - moxie_adjust)
+        moxie_log = (moxie - adjustments["moxie_swing_correct"])
         swing_correct_chance = log_transform(moxie_log, 100.0)        
         swing_strike_chance = (swing_correct_chance + ((1.0 / 3.0) if ("h20" in battingAttrs or "h20" in playerAttrs) else 0.0) + (strike_chance if ("0" in battingAttrs or "0" in playerAttrs) else 0.0)) * strike_chance     
         swing_ball_chance = (1.0 - swing_correct_chance) * (1.0 - strike_chance)        
 
-        connect_log = (path_adjust - patheticism)
+        connect_log = (adjustments["path_connect"] - patheticism)
         connect_chance = log_transform(connect_log, 100.0) * swing_strike_chance
         
-        base_hit_log = ((thwackability - unthwackability - omniscience) - (thwack_adjust - unthwack_adjust - omni_adjust))
+        base_hit_log = ((thwackability - unthwackability - omniscience) - (adjustments["thwack_base_hit"] - adjustments["unthwack_base_hit"] - adjustments["omni_base_hit"]))
         base_hit_chance = log_transform(base_hit_log, 100.0) * connect_chance              
         
-        walk_chance = ((swing_correct_chance * (1.0 - strike_chance)) + ((1.0 * ((1.0 - strike_chance) ** 4.0)) if "flinch" in playerAttrs else 0.0)) * ((4.0 / 3.0) if "walk_in_the_park" in battingAttrs else 1.0)
+        walk_chance = ((swing_correct_chance * (1.0 - strike_chance)) + (((1.0 - strike_chance) ** 4.0) if "flinch" in playerAttrs else 0.0)) * ((4.0 / 3.0) if "walk_in_the_park" in battingAttrs else 1.0)
 
         strike_looking_chance = (1.0 - swing_correct_chance) * strike_chance
 
-        caught_out_log = ((omniscience - musclitude) - (omni_adjust - muscl_adjust))
+        caught_out_log = ((omniscience - musclitude) - (adjustments["omni_caught_out"] - adjustments["muscl_caught_out"]))
         caught_out_chance[playerid] = log_transform(caught_out_log, 100.0) * connect_chance
 
         on_base_chance = min((base_hit_chance + walk_chance), 1.0)
 
-        attempt_steal_log = ((basethirst + laserlikeness - watchfulness) - (basethirst_adjust + laser_adjust - watch_adjust))
+        attempt_steal_log = ((basethirst + laserlikeness - watchfulness) - (adjustments["baset_attempt_steal"] + adjustments["laser_attempt_steal"] - adjustments["watch_attempt_steal"]))
         attempt_steal_chance = log_transform(attempt_steal_log, 100.0) * on_base_chance
-        caught_steal_log = ((basethirst + laserlikeness - anticap - coldness) - (basethirst_adjust + laser_adjust - anticap_adjust - cold_adjust))
+        caught_steal_log = ((basethirst + laserlikeness - anticap - coldness) - (adjustments["baset_caught_steal"] + adjustments["laser_caught_steal"] - adjustments["anticap_caught_steal"] - adjustments["cold_caught_steal"]))
         caught_steal_outs[playerid] = log_transform(caught_steal_log, 100.0) * attempt_steal_chance
         
         base_steal_score[playerid] = (((base * attempt_steal_chance) + (base * (attempt_steal_chance ** 2)) + (base * (attempt_steal_chance ** 3))) * steal_mod) - (10.0 * score_mod)        
@@ -422,16 +356,16 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
             strike_out_chance[playerid] += ((strike_out_chance[playerid] * (1.0 - (walk_chance / 4.0))) - strike_out_chance[playerid]) * a_blood_multiplier
 
         #homeruns needs to care about how many other runners are on base for how valuable they are, with a floor of "1x"
-        homerun_log = ((divinity - overpowerment) - (div_adjust - overp_adjust))
+        homerun_log = ((divinity - overpowerment) - (adjustments["div_homer"] - adjustments["overp_homer"]))
         homerun_chance = log_transform(homerun_log, 100.0) * base_hit_chance
         homerun_multipliers[playerid] = homerun_chance * homer_multiplier
         runners_on_base.append(min((base_hit_chance + walk_chance), 1.0))
 
-        triple_log = ((groundfriction + continuation - overpowerment - chasiness) - (groundfriction_adjust + continuation_adjust - overp_adjust - chasi_adjust))
+        triple_log = ((musclitude + groundfriction + continuation - overpowerment - chasiness) - (adjustments["muscl_triple"] + adjustments["ground_triple"] + adjustments["cont_triple"] - adjustments["overp_triple"] - adjustments["chasi_triple"]))
         triple_prob = log_transform(triple_log, 100.0) * (1.0 - homerun_chance)
         triple_chance[playerid] = triple_prob * base_hit_chance        
 
-        double_log = ((musclitude + continuation - overpowerment - chasiness) - (muscl_adjust + continuation_adjust - overp_adjust - chasi_adjust))
+        double_log = ((musclitude + continuation - overpowerment - chasiness) - (adjustments["muscl_double"] + adjustments["cont_double"] - adjustments["overp_double"] - adjustments["chasi_double"]))
         double_prob = log_transform(double_log, 100.0) * (1.0 - triple_prob) * (1.0 - homerun_chance)
         double_chance[playerid] = double_prob * base_hit_chance 
 
@@ -440,12 +374,12 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
         
         hit_modifier[playerid] = hit_multiplier          
 
-        #runners advancing is tricky, since we have to do this based on runners being on base already, but use the batter's martyrdom    
-        runners_advance_log = ((martyrdom - musclitude) - (martyr_adjust - muscl_adjust))
-        runner_advance_chance[playerid] = log_transform(runners_advance_log, 100.0) * (1.0 - base_hit_chance)                
+        #runners advancing is tricky, since we have to do this based on runners being on base already, but use the batter's martyrdom for sacrifices
+        sacrifice_log = martyrdom - adjustments["martyr_sacrifice"]
+        sacrifice_chance[playerid] = log_transform(sacrifice_log, 100.0) * caught_out_chance[playerid]
         
-        runner_advances_log = ((laserlikeness + indulgence - tragicness - shakespearianism - tenaciousness) - (laser_adjust + indulgence_adjust - trag_adjust - shakes_adjust - tenacious_adjust))
-        runner_advances_chance = log_transform(runner_advances_log, 100.0) * min((base_hit_chance + walk_chance), 1.0)
+        runner_advances_log = ((laserlikeness + indulgence - tragicness - shakespearianism - tenaciousness) - (adjustments["laser_runner_advances"] + adjustments["indulg_runner_advances"] - adjustments["trag_runner_advances"] - adjustments["shakes_runner_advances"] - adjustments["shakes_runner_advances"]))
+        runner_advances_chance = log_transform(runner_advances_log, 100.0)
         runner_advance_points[playerid] = base * runner_advances_chance
         playerAttrs.clear()
 
@@ -474,12 +408,12 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
         if blood_calc == "a":
             return average_aa_blood_impact, average_aaa_blood_impact
 
-    return runners_on_base, runner_advance_points, caught_out_chance, runner_advance_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, base_steal_score, walk_score, strike_out_chance, caught_steal_outs, triple_chance, double_chance, single_chance
+    return runners_on_base, runner_advance_points, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, base_steal_score, walk_score, strike_out_chance, caught_steal_outs, triple_chance, double_chance, single_chance
 
 def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, innings=9, outs=3):      
     battingAttrs = [attr.lower() for attr in teamAttrs]
     reverb_weather = helpers.get_weather_idx("Reverb")    
-    runners_on_base, runner_advance_points, caught_out_chance, runner_advance_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, base_steal_score, walk_score, strike_out_chance, caught_steal_outs, triple_chance, double_chance, single_chance = calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments)    
+    runners_on_base, runner_advance_points, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, base_steal_score, walk_score, strike_out_chance, caught_steal_outs, triple_chance, double_chance, single_chance = calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments)    
     
     #run ten "games" to get a more-representative average
     total_outs = innings * outs * 10
@@ -497,7 +431,7 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
             else:
                 average_runners_on_base = max(sum(runners_on_base) - runners_on_base[current_batter], 0.0) / (len(runners_on_base) - 1)
             runners_advance_batter = max(sum(runner_advance_points.values()) - runner_advance_points[playerid], 0.0) * max(average_runners_on_base, 3.0)
-            runners_advance_score = caught_out_chance[playerid] * runner_advance_chance[playerid] * runners_advance_batter
+            runners_advance_score = sacrifice_chance[playerid] * runners_advance_batter
             homerun_score = ((100.0 * (1.0 + max(average_runners_on_base, 3.0))) - (10.0 * score_mod)) * homerun_multipliers[playerid]
             triple_score = (((base * 3.0) * triple_chance[playerid] * (1.0 + max(average_runners_on_base, 3.0))) - (10.0 * score_mod)) * hit_modifier[playerid]
             double_score = (((base * 2.0) * double_chance[playerid] * (1.0 + max(average_runners_on_base, 3.0))) - (10.0 * score_mod)) * hit_modifier[playerid]
@@ -703,6 +637,85 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
     away_formula = numerator / denominator        
     away_odds = log_transform(away_formula, 100.0)    
     return away_odds, 1.0 - away_odds
+
+def get_player_mods(mods, awayAttrs, homeAttrs, weather, away_home, player_stat_data):            
+    lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
+    lowerHomeAttrs = [attr.lower() for attr in homeAttrs]            
+    playerAttrs = [attr.lower() for attr in player_stat_data["attrs"].split(";")]       
+    allAttrs_lol = [lowerAwayAttrs, lowerHomeAttrs, playerAttrs]
+    allAttrs_set = set().union(*allAttrs_lol)
+    modAttrs_set = set(mods.keys())
+    allModAttrs_set = allAttrs_set.intersection(modAttrs_set) - MODS_CALCED_DIFFERENTLY
+    allAttrs = list(allAttrs_set)   
+    modAttrs = list(allModAttrs_set)    
+    playerMods = collections.defaultdict(lambda: [])
+    #applied_mods = []
+    bird_weather = helpers.get_weather_idx("Birds")    
+    flood_weather = helpers.get_weather_idx("Flooding")   
+
+    for attr in modAttrs:        
+        if attr == "affinity_for_crows" and weather != bird_weather:
+            continue
+        if attr == "high_pressure" and weather != flood_weather:
+            continue    
+        if away_home == "home" and attr == "traveling":
+            continue
+        if attr in mods:            
+            if (away_home == "home" and attr in lowerHomeAttrs) or (away_home == "away" and attr in lowerAwayAttrs) or (attr in playerAttrs):
+                for name, stlatterm in mods[attr]["same"].items():                
+                    multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
+                    if multiplier is not None:
+                        playerMods[name].append(multiplier)                        
+            if (away_home == "away" and attr in lowerHomeAttrs) or (away_home == "home" and attr in lowerAwayAttrs):
+                for name, stlatterm in mods[attr]["opp"].items():                
+                    multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
+                    if multiplier is not None:
+                        playerMods[name].append(multiplier)                           
+
+    return playerMods
+
+def get_park_mods(ballpark, ballpark_mods):
+    awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])    
+    for ballparkstlat, stlatterms in ballpark_mods.items():        
+        for playerstlat, stlatterm in stlatterms.items():
+            if type(stlatterm) == ParkTerm:            
+                value = ballpark[ballparkstlat]        
+                if ballparkstlat != "hype":
+                    normalized_value = stlatterm.calc(value) - stlatterm.calc(0.5)
+                else:
+                    normalized_value = stlatterm.calc(value) - stlatterm.calc(0.0)
+                base_multiplier = log_transform(normalized_value, 100.0)
+                #forcing harmonic mean with quicker process time?                
+                multiplier = 1.0 / (2.0 * base_multiplier)
+                if ballparkstlat != "hype":                                                    
+                    awayMods[playerstlat].append(multiplier)
+                    homeMods[playerstlat].append(multiplier)
+                else:                                        
+                    homeMods[playerstlat].append(multiplier)
+    return awayMods, homeMods
+
+def setup_playerbased(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data):
+    terms_url = os.getenv("MOFO_TERMS")
+    terms, _ = helpers.load_terms(terms_url)
+    halfterms_url = os.getenv("MOFO_HALF_TERMS")
+    halfterms = helpers.load_half_terms(halfterms_url)
+    mods_url = os.getenv("MOFO_MODS")
+    mods = helpers.load_mods(mods_url)
+    ballparks_url = os.getenv("BALLPARKS")
+    ballparks = helpers.load_ballparks(ballparks_url)
+    ballpark_mods_url = os.getenv("MOFO_BALLPARK_TERMS")
+    ballpark_mods = helpers.load_bp_terms(ballpark_mods_url)
+    homeTeamId = helpers.get_team_id(homeTeam)
+    ballpark = ballparks.get(homeTeamId, collections.defaultdict(lambda: 0.5))
+    awayMods, homeMods = get_park_mods(ballpark, ballpark_mods)
+    adjustments = instantiate_adjustments(terms, halfterms)
+    return mods, terms, awayMods, homeMods, adjustments
+
+def calculate_playerbased(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs,
+              day, weather, skip_mods=False):    
+    mods, terms, awayMods, homeMods, adjustments = setup_playerbased(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data)
+    adjusted_stat_data = helpers.calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_stat_data)
+    return get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods, adjusted_stat_data, adjustments, skip_mods=skip_mods)
 
 def get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data):
     awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])
