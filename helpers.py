@@ -11,6 +11,7 @@ import os
 import random
 import sys
 import time
+import copy
 from functools import reduce
 import requests
 from discord_webhook import DiscordWebhook, DiscordEmbed
@@ -438,11 +439,11 @@ def adjust_stlats(row, game, day, roster_size, raw_player_attrs, team_attrs=None
             new_row = adjust_by_pct(new_row, 0.50, BATTING_STLATS, batting_stars)        
     return new_row
 
-def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_stat_data):    
+def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_stat_data):        
     adjusted_stat_data = {}
     adjusted_stat_data["away"], adjusted_stat_data["home"] = {}, {}      
 
-    for playerid in team_stat_data[awayTeam]:                
+    for playerid in team_stat_data[awayTeam]:            
         adjusted_stat_data["away"][playerid] = {}        
         adjusted_defense_stlats = {"omniscience": team_stat_data[awayTeam][playerid]["omniscience"], "watchfulness": team_stat_data[awayTeam][playerid]["watchfulness"], "chasiness": team_stat_data[awayTeam][playerid]["chasiness"], "anticapitalism": team_stat_data[awayTeam][playerid]["anticapitalism"], "tenaciousness": team_stat_data[awayTeam][playerid]["tenaciousness"]} 
         if not team_stat_data[awayTeam][playerid]["shelled"]:
@@ -462,10 +463,10 @@ def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_
             adjusted_batting_stlats.clear() 
             adjusted_running_stlats.clear()   
         
-    for playerid in team_stat_data[homeTeam]:            
+    for playerid in team_stat_data[homeTeam]:                    
         adjusted_stat_data["home"][playerid] = {}
         adjusted_defense_stlats = {"omniscience": team_stat_data[homeTeam][playerid]["omniscience"], "watchfulness": team_stat_data[homeTeam][playerid]["watchfulness"], "chasiness": team_stat_data[homeTeam][playerid]["chasiness"], "anticapitalism": team_stat_data[homeTeam][playerid]["anticapitalism"], "tenaciousness": team_stat_data[homeTeam][playerid]["tenaciousness"]} 
-        if not team_stat_data[homeTeam][playerid]["shelled"]:
+        if not team_stat_data[homeTeam][playerid]["shelled"]:            
             adjusted_batting_stlats = {"patheticism": team_stat_data[homeTeam][playerid]["patheticism"], "tragicness": team_stat_data[homeTeam][playerid]["tragicness"], "thwackability": team_stat_data[homeTeam][playerid]["thwackability"], "divinity": team_stat_data[homeTeam][playerid]["divinity"], "moxie": team_stat_data[homeTeam][playerid]["moxie"], "musclitude": team_stat_data[homeTeam][playerid]["musclitude"], "martyrdom": team_stat_data[homeTeam][playerid]["martyrdom"]}
             adjusted_running_stlats = {"laserlikeness": team_stat_data[homeTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[homeTeam][playerid]["baseThirst"], "continuation": team_stat_data[homeTeam][playerid]["continuation"], "groundFriction": team_stat_data[homeTeam][playerid]["groundFriction"], "indulgence": team_stat_data[homeTeam][playerid]["indulgence"]}
         if "A" in homeAttrs or "AA" in homeAttrs or "AAA" in homeAttrs:
@@ -474,7 +475,7 @@ def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_
                 adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
                 adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)        
         if not team_stat_data[homeTeam][playerid]["shelled"]:
-            adjusted_stat_data["home"][playerid] = {**adjusted_defense_stlats, **adjusted_batting_stlats, **adjusted_running_stlats}        
+            adjusted_stat_data["home"][playerid] = {**adjusted_defense_stlats, **adjusted_batting_stlats, **adjusted_running_stlats}                    
         else:
             adjusted_stat_data["home"][playerid] = {**adjusted_defense_stlats}
         adjusted_defense_stlats.clear() 
@@ -566,7 +567,7 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
             if player_id in teamstatdata[team]:  # these are defaultdicts so we don't want to add skipped players                
                 teamstatdata[team][player_id]["team"] = team
                 teamstatdata[team][player_id]["name"] = new_row["name"]
-                teamstatdata[team][player_id]["attrs"] = player_attrs                
+                teamstatdata[team][player_id]["attrs"] = player_attrs       
     return teamstatdata, pitcherstatdata
 
 

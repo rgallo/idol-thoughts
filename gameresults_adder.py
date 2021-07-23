@@ -62,7 +62,7 @@ def write_headers(output):
 
 
 def get_game_stats(game_id):
-    time.sleep(2)
+    time.sleep(5)
     game_request = requests.get("https://api.blaseball-reference.com/v1/events?gameId={}".format(game_id))
     game_results = game_request.json().get("results")
     pitchers = set([event['pitcher_id'] for event in game_results])
@@ -95,6 +95,8 @@ def write_rows(output, games, game_stats):
 def handle_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', help="path to file")
+    parser.add_argument('--startday', help="declare start day for current season")
+    parser.add_argument('--endday', help="declare end day for current season")
     args = parser.parse_args()
     return args
 
@@ -107,11 +109,23 @@ def main():
         sys.exit("Too early")
     if not os.path.exists(args.output):
         write_headers(args.output)
-    if check_file_for_data(args.output, season, day):
-        sys.exit("Data already in file")
-    games, gameids = get_games(season, day)
-    game_stats = {gameid: get_game_stats(gameid) for gameid in gameids}
-    write_rows(args.output, games, game_stats)
+    if args.startday:
+        if args.endday:
+            dayrange = range(int(args.startday), int(args.endday) + 1)
+        else:
+            dayrange = range(int(args.startday), sim.day + 1)
+        for day in dayrange:
+            if check_file_for_data(args.output, season, day):
+                continue
+            games, gameids = get_games(season, day)
+            game_stats = {gameid: get_game_stats(gameid) for gameid in gameids}
+            write_rows(args.output, games, game_stats)
+    else:
+        if check_file_for_data(args.output, season, day):
+            sys.exit("Data already in file")
+        games, gameids = get_games(season, day)
+        game_stats = {gameid: get_game_stats(gameid) for gameid in gameids}
+        write_rows(args.output, games, game_stats)
 
 
 if __name__ == "__main__":

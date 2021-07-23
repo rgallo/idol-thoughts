@@ -1,7 +1,7 @@
 from collections import namedtuple
 
 MOFOTerm = namedtuple("MOFOTerm", ["stat", "bounds"])
-DefaultBounds = [[0, 3], [1, 3], [0, 3]]
+DefaultBounds = [[0, 3], [0, 3], [0, 3]]
 
 MOFO_TERMS = [        
     MOFOTerm("tragicness", DefaultBounds),

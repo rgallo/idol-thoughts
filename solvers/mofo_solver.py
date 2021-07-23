@@ -37,10 +37,10 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     #if special_game_attrs:        
     #    return 0, 0, 0, 0    
     awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]    
-    away_game, home_game = game["away"], game["home"]
+    away_game, home_game = game["away"], game["home"]    
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])           
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
-    homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])    
+    homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])        
     awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)     
     awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, away_game["weather"], team_stat_data, pitcher_stat_data, terms,
                            awayMods, homeMods, adjusted_stat_data, adjustments)        
@@ -96,7 +96,7 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
         with open(os.path.join(init_dir, "{}-halfterms.csv".format(job_id))) as halfterms_file:            
             halftermsplitdata = [d.split(",") for d in halfterms_file.readlines()[1:] if d]
         for row in halftermsplitdata:
-            params.extend([float(row[1])])
+            params.extend([float(row[2])])
         with open(os.path.join(init_dir, "{}-mods.csv".format(job_id))) as mod_file:            
             modsplitdata = [d.split(",") for d in mod_file.readlines()[1:] if d]
         for row in modsplitdata:
@@ -191,7 +191,9 @@ def main():
     #solver time
     workers = int(cmd_args.workers)        
     popsize = 25     
-    init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'latinhypercube'
+    #init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'latinhypercube'
+    #experimenting with sobol instead of latinhypercube
+    init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'sobol'
     #print(len(init), ",".join(str(len(s)) for s in init))
     recombination = float(cmd_args.rec)    
     print("Using recombination of {}".format(recombination))
@@ -210,15 +212,17 @@ def main():
     #screw it, final file output stuff in here to try and make sure it actually happens
     park_mod_list_size = len(BALLPARK_TERMS) * 3
     team_mod_list_size = len(team_mod_terms) * 3
-    special_cases_count = len(halfbase_terms)
+    special_cases_count = len(MOFO_HALF_TERMS)
     base_mofo_list_size = len(mofo_base_terms) * 3
     terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms, zip(*[iter(result.x[:(base_mofo_list_size)])] * 3)))  
+    half_output = "\n".join("{},{},{}".format(halfterm.stat, halfterm.event, a) for halfterm, a in zip(special_case_list, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]))
     #need to set unused mods to 0, 0, 1
     mods_output = "identifier,team,name,a,b,c"
     for mod, (a, b, c) in zip(team_mod_terms, zip(*[iter(result.x[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
         mods_output += "\n{},{},{},{},{},{}".format(mod.attr, mod.team, mod.stat, a, b, c)        
     #mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
     ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(BALLPARK_TERMS, zip(*[iter(result.x[-(park_mod_list_size):])] * 3)))
+
     outputdir = cmd_args.output
     if solve_for_ev:
         base_solver.write_final(outputdir, "MOFOCoefficients.csv", "name,a,b,c\n" + terms_output)
@@ -226,7 +230,8 @@ def main():
         base_solver.write_final(outputdir, "MOFOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
     else:
         base_solver.write_final(outputdir, "FOMOCoefficients.csv", "name,a,b,c\n" + terms_output)
-        base_solver.write_final(outputdir, "FOMOTeamModsCorrection.csv",  mods_output)
+        base_solver.write_final(outputdir, "FOMOHalfTerms.csv", "name,event,a\n" + half_output)
+        base_solver.write_final(outputdir, "FOMOTeamModsCorrection.csv", mods_output)
         base_solver.write_final(outputdir, "FOMOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print(datetime.datetime.now())

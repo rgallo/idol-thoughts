@@ -28,9 +28,9 @@ MOFO_MOD_TERMS = [
     MofoModTerm("HIGH_PRESSURE", "same", "Continuation", BuffOnlyBounds),
     MofoModTerm("HIGH_PRESSURE", "same", "GroundFriction", BuffOnlyBounds),
     MofoModTerm("HIGH_PRESSURE", "same", "Indulgence", BuffOnlyBounds),       
-    MofoModTerm("BASE_INSTINCTS", "same", "Multiplier", DefaultBounds),                 
-    MofoModTerm("FIERY", "same", "Multiplier", DefaultBounds),
-    MofoModTerm("ELECTRIC", "same", "Multiplier", DefaultBounds),         
+    MofoModTerm("BASE_INSTINCTS", "same", "Multiplier", DebuffOnlyBounds),                 
+    MofoModTerm("FIERY", "same", "Multiplier", DebuffOnlyBounds),
+    MofoModTerm("ELECTRIC", "same", "Multiplier", DebuffOnlyBounds),         
     MofoModTerm("PSYCHIC", "opp", "Ruthlessness", DebuffOnlyBounds),
     MofoModTerm("PSYCHIC", "opp", "Unthwackability", DebuffOnlyBounds),
     MofoModTerm("PSYCHIC", "opp", "Overpowerment", DebuffOnlyBounds),
@@ -53,7 +53,7 @@ MOFO_MOD_TERMS = [
     MofoModTerm("PSYCHIC", "opp", "Continuation", DebuffOnlyBounds),
     MofoModTerm("PSYCHIC", "opp", "GroundFriction", DebuffOnlyBounds),
     MofoModTerm("PSYCHIC", "opp", "Indulgence", DebuffOnlyBounds),
-    MofoModTerm("ACIDIC", "same", "Multiplier", DefaultBounds)    
+    MofoModTerm("ACIDIC", "same", "Multiplier", DebuffOnlyBounds)    
 ]
 
 
