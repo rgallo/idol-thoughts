@@ -31,7 +31,7 @@ BALLPARK_TERMS = [
     BallParkTerm("hype", "Unthwackability", BuffOnlyBounds),
     BallParkTerm("hype", "Overpowerment", BuffOnlyBounds),
     BallParkTerm("hype", "Shakespearianism", BuffOnlyBounds),
-    BallParkTerm("hype", "Coldness", BuffOnlyBounds),
+    #BallParkTerm("hype", "Coldness", [[0, 0.1], [0, 0.1], [0, 0.1]]),
     BallParkTerm("hype", "Omniscience", BuffOnlyBounds),
     BallParkTerm("hype", "Tenaciousness", BuffOnlyBounds),
     BallParkTerm("hype", "Watchfulness", BuffOnlyBounds),

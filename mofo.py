@@ -4,6 +4,7 @@ from __future__ import print_function
 import collections
 import copy
 import statistics
+import datetime
 from scipy.stats import hmean
 
 import helpers
@@ -192,7 +193,7 @@ def calc_player_stlatmod(name, player_data, stlatterm):
         if (stlatname in helpers.BATTING_STLATS or stlatname in helpers.BASERUNNING_STLATS) and player_data["shelled"]:
             return None
         value = player_data[stlatname]    
-    base_multiplier = stlatterm.calc(1.0)
+    base_multiplier = stlatterm
     #base_multiplier = log_transform(normalized_value, 100.0)    
     #forcing harmonic mean with quicker process time?
     multiplier = 1.0 / (2.0 * base_multiplier)
@@ -263,8 +264,8 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
     battingAttrs = [attr.lower() for attr in teamAttrs]
     opponentAttrs = [attr.lower() for attr in oppAttrs]
     pitcherAttrs = [attr.lower() for attr in pitcher_data["attrs"].split(";")]    
-    strike_out_chance, caught_out_chance, base_steal_score, walk_score, hit_modifier, sacrifice_chance, runner_advance_points, homerun_multipliers, caught_steal_outs = {}, {}, {}, {}, {}, {}, {}, {}, {}
-    single_chance, double_chance, triple_chance, homerun_chance, score_multiplier = {}, {}, {}, {}, {}
+    strike_out_chance, caught_out_chance, attempt_steal_chance, walk_chance, hit_modifier, sacrifice_chance, runner_advance_chance, homerun_multipliers, caught_steal_base_chance, caught_steal_home_chance = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+    single_chance, double_chance, triple_chance, homerun_chance, score_multiplier, average_on_base_position, steal_mod, caught_steal_outs = {}, {}, {}, {}, {}, {}, {}, {}
 
     blood_count = 12.0
     a_blood_multiplier = 1.0 / blood_count    
@@ -284,51 +285,44 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
     if "magnify_5x" in pitcherAttrs:
         score_mult_pitcher *= 5.0
     #positive strike mod means fewer average strikes per strikeout; negative means more
-    strike_mod, walk_mod, steal_mod, score_mod = 0.0, 1.0, 1.0, 0.0
+    strike_mod, walk_mod, score_mod = 1.0, 0.0, 0.0
     if "fiery" in opponentAttrs:                
-        strike_mod += mods["fiery"]["same"]["multiplier"].calc(1.0)    
+        strike_mod += mods["fiery"]["same"]["multiplier"]
     if "acidic" in opponentAttrs:                
-        score_mod += mods["acidic"]["same"]["multiplier"].calc(1.0)
+        score_mod += mods["acidic"]["same"]["multiplier"]
     if "electric" in battingAttrs:
-        strike_mod -= mods["electric"]["same"]["multiplier"].calc(1.0)
+        strike_mod -= mods["electric"]["same"]["multiplier"]
     if "base_instincts" in battingAttrs:
-        walk_mod += mods["base_instincts"]["same"]["multiplier"].calc(1.0)
+        walk_mod += mods["base_instincts"]["same"]["multiplier"]
     if "a" in opponentAttrs:
-        strike_mod += mods["fiery"]["same"]["multiplier"].calc(1.0) * a_blood_multiplier
-        score_mod += mods["acidic"]["same"]["multiplier"].calc(1.0) * a_blood_multiplier
+        strike_mod += mods["fiery"]["same"]["multiplier"] * a_blood_multiplier
+        score_mod += mods["acidic"]["same"]["multiplier"] * a_blood_multiplier
     if "a" in battingAttrs:
-        strike_mod -= mods["electric"]["same"]["multiplier"].calc(1.0) * a_blood_multiplier
-        walk_mod += mods["base_instincts"]["same"]["multiplier"].calc(1.0) * a_blood_multiplier        
-    if "blaserunning" in battingAttrs:
-        steal_mod += 0.2
+        strike_mod -= mods["electric"]["same"]["multiplier"] * a_blood_multiplier
+        walk_mod += mods["base_instincts"]["same"]["multiplier"] * a_blood_multiplier            
 
     strike_log = (ruthlessness - adjustments["ruth_strike"])
     strike_chance = log_transform(strike_log, 100.0)
-    runners_on_base, playerAttrs = [], []
+    clutch_log = (coldness - adjustments["cold_clutch_factor"])
+    clutch_factor = log_transform(clutch_log, 100.0)    
+    playerAttrs = []
         
     for playerid in sorted_batters:                                                      
         playerAttrs = [attr.lower() for attr in team_data[playerid]["attrs"].split(";")]
         homer_multiplier = pitcher_homer_multiplier
         hit_multiplier = pitcher_hit_multiplier
-        #attempt to make it such that 25 points is a base and 100 points is a run (since a base is 1/4 of a run normally)   
-        base = 20.0 if (("extra_base" in battingAttrs) or ("extra_base" in playerAttrs)) else 25.0        
         homer_multiplier *= -1.0 if "subtractor" in playerAttrs else 1.0
         homer_multiplier *= -1.0 if "underachiever" in playerAttrs else 1.0
         hit_multiplier *= -1.0 if "subtractor" in playerAttrs else 1.0
         strike_count = 4.0 if (("extra_strike" in battingAttrs) or ("extra_strike" in playerAttrs)) else 3.0
-        ball_count = 3.0 if (("walk_in_the_park" in battingAttrs) or ("walk_in_the_park" in playerAttrs)) else 4.0        
+        strike_count -= 1.0 if "flinch" in playerAttrs else 0.0
+        ball_count = 3.0 if (("walk_in_the_park" in battingAttrs) or ("walk_in_the_park" in playerAttrs)) else 4.0            
+        steal_mod[playerid] = 20.0 if ("blaserunning" in battingAttrs or "blaserunning" in playerAttrs) else 0.0
         if "skipping" in playerAttrs:            
-            i, average_strikes = 1.0, 0.0
-            while i < strike_count:
-                average_strikes += i
-                i += 1.0
-            average_strikes = average_strikes / strike_count
-            strike_count -= average_strikes
-            i, average_balls = 1.0, 0.0
-            while i < ball_count:
-                average_balls += i
-                i += 1.0
-            average_balls = average_balls / ball_count
+            average_strikes = (strike_count - 1.0) / 2.0
+            average_balls = (ball_count - 1.0) / 2.0            
+            strike_count -= average_strikes            
+            strike_count = max(strike_count, 1.0)
             ball_count -= average_balls
         score_multiplier[playerid] = score_mult_pitcher
         if "magnify_2x" in playerAttrs:
@@ -348,24 +342,81 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
         if "a" in battingAttrs and not blood_calc:
             swing_strike_blood_factors += ((1.0 / outs) * a_blood_multiplier) + (((strike_chance / (strike_count + ball_count)) * a_blood_multiplier) if "skipping" not in playerAttrs else 0.0)
         swing_strike_chance = (min(swing_correct_chance + swing_strike_blood_factors, 1.0)) * strike_chance        
-        swing_ball_chance = max(((1.0 - swing_correct_chance) * (1.0 - strike_chance)) - (((1.0 - strike_chance) ** strike_count) if "flinch" in playerAttrs else 0.0), 0.0)
+        swing_ball_chance = min(max(((1.0 - swing_correct_chance) * (1.0 - strike_chance)) - (((1.0 - strike_chance) ** ball_count) if "flinch" in playerAttrs else 0.0), 0.0), 1.0)
 
         connect_log = (adjustments["path_connect"] - patheticism)
         base_connect_chance = log_transform(connect_log, 100.0)
         connect_chance = base_connect_chance * swing_strike_chance
         
         base_hit_log = ((thwackability - unthwackability - omniscience) - (adjustments["thwack_base_hit"] - adjustments["unthwack_base_hit"] - adjustments["omni_base_hit"]))
-        base_hit_chance = log_transform(base_hit_log, 100.0) * connect_chance                     
+        base_hit = log_transform(base_hit_log, 100.0)
+        base_hit_chance = base_hit * connect_chance                     
 
-        strike_looking_chance = min(((1.0 - swing_correct_chance) * strike_chance) + ((1.0 / strike_count) if "flinch" in playerAttrs else 0.0), 1.0)
-        strike_swinging_chance = min((1.0 - connect_chance) + swing_ball_chance, 1.0)
+        strike_looking_chance = min(((1.0 - swing_correct_chance) * strike_chance), 1.0)
+        strike_swinging_chance = min((1.0 - connect_chance) + swing_ball_chance, 1.0)      
+        ball_chance = 1.0 - swing_ball_chance     
 
-        caught_out_log = ((omniscience - musclitude) - (adjustments["omni_caught_out"] - adjustments["muscl_caught_out"]))
-        caught_out_chance[playerid] = log_transform(caught_out_log, 100.0) * connect_chance        
+        foul_ball_log = musclitude - adjustments["muscl_foul_ball"]
+        foul_ball_prob = log_transform(foul_ball_log, 100.0)
+        foul_ball_chance = foul_ball_prob * (1.0 - base_hit) * connect_chance
+        caught_out_chance[playerid] = max(connect_chance - foul_ball_chance - base_hit_chance, 0.0)
 
-        ball_chance = (swing_correct_chance * (1.0 - strike_chance)) + (((1.0 - strike_chance) ** strike_count) if "flinch" in playerAttrs else 0.0)
+        all_connect_events_prob = base_hit_chance + foul_ball_chance + caught_out_chance[playerid]
+        if all_connect_events_prob != connect_chance:
+            factor = connect_chance / all_connect_events_prob
+            base_hit_chance *= factor
+            foul_ball_chance *= factor
+            caught_out_chance[playerid] *= factor 
+            
+        all_pitch_events_prob = strike_looking_chance + strike_swinging_chance + connect_chance + ball_chance
+        if all_pitch_events_prob != 1.0:
+            factor = 1.0 / all_pitch_events_prob
+            strike_looking_chance *= factor
+            strike_swinging_chance *= factor
+            connect_chance *= factor
+            ball_chance *= factor
 
-        corrected_strike_chance = min(strike_swinging_chance + strike_looking_chance, 1.0)        
+        #possibiliies are any three of foul balls (only up to strikecount - 1), strike swinging, and strike looking
+        #always need at least one strike to strike out
+        #walks are ball count balls plus any combination above that does not include the final strike
+        strikeout = (strike_looking_chance ** strike_count) + (strike_swinging_chance ** strike_count)
+        walked = ball_chance ** ball_count
+        if strike_count >= 2.0:
+            strikeout += (foul_ball_chance ** (strike_count - 1.0)) * strike_looking_chance
+            strikeout += (foul_ball_chance ** (strike_count - 1.0)) * strike_swinging_chance
+            strikeout += (strike_looking_chance ** (strike_count - 1.0)) * strike_swinging_chance
+            strikeout += (strike_swinging_chance ** (strike_count - 1.0)) * strike_looking_chance
+            strikeout += (strike_looking_chance ** (strike_count - 1.0)) * strike_looking_chance
+            strikeout += strike_looking_chance ** strike_count
+            strikeout += strike_swinging_chance ** strike_count
+            walked += (ball_chance ** ball_count) * strike_swinging_chance
+            walked += (ball_chance ** ball_count) * strike_looking_chance
+            walked += (ball_chance ** ball_count) * foul_ball_chance
+        if strike_count >= 3.0:
+            strikeout += (foul_ball_chance ** (strike_count - 2.0)) * strike_swinging_chance * strike_looking_chance
+            strikeout += (foul_ball_chance ** (strike_count - 2.0)) * (strike_swinging_chance ** 2.0)
+            strikeout += (foul_ball_chance ** (strike_count - 2.0)) * (strike_looking_chance ** 2.0)
+            walked += (ball_chance ** ball_count) * (strike_swinging_chance ** 2.0)
+            walked += (ball_chance ** ball_count) * (strike_looking_chance ** 2.0)
+            walked += (ball_chance ** ball_count) * strike_looking_chance * strike_swinging_chance
+            walked += (ball_chance ** ball_count) * foul_ball_chance * strike_swinging_chance
+            walked += (ball_chance ** ball_count) * foul_ball_chance * strike_looking_chance
+        if strike_count >= 4.0:
+            strikeout += (foul_ball_chance ** (strike_count - 3.0)) * (strike_swinging_chance ** 2.0) * strike_looking_chance
+            strikeout += (foul_ball_chance ** (strike_count - 3.0)) * strike_swinging_chance * (strike_looking_chance ** 2.0)
+            strikeout += (foul_ball_chance ** (strike_count - 3.0)) * (strike_swinging_chance ** 3.0)
+            strikeout += (foul_ball_chance ** (strike_count - 3.0)) * (strike_looking_chance ** 3.0)
+            walked += (ball_chance ** ball_count) * (strike_swinging_chance ** 3.0)
+            walked += (ball_chance ** ball_count) * (strike_looking_chance ** 3.0)
+            walked += (ball_chance ** ball_count) * (strike_swinging_chance ** 2.0) * strike_looking_chance
+            walked += (ball_chance ** ball_count) * strike_swinging_chance * (strike_looking_chance ** 2.0)
+            walked += (ball_chance ** ball_count) * foul_ball_chance * (strike_swinging_chance ** 2.0)
+            walked += (ball_chance ** ball_count) * foul_ball_chance * (strike_looking_chance ** 2.0)
+            walked += (ball_chance ** ball_count) * foul_ball_chance * strike_swinging_chance * strike_looking_chance
+            walked += (ball_chance ** ball_count) * (foul_ball_chance ** 2.0) * strike_swinging_chance
+            walked += (ball_chance ** ball_count) * (foul_ball_chance ** 2.0) * strike_looking_chance
+        
+        corrected_strike_chance = strikeout
         if "o_no" in battingAttrs or "o_no" in playerAttrs or ("a" in battingAttrs and not blood_calc):
             #probability of no balls happening is the probability that every strike is a strike AND every ball is swung at
             no_balls = ((strike_chance * (1.0 - swing_correct_chance)) + (strike_chance * swing_correct_chance * (1.0 - base_connect_chance))) * ((1.0 - swing_correct_chance) * (1.0 - strike_chance))          
@@ -376,75 +427,110 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
             #probability of a least one ball happening is 1 - probability of no balls happening
             corrected_strike_chance *= (1.0 - no_balls)
 
+        corrected_strike_chance *= strike_mod
         #everything else is per pitch... connect per pitch, base hit per pitch, caught out per pitch, so each ball pitched is 1 / ball count % of a walk
-        walk_chance = ball_chance ** ball_count                                                                                                                                            
-        strike_out_chance[playerid] = (corrected_strike_chance ** strike_count) * strike_mod
+        walk_chance[playerid] = walked
+        strike_out_chance[playerid] = corrected_strike_chance
 
-        on_base_chance = min((base_hit_chance + walk_chance), 1.0)
+        #the sum of these events (which would be one or the other or the other etc.) must be one, as they are everything that can happen on a plate appearance
+        all_macro_events_prob = walk_chance[playerid] + base_hit_chance + strike_out_chance[playerid] + caught_out_chance[playerid]        
+        #if the sum is not one, correct all probabilities such that the sum will be equal to 1.0, which will preserve the relative probabilities for all events
+        if all_macro_events_prob != 1.0:
+            #if caught_out_chance[playerid] > 0.0000:
+            #    print("Pre-normalized: strikeout {:.4f}, walked {:.4f}, base hit {:.4f}, caughtout {:.4f}".format(strike_out_chance[playerid], walk_chance[playerid], base_hit_chance, caught_out_chance[playerid]))
+            factor = 1.0 / all_macro_events_prob
+            walk_chance[playerid] *= factor
+            strike_out_chance[playerid] *= factor
+            base_hit_chance *= factor
+            caught_out_chance[playerid] *= factor
+            all_macro_events_prob = walk_chance[playerid] + base_hit_chance + strike_out_chance[playerid] + caught_out_chance[playerid]                 
+            #if caught_out_chance[playerid] > 0.0000:
+            #    print("Normalized to: strikeout {:.4f}, walked {:.4f}, base hit {:.4f}, caughtout {:.4f}".format(strike_out_chance[playerid], walk_chance[playerid], base_hit_chance, caught_out_chance[playerid]))
 
         attempt_steal_log = ((basethirst + laserlikeness - watchfulness) - (adjustments["baset_attempt_steal"] + adjustments["laser_attempt_steal"] - adjustments["watch_attempt_steal"]))
-        attempt_steal_chance = log_transform(attempt_steal_log, 100.0) * on_base_chance
-        caught_steal_log = ((basethirst + laserlikeness - anticap - coldness) - (adjustments["baset_caught_steal"] + adjustments["laser_caught_steal"] - adjustments["anticap_caught_steal"] - adjustments["cold_caught_steal"]))
-        caught_steal_outs[playerid] = log_transform(caught_steal_log, 100.0) * attempt_steal_chance
-        
-        base_steal_score[playerid] = (((base * attempt_steal_chance) + (base * (attempt_steal_chance ** 2)) + (base * (attempt_steal_chance ** 3))) * steal_mod)
-        walk_score[playerid] = base * walk_chance * walk_mod   
+        attempt_steal_chance[playerid] = log_transform(attempt_steal_log, 100.0)
+        caught_steal_base_log = ((laserlikeness - anticap) - (adjustments["laser_caught_steal_base"] - adjustments["anticap_caught_steal_base"]))
+        caught_steal_home_log = ((basethirst + laserlikeness - anticap) - (adjustments["baset_caught_steal_home"] + adjustments["laser_caught_steal_home"] - adjustments["anticap_caught_steal_home"]))
+        caught_steal_base_chance[playerid] = log_transform(caught_steal_base_log, 100.0)        
+        caught_steal_home_chance[playerid] = log_transform(caught_steal_home_log, 100.0)             
         
         #homeruns needs to care about how many other runners are on base for how valuable they are, with a floor of "1x"
         homerun_log = ((divinity - overpowerment) - (adjustments["div_homer"] - adjustments["overp_homer"]))
-        homerun_chance = log_transform(homerun_log, 100.0) * base_hit_chance
-        homerun_multipliers[playerid] = homerun_chance * homer_multiplier
-        runners_on_base.append(on_base_chance)
+        homerun_prob = log_transform(homerun_log, 100.0)
+        homerun_chance[playerid] = homerun_prob * base_hit_chance
+        homerun_multipliers[playerid] = homer_multiplier        
 
         triple_log = ((musclitude + groundfriction + continuation - overpowerment - chasiness) - (adjustments["muscl_triple"] + adjustments["ground_triple"] + adjustments["cont_triple"] - adjustments["overp_triple"] - adjustments["chasi_triple"]))
-        triple_prob = log_transform(triple_log, 100.0) * (1.0 - homerun_chance)
+        triple_prob = log_transform(triple_log, 100.0) * (1.0 - homerun_chance[playerid])
         triple_chance[playerid] = triple_prob * base_hit_chance        
 
         double_log = ((musclitude + continuation - overpowerment - chasiness) - (adjustments["muscl_double"] + adjustments["cont_double"] - adjustments["overp_double"] - adjustments["chasi_double"]))
-        double_prob = log_transform(double_log, 100.0) * (1.0 - triple_prob) * (1.0 - homerun_chance)
+        double_prob = log_transform(double_log, 100.0) * (1.0 - triple_prob) * (1.0 - homerun_prob)
         double_chance[playerid] = double_prob * base_hit_chance 
-
-        single_prob = (1.0 - triple_prob) * (1.0 - double_prob) * (1.0 - homerun_chance)
-        single_chance[playerid] = single_prob * base_hit_chance
+        
+        single_chance[playerid] = max(base_hit_chance - triple_chance[playerid] - double_chance[playerid] - homerun_chance[playerid], 0.0)        
+        #normalize these to sum to base hit chance
+        all_base_hit_events_prob = single_chance[playerid] + triple_chance[playerid] + double_chance[playerid] + homerun_chance[playerid]
+        if all_base_hit_events_prob != base_hit_chance:
+            factor = base_hit_chance / all_macro_events_prob
+            single_chance[playerid] *= factor
+            triple_chance[playerid] *= factor
+            double_chance[playerid] *= factor
+            homerun_chance[playerid] *= factor            
         
         hit_modifier[playerid] = hit_multiplier          
 
         #runners advancing is tricky, since we have to do this based on runners being on base already, but use the batter's martyrdom for sacrifices
         sacrifice_log = martyrdom - adjustments["martyr_sacrifice"]
-        sacrifice_chance[playerid] = log_transform(sacrifice_log, 100.0) * caught_out_chance[playerid]
+        sacrifice_chance[playerid] = log_transform(sacrifice_log, 100.0) * caught_out_chance[playerid]        
         
-        runner_advances_log = ((laserlikeness + indulgence - tragicness - shakespearianism - tenaciousness) - (adjustments["laser_runner_advances"] + adjustments["indulg_runner_advances"] - adjustments["trag_runner_advances"] - adjustments["shakes_runner_advances"] - adjustments["shakes_runner_advances"]))
-        runner_advances_chance = log_transform(runner_advances_log, 100.0)
-        runner_advance_points[playerid] = base * runner_advances_chance
+        runner_advances_log = ((laserlikeness + indulgence - tragicness - shakespearianism - tenaciousness) - (adjustments["laser_runner_advances"] + adjustments["indulg_runner_advances"] - adjustments["trag_runner_advances"] - adjustments["shakes_runner_advances"] - adjustments["shakes_runner_advances"]))        
+        runner_advance_chance[playerid] = log_transform(runner_advances_log, 100.0)
+        average_on_base_position[playerid] = {}
+        average_on_base_position[playerid]["first"] = min(single_chance[playerid] + (walk_chance[playerid] * (1.0 - walk_mod)), 1.0)
+        average_on_base_position[playerid]["second"] = min(double_chance[playerid] + (walk_chance[playerid] * walk_mod), 1.0)
+        average_on_base_position[playerid]["third"] = min(triple_chance[playerid] + (walk_chance[playerid] * walk_mod), 1.0)                
+
+        #need to approximate caught stealing outs for blood calcing        
+        average_bases_to_steal = (2.0 * average_on_base_position[playerid]["first"]) + average_on_base_position[playerid]["second"]
+        average_home_to_steal = average_on_base_position[playerid]["first"] + average_on_base_position[playerid]["second"] + average_on_base_position[playerid]["third"]
+        caught_steal_outs[playerid] = min((caught_steal_base_chance[playerid] * attempt_steal_chance[playerid] * average_bases_to_steal) + (caught_steal_home_chance[playerid] * attempt_steal_chance[playerid] * average_home_to_steal), 1.0)
+        
         playerAttrs.clear()
 
-    if blood_calc:        
+    if blood_calc:                        
         outs_per_lineup = sum(strike_out_chance.values()) + sum(caught_steal_outs.values()) + sum(caught_out_chance.values())            
         average_aaa_blood_impact, average_aa_blood_impact = {}, {}
-        max_x = outs * innings * 10        
+        max_x = outs * innings * 3.0      
         lineup_factor = (outs - outs_per_lineup) if (outs_per_lineup < outs) else 1.0
         if blood_calc == "aaa" or blood_calc == "a":            
             for playerid in triple_chance:
                 x = 0
-                average_aaa_blood_impact[playerid] = 0.0                
-                while (x < max_x) and (average_aaa_blood_impact[playerid] < 1.0):                    
-                    previous_blood_impact = average_aaa_blood_impact[playerid]
-                    average_aaa_blood_impact[playerid] += ((triple_chance[playerid] * ((1.0 - triple_chance[playerid]) ** x)) * ((max_x - x) / max_x)) * lineup_factor                    
-                    if (average_aaa_blood_impact[playerid] - previous_blood_impact) < 0.0001:
-                        break
-                    x += outs_per_lineup * lineup_factor
-                average_aaa_blood_impact[playerid] = max(average_aaa_blood_impact[playerid], 1.0)
+                average_aaa_blood_impact[playerid] = 0.0     
+                if outs_per_lineup < 0.1:
+                    average_aaa_blood_impact[playerid] = 1.0
+                else:
+                    while (x < max_x) and (average_aaa_blood_impact[playerid] < 1.0):                    
+                        previous_blood_impact = average_aaa_blood_impact[playerid]
+                        average_aaa_blood_impact[playerid] += ((triple_chance[playerid] * ((1.0 - triple_chance[playerid]) ** x)) * ((max_x - x) / max_x)) * lineup_factor                    
+                        if (average_aaa_blood_impact[playerid] - previous_blood_impact) < 0.001:
+                            break
+                        x += outs_per_lineup * lineup_factor
+                    average_aaa_blood_impact[playerid] = max(average_aaa_blood_impact[playerid], 1.0)
         if blood_calc == "aa" or blood_calc == "a":            
             for playerid in double_chance:
                 x = 0
                 average_aa_blood_impact[playerid] = 0.0
-                while (x < max_x) and (average_aa_blood_impact[playerid] < 1.0):                    
-                    previous_blood_impact = average_aa_blood_impact[playerid]
-                    average_aa_blood_impact[playerid] += ((double_chance[playerid] * ((1.0 - double_chance[playerid]) ** x)) * ((max_x - x) / max_x)) * lineup_factor                    
-                    if (average_aa_blood_impact[playerid] - previous_blood_impact) < 0.0001:
-                        break
-                    x += outs_per_lineup * lineup_factor
-                average_aa_blood_impact[playerid] = max(average_aa_blood_impact[playerid], 1.0)
+                if outs_per_lineup < 0.1:
+                    average_aa_blood_impact[playerid] = 1.0
+                else:
+                    while (x < max_x) and (average_aa_blood_impact[playerid] < 1.0):                    
+                        previous_blood_impact = average_aa_blood_impact[playerid]
+                        average_aa_blood_impact[playerid] += ((double_chance[playerid] * ((1.0 - double_chance[playerid]) ** x)) * ((max_x - x) / max_x)) * lineup_factor                    
+                        if (average_aa_blood_impact[playerid] - previous_blood_impact) < 0.001:
+                            break
+                        x += outs_per_lineup * lineup_factor
+                    average_aa_blood_impact[playerid] = max(average_aa_blood_impact[playerid], 1.0)        
         if blood_calc == "aaa":
             return average_aaa_blood_impact
         if blood_calc == "aa":
@@ -452,60 +538,282 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
         if blood_calc == "a":
             return average_aa_blood_impact, average_aaa_blood_impact
 
-    return runners_on_base, runner_advance_points, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, base_steal_score, walk_score, strike_out_chance, caught_steal_outs, triple_chance, double_chance, single_chance
+    return runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, average_on_base_position, steal_mod, clutch_factor, walk_mod
 
-def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, innings=9, outs=3):      
+def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, innings=9, outs=3, runtime_solution=False):          
     battingAttrs = [attr.lower() for attr in teamAttrs]
-    reverb_weather = helpers.get_weather_idx("Reverb")    
-    runners_on_base, runner_advance_points, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, base_steal_score, walk_score, strike_out_chance, caught_steal_outs, triple_chance, double_chance, single_chance = calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, None, innings)    
+    reverb_weather, sun_weather, bh_weather = helpers.get_weather_idx("Reverb"), helpers.get_weather_idx("Sun 2"), helpers.get_weather_idx("Black Hole")
+    runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, average_on_base_position, steal_mod, clutch_factor, walk_mod = calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, None, innings)    
     
-    #run ten "games" to get a more-representative average
-    total_outs = innings * outs * 10
+    #run three "games" to get a more-representative average
+    total_innings = innings * 3.0
+    current_innings, atbats_in_inning = 0, 0  
     current_outs = 0.0
     team_score = 100.0 if "home_field" in battingAttrs else 0.0
+    inning_score = 0.0
 
-    while current_outs < total_outs:        
-        current_batter = 0
-        previous_outs = current_outs
-        for playerid in sorted_batters:            
+    runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
+    runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
+    inning_outs = 0.0    
+    batter_atbats = 0    
+    last_player_out = ""
+    stolen_bases, homers, hits = {}, {}, {}    
+    loop_checker = {}
+    loop_encountered, last_pass = False, False            
+    
+    while current_innings < total_innings:
+        starting_lineup_inning_outs, starting_lineup_inning_score = inning_outs, inning_score
+        innings_since_lineup_start = 0
+        for playerid in sorted_batters:
+            batter_atbats += 1
             playerAttrs = [attr.lower() for attr in team_data[playerid]["attrs"].split(";")]
-            base = 20.0 if (("extra_base" in battingAttrs) or ("extra_base" in playerAttrs)) else 25.0
-            if len(runners_on_base) < 4:            
-                average_runners_on_base = max(sum(runners_on_base), 0.0) / len(runners_on_base)     
+            base = 20.0 if (("extra_base" in battingAttrs) or ("extra_base" in playerAttrs)) else 25.0                   
+            if base == 25.0:
+                homerun_score = ((100.0 - (10.0 * score_mod)) * (1.0 + runners_on_first + runners_on_second + runners_on_third)) * homerun_chance[playerid] * homerun_multipliers[playerid]
+                triple_runners_score = ((100.0 - (10.0 * score_mod)) * (runners_on_first + runners_on_second + runners_on_third)) * hit_modifier[playerid] * triple_chance[playerid]
+                double_runners_score = ((100.0 - (10.0 * score_mod)) * (runners_on_second + runners_on_third)) * hit_modifier[playerid] * double_chance[playerid]    
+                single_runners_score = ((100.0 - (10.0 * score_mod)) * runners_on_third) * hit_modifier[playerid] * single_chance[playerid]                               
+                runners_advance_score = 100.0 * runners_on_third * sacrifice_chance[playerid]
+                walking_score = 100.0 * ((runners_on_third * walk_chance[playerid]) + (runners_on_second * (walk_chance[playerid] * walk_mod)) + (runners_on_first * (walk_chance[playerid] * walk_mod)))
             else:
-                average_runners_on_base = max(sum(runners_on_base) - runners_on_base[current_batter], 0.0) / (len(runners_on_base) - 1)
-            runners_advance_batter = max(sum(runner_advance_points.values()) - runner_advance_points[playerid], 0.0) * max(average_runners_on_base, 3.0)
-            runners_advance_score = sacrifice_chance[playerid] * runners_advance_batter
-            homerun_score = ((100.0 * (1.0 + max(average_runners_on_base, 3.0))) - (10.0 * score_mod)) * homerun_multipliers[playerid]
-            triple_score = (((base * 3.0) * triple_chance[playerid] * (1.0 + max(average_runners_on_base, 3.0))) - (10.0 * score_mod)) * hit_modifier[playerid]
-            double_score = (((base * 2.0) * double_chance[playerid] * (1.0 + max(average_runners_on_base, 3.0))) - (10.0 * score_mod)) * hit_modifier[playerid]
-            single_score = (((base * 1.0) * single_chance[playerid] * (1.0 + max(average_runners_on_base, 3.0))) - (10.0 * score_mod)) * hit_modifier[playerid]                        
-            player_score = ((runners_advance_score + homerun_score + triple_score + double_score + single_score) * score_multiplier[playerid]) + base_steal_score[playerid] + walk_score[playerid] 
-            player_outs = strike_out_chance[playerid] + caught_out_chance[playerid] + caught_steal_outs[playerid]
-            if ("reverberating" in playerAttrs) or ("repeating" in playerAttrs and weather == reverb_weather):
-                player_score *= 1.02
-                player_outs *= 1.02            
-            team_score += player_score
-            current_outs += player_outs
-            if current_outs >= total_outs:
-                break
-            current_batter += 1
-            playerAttrs.clear()
+                homerun_score = ((100.0 - (10.0 * score_mod)) * (1.0 + runners_on_first + runners_on_second + runners_on_third + runners_on_fourth)) * homerun_chance[playerid] * homerun_multipliers[playerid]
+                triple_runners_score = ((100.0 - (10.0 * score_mod)) * (runners_on_fourth + runners_on_second + runners_on_third)) * hit_modifier[playerid] * triple_chance[playerid]
+                double_runners_score = ((100.0 - (10.0 * score_mod)) * (runners_on_fourth + runners_on_third)) * hit_modifier[playerid] * double_chance[playerid]    
+                single_runners_score = ((100.0 - (10.0 * score_mod)) * runners_on_fourth) * hit_modifier[playerid] * single_chance[playerid]                               
+                runners_advance_score = 100.0 * runners_on_fourth * sacrifice_chance[playerid]
+                walking_score = 100.0 * ((runners_on_fourth * walk_chance[playerid]) + (runners_on_third * walk_chance[playerid] * walk_mod) + (runners_on_second * walk_chance[playerid] * walk_mod) + (runners_on_first * walk_chance[playerid] * walk_mod))                
+                runners_on_fourth, runner_advance_fourth = calc_runners_on(runners_on_fourth, runner_advance_fourth, runners_on_third, runner_advance_third, runners_on_second, runner_advance_second, runners_on_first, runner_advance_first, single_chance[playerid], double_chance[playerid], triple_chance[playerid], homerun_chance[playerid], sacrifice_chance[playerid], caught_out_chance[playerid], walk_chance[playerid], walk_mod)
+            runners_on_third, runner_advance_third = calc_runners_on(runners_on_third, runner_advance_third, runners_on_second, runner_advance_second, runners_on_first, runner_advance_first, 0.0, 0.0, single_chance[playerid], double_chance[playerid], triple_chance[playerid], homerun_chance[playerid], sacrifice_chance[playerid], caught_out_chance[playerid], walk_chance[playerid], walk_mod)
+            runners_on_second, runner_advance_second = calc_runners_on(runners_on_second, runner_advance_second, runners_on_first, runner_advance_first, 0.0, 0.0, 0.0, 0.0, single_chance[playerid], double_chance[playerid], triple_chance[playerid], homerun_chance[playerid], sacrifice_chance[playerid], caught_out_chance[playerid], walk_chance[playerid], walk_mod)
+            runners_on_first, runner_advance_first = calc_runners_on(runners_on_first, runner_advance_first, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, single_chance[playerid], double_chance[playerid], triple_chance[playerid], homerun_chance[playerid], sacrifice_chance[playerid], caught_out_chance[playerid], walk_chance[playerid], walk_mod)
+            player_score = (runners_advance_score + walking_score + homerun_score + triple_runners_score + double_runners_score + single_runners_score) * score_multiplier[playerid]
+            if playerid not in homers:
+                homers[playerid] = 0.0
+                hits[playerid] = 0.0
+            homers[playerid] += homerun_chance[playerid]
+            hits[playerid] += triple_chance[playerid] + double_chance[playerid] + single_chance[playerid]
+            player_outs = strike_out_chance[playerid] + caught_out_chance[playerid]
+            inning_outs += player_outs            
+            if inning_outs >= outs:
+                inning_outs = 0                
+                current_innings += 1
+                innings_since_lineup_start += 1
+                if not runtime_solution:
+                    if playerid in loop_checker:
+                        if not last_pass:
+                            if (str(batter_atbats - atbats_in_inning) in loop_checker[playerid]) and (loop_checker[playerid][str(batter_atbats - atbats_in_inning)][2] == 1):                            
+                                #this means that we have hit a loop point; our inning ended with the same player and had the same number of atbats
+                                loop_encountered = True                        
+                                inning_score = 0.0
+                                runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
+                                runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
+                                break
+                    else:
+                        loop_checker[playerid] = {}
+                    loop_checker[playerid][str(batter_atbats - atbats_in_inning)] = [team_score, current_innings, 1]
+                inning_score += player_score
+                atbats_in_inning = batter_atbats
+                team_score += inning_score                
+                inning_score = 0.0
+                runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
+                runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
+                if current_innings >= total_innings:                
+                    break
+            else:
+                steal_runners_on_second = min(runners_on_second, 1.0)
+                steal_runners_on_third = min(runners_on_third, 1.0)
+                steal_runners_on_fourth = min(runners_on_fourth, 1.0)
+                runners_on_third += average_on_base_position[playerid]["third"]
+                runners_on_second += average_on_base_position[playerid]["second"]
+                runners_on_first += average_on_base_position[playerid]["first"]
+                runner_advance_first += average_on_base_position[playerid]["first"] * runner_advance_chance[playerid]
+                runner_advance_second += average_on_base_position[playerid]["second"] * runner_advance_chance[playerid]
+                runner_advance_third += average_on_base_position[playerid]["third"] * runner_advance_chance[playerid]                
+                runners_on_first = min(runners_on_first, 1.0)
+                runners_on_second = min(runners_on_second, 1.0)
+                runners_on_third = min(runners_on_third, 1.0)
+                runners_on_fourth = min(runners_on_fourth, 1.0)
+                #since the inning is still live, now we need to calculate potential steals from the batter, taking their likely position on base and computing how much the runners on base positions change
+                #stealing from first to second
+                if playerid not in stolen_bases:
+                    stolen_bases[playerid] = 0.0                
+                steal_base_success_rate = (1.0 - caught_steal_base_chance[playerid]) * attempt_steal_chance[playerid]
+                steal_home_success_rate = (1.0 - caught_steal_home_chance[playerid]) * attempt_steal_chance[playerid]                
+                #steal second
+                steal_second_opportunities = average_on_base_position[playerid]["first"] * (1.0 - steal_runners_on_second) 
+                #steal third
+                steal_third_opportunities = steal_second_opportunities * (1.0 - steal_runners_on_third)
+                steal_third_opportunities += average_on_base_position[playerid]["second"] * (1.0 - steal_runners_on_third)
+                #adjust base position based on stealing bases
+                runners_on_first -= (steal_second_opportunities * attempt_steal_chance[playerid])
+                runner_advance_first -= (steal_second_opportunities * attempt_steal_chance[playerid]) * runner_advance_chance[playerid]
+                runners_on_second += (steal_second_opportunities * steal_base_success_rate) - (steal_third_opportunities * attempt_steal_chance[playerid])
+                runner_advance_second += ((steal_second_opportunities * steal_base_success_rate) - (steal_third_opportunities * attempt_steal_chance[playerid])) * runner_advance_chance[playerid]
+                if base == 20.0:                    
+                    #steal fourth
+                    steal_fourth_opportunities = steal_third_opportunities * (1.0 - steal_runners_on_fourth)                    
+                    steal_fourth_opportunities += average_on_base_position[playerid]["third"] * (1.0 - steal_runners_on_fourth)
+                    #steal_home                    
+                    steal_home_opportunities = steal_fourth_opportunities                    
+                    #adjust third and fourth base
+                    runners_on_third += (steal_third_opportunities * steal_base_success_rate) - (steal_fourth_opportunities * attempt_steal_chance[playerid])
+                    runner_advance_third += ((steal_third_opportunities * steal_base_success_rate) - (steal_fourth_opportunities * attempt_steal_chance[playerid])) * runner_advance_chance[playerid]
+                    runners_on_fourth += (steal_fourth_opportunities * steal_base_success_rate) - (steal_home_opportunities * attempt_steal_chance[playerid])
+                    runner_advance_fourth += ((steal_fourth_opportunities * steal_base_success_rate) - (steal_home_opportunities * attempt_steal_chance[playerid])) * runner_advance_chance[playerid]
+                else:
+                    steal_fourth_opportunities = 0.0
+                    #steal_home                    
+                    steal_home_opportunities = steal_third_opportunities                    
+                    steal_home_opportunities += average_on_base_position[playerid]["third"]
+                    #adjust third base
+                    runners_on_third += (steal_third_opportunities * steal_base_success_rate) - (steal_home_opportunities * attempt_steal_chance[playerid])
+                    runner_advance_third += ((steal_third_opportunities * steal_base_success_rate) - (steal_home_opportunities * attempt_steal_chance[playerid])) * runner_advance_chance[playerid]
+                steal_base_opportunities = steal_second_opportunities + steal_third_opportunities + steal_fourth_opportunities
+                stolen_bases[playerid] += steal_base_opportunities * steal_base_success_rate
+                stolen_bases[playerid] += steal_home_opportunities * steal_home_success_rate
+                player_score += ((100.0 + steal_mod[playerid]) * (steal_home_opportunities * steal_home_success_rate)) + (steal_mod[playerid] * steal_base_opportunities * steal_base_success_rate)
+                steal_outs = (steal_base_opportunities * caught_steal_base_chance[playerid] * attempt_steal_chance[playerid]) + (steal_home_opportunities * caught_steal_home_chance[playerid] * attempt_steal_chance[playerid])
+                inning_outs += steal_outs
+                player_outs += steal_outs
+                if inning_outs >= outs:
+                    inning_outs = 0.0                    
+                    current_innings += 1
+                    innings_since_lineup_start += 1
+                    if not runtime_solution:
+                        if playerid in loop_checker:       
+                            if not last_pass:
+                                if (str(batter_atbats - atbats_in_inning) in loop_checker[playerid]) and (loop_checker[playerid][str(batter_atbats - atbats_in_inning)][2] == 2):                                
+                                    #this means that we have hit a loop point; our inning ended with the same player and had the same number of atbats
+                                    loop_encountered = True                                 
+                                    inning_score = 0.0
+                                    runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
+                                    runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
+                                    break
+                        else:
+                            loop_checker[playerid] = {}
+                        loop_checker[playerid][str(batter_atbats - atbats_in_inning)] = [team_score, current_innings, 2]
+                    inning_score += player_score
+                    atbats_in_inning = batter_atbats
+                    team_score += inning_score                    
+                    inning_score = 0.0
+                    runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
+                    runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
+                    if current_innings >= total_innings:                
+                        break
+                else:
+                    runners_on_first = max(min(runners_on_first, 1.0), 0.0)
+                    runners_on_second = max(min(runners_on_second, 1.0), 0.0)
+                    runners_on_third = max(min(runners_on_third, 1.0), 0.0)
+                    runners_on_fourth = max(min(runners_on_fourth, 1.0), 0.0)
+                    runner_advance_first = max(min(runner_advance_first, 1.0), 0.0)
+                    runner_advance_second = max(min(runner_advance_second, 1.0), 0.0)
+                    runner_advance_third = max(min(runner_advance_third, 1.0), 0.0)
+                    runner_advance_fourth = max(min(runner_advance_fourth, 1.0), 0.0)
+                    if ("reverberating" in playerAttrs) or ("repeating" in playerAttrs and weather == reverb_weather):
+                        player_score *= 1.02
+                        inning_outs += (player_outs * 0.02)
+                    if inning_outs >= outs:
+                        inning_outs = 0.0                        
+                        current_innings += 1
+                        innings_since_lineup_start += 1
+                        if not runtime_solution:
+                            if playerid in loop_checker:         
+                                if not last_pass:
+                                    if (str(batter_atbats - atbats_in_inning) in loop_checker[playerid]) and (loop_checker[playerid][str(batter_atbats - atbats_in_inning)][2] == 3):
+                                        #this means that we have hit a loop point; our inning ended with the same player and had the same number of atbats to get there
+                                        loop_encountered = True             
+                                        inning_score = 0.0
+                                        runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
+                                        runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
+                                        break
+                            else:
+                                loop_checker[playerid] = {}
+                            loop_checker[playerid][str(batter_atbats - atbats_in_inning)] = [team_score, current_innings, 3]
+                        inning_score += player_score
+                        atbats_in_inning = batter_atbats
+                        team_score += inning_score                
+                        inning_score = 0.0
+                        runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
+                        runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
+                        if current_innings >= total_innings:                
+                            break
+                    else:
+                        inning_score += player_score
+            playerAttrs.clear()                
 
-        lineup_score = team_score        
-        if current_outs <= (previous_outs + 0.01):
-            #this means we did not accumulate any appreciable number of outs during an entire lineup run, so we need to be done and assume an absurd score
-            full_lineup_count = (math.floor(total_outs / 0.01)) - 1            
-            team_score += lineup_score * full_lineup_count            
-            return team_score
-        elif current_outs < total_outs:
-            #shortcut number of times through the lineup for loop to 2 maximum; each full time through will produce the same answer, after all            
-            #we've been through it one time already, accumulating N outs, so we'll go through it another (total outs / N) - 1 times
-            full_lineup_count = (math.floor(total_outs / current_outs)) - 1            
-            team_score += lineup_score * full_lineup_count
-            current_outs += current_outs * full_lineup_count
+        if (current_innings < total_innings):        
+            if loop_encountered and not runtime_solution:
+                loop_encountered, last_pass = False, True
+                #print("We hit this new loop condition, sweet")
+                lineup_score = team_score - loop_checker[playerid][str(batter_atbats - atbats_in_inning)][0]
+                #print("{} innings before loop started, current innings {}".format(loop_checker[playerid][str(batter_atbats - atbats_in_inning)][1], current_innings))
+                innings_in_loop = current_innings - loop_checker[playerid][str(batter_atbats - atbats_in_inning)][1]
+                #we will have not added the most-recent inning, but we know we get a loop of innings from there and can replicate that loop N times and be at the same state
+                #as the inning where we detected the start of a new loop is our current inning, we need to make sure that gets included in our replicated loop count
+                current_innings -= 1
+                full_lineup_count = math.floor((total_innings - current_innings) / innings_in_loop)                
+                #print("Iterating through {} replicates of the loop of {} innings, current innings {}".format(full_lineup_count, innings_in_loop, current_innings))
+                atbats_in_inning = batter_atbats
+                team_score += lineup_score * full_lineup_count
+                current_innings += innings_in_loop * full_lineup_count
+                #print("Current innings now {}, out of total {}".format(current_innings, total_innings))            
+            elif ((inning_outs - starting_lineup_inning_outs) < 1) and (innings_since_lineup_start == 0):
+                #this means we have gone through the entire lineup and not even gotten one out
+                #most likely this will continue, so we are just going to macro score these cases to save time
+                #first, we need to determine how many innings remain
+                remaining_innings = total_innings - current_innings
+                #next, we need to determine how many passes through the lineup it will take at our current rate to complete the remaining innings
+                remaining_outs = ((remaining_innings * 3) - inning_outs)
+                #we need to have a fail case for accumulating ZERO outs in a lineup pass; a truly absurd number
+                if (inning_outs - starting_lineup_inning_outs) == 0:
+                    lineup_passes = remaining_outs / 0.0001
+                else:
+                    lineup_passes = remaining_outs / (inning_outs - starting_lineup_inning_outs)
+                #then, we need to take the amount of score we have accumulated in our pass through the lineup and multiply it by our lineup passes, including the pass we just did in our total
+                lineup_score = (inning_score - starting_lineup_inning_score) * (lineup_passes + 1)
+                #increase team score by this amount
+                team_score += lineup_score
+                #finish scoring for the team
+                current_innings = total_innings
+                #only update the hits homers and steals if we are generating runtime output
+                if runtime_solution:
+                    for playerid in sorted_batters:
+                        hits[playerid] *= lineup_passes + 1
+                        homers[playerid] *= lineup_passes + 1
+                        stolen_bases[playerid] *= lineup_passes + 1
+            else:
+                if ((runners_on_first + runners_on_second + runners_on_third + runners_on_fourth) == 0.0) and ((runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth) == 0.0):
+                    #this means we're going to replicate this result a number of times as we completed the lineup before accumulating whatever remains                    
+                    last_pass = True
+                    remaining_innings = total_innings - current_innings
+                    total_iterations = math.floor(remaining_innings / current_innings)
+                    print("Discovered a replicate point at inning {}, {} innings remain, {} replicates".format(current_innings, remaining_innings, total_iterations))
+                    team_score *= total_iterations
+                    current_innings += current_innings * total_iterations
+                    print("Re-entering the loop at inning {}".format(current_innings))
+                    if runtime_solution:
+                        for playerid in sorted_batters:
+                            hits[playerid] *= total_iterations
+                            homers[playerid] *= total_iterations
+                            stolen_bases[playerid] *= total_iterations
+    
+    if ((weather == sun_weather) or (weather == bh_weather)) and runtime_solution:        
+        adjusted_score = team_score - (math.floor(team_score / 1000.0) * 1000.0)
+        print("Adjusting team score for {} weather: team score = {}, adjusted score = {}".format("Sun 2" if weather == sun_weather else "Black Hole", team_score, adjusted_score))
+        team_score = adjusted_score    
+
+    if runtime_solution:
+        return team_score, stolen_bases, homers, hits
 
     return team_score
+
+def calc_runners_on(runners_on_base, runner_advance_base, runners_on_base_minus_one, runner_advance_base_minus_one, runners_on_base_minus_two, runner_advance_base_minus_two, runners_on_base_minus_three, runner_advance_base_minus_three, single_chance, double_chance, triple_chance, homerun_chance, sacrifice_chance, caught_out_chance, walk_chance, walk_mod):
+
+    runners_on = max(runners_on_base + (runner_advance_base_minus_one * runners_on_base_minus_one * caught_out_chance) + ((runners_on_base_minus_one - runners_on_base) * single_chance) + ((runners_on_base_minus_one - runners_on_base) * sacrifice_chance) + ((runners_on_base_minus_two - runners_on_base) * double_chance) + ((runners_on_base_minus_three - runners_on_base) * triple_chance) - (runners_on_base * homerun_chance) + ((runners_on_base_minus_one - runners_on_base) * walk_chance * (1.0 - walk_mod)) + ((runners_on_base_minus_two + runners_on_base_minus_three - runners_on_base) * walk_chance * walk_mod), 0.0)
+    
+    runner_advance = max(runner_advance_base + (runner_advance_base_minus_one * runners_on_base_minus_one * caught_out_chance * runner_advance_base_minus_one) + (((runners_on_base_minus_one * runner_advance_base_minus_one) - (runners_on_base * runner_advance_base)) * single_chance) + (((runners_on_base_minus_one * runner_advance_base_minus_one) - (runners_on_base * runner_advance_base)) * sacrifice_chance) + (((runners_on_base_minus_two * runner_advance_base_minus_two) - (runners_on_base * runner_advance_base)) * double_chance) + (((runners_on_base_minus_three * runner_advance_base_minus_three) - (runner_advance_base * runners_on_base)) * triple_chance) - (runners_on_base * runner_advance_base * homerun_chance) + (((runners_on_base_minus_one * runner_advance_base_minus_one) - (runners_on_base * runner_advance_base)) * walk_chance * (1.0 - walk_mod)) + (((runners_on_base_minus_two * runner_advance_base_minus_two) + (runners_on_base_minus_three * runner_advance_base_minus_three) - (runners_on_base * runner_advance_base)) * walk_chance * walk_mod), 0.0)
+    
+    return runners_on, runner_advance
 
 def get_blood_mod(mods, bloodMod, opp_same, player_stat_data, stlatset):                         
     playerMods = collections.defaultdict(lambda: [])    
@@ -665,14 +973,14 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
     home_team_stlats, home_team_defense, home_batter_order, homePitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, homeMods, weather, "home", team_stat_data[homeTeam], pitcher_stat_data[homePitcher], adjusted_stat_data)
 
     if "AAA" in awayAttrs or "AA" in awayAttrs or "A" in awayAttrs:
-        away_team_stlats, away_team_defense, away_batter_order, awayPitcherStlats = blood_impact_calc(terms, mods, weather, "away", awayMods, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], pitcher_stat_data[awayPitcher], awayAttrs, homeAttrs, away_batter_order, adjusted_stat_data, adjustments, pitcher_stat_data[homePitcher]["innings"])
+        away_team_stlats, away_team_defense, away_batter_order, awayPitcherStlats = blood_impact_calc(terms, mods, weather, "away", awayMods, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], pitcher_stat_data[awayPitcher], awayAttrs, homeAttrs, away_batter_order, adjusted_stat_data, adjustments)
     if "AAA" in homeAttrs or "AA" in homeAttrs or "A" in homeAttrs:
-        home_team_stlats, home_team_defense, home_batter_order, homePitcherStlats = blood_impact_calc(terms, mods, weather, "home", homeMods, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], pitcher_stat_data[homePitcher], homeAttrs, awayAttrs, home_batter_order, adjusted_stat_data, adjustments, pitcher_stat_data[awayPitcher]["innings"])
+        home_team_stlats, home_team_defense, home_batter_order, homePitcherStlats = blood_impact_calc(terms, mods, weather, "home", homeMods, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], pitcher_stat_data[homePitcher], homeAttrs, awayAttrs, home_batter_order, adjusted_stat_data, adjustments)
     
-    away_score = calc_team_score(mods, weather, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, away_batter_order, adjustments, pitcher_stat_data[homePitcher]["innings"])
-    home_score = calc_team_score(mods, weather, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, home_batter_order, adjustments, pitcher_stat_data[awayPitcher]["innings"])   
+    away_score = calc_team_score(mods, weather, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, away_batter_order, adjustments)
+    home_score = calc_team_score(mods, weather, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, home_batter_order, adjustments)   
 
-    numerator = away_score - home_score    
+    numerator = away_score - home_score
     denominator = abs(away_score + home_score)
     if not denominator:
         return .5, .5    
@@ -693,7 +1001,7 @@ def get_player_mods(mods, awayAttrs, homeAttrs, weather, away_home, player_stat_
     playerMods = collections.defaultdict(lambda: [])
     #applied_mods = []
     bird_weather = helpers.get_weather_idx("Birds")    
-    flood_weather = helpers.get_weather_idx("Flooding")   
+    flood_weather = helpers.get_weather_idx("Flooding")       
 
     for attr in modAttrs:        
         if attr == "affinity_for_crows" and weather != bird_weather:

@@ -20,7 +20,7 @@ MOFO_TERMS = [
     MOFOTerm("ruthlessness", DefaultBounds),
     MOFOTerm("overpowerment", DefaultBounds),    
     MOFOTerm("shakespearianism", DefaultBounds),    
-    MOFOTerm("coldness", DefaultBounds),
+    MOFOTerm("coldness", [[0, 0.1], [0, 0.1], [0, 0.1]]),
     MOFOTerm("omniscience", DefaultBounds),           
     MOFOTerm("tenaciousness", DefaultBounds),    
     MOFOTerm("watchfulness", DefaultBounds),    

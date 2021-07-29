@@ -174,8 +174,8 @@ def get_attrs_from_game(season_team_attrs, game, side):
     team_attrs = season_team_attrs.get(get_team_name(game["team_id"], int(game["season"]), int(game["day"])), [])
     for attr in team_attrs:
         if (attr == "TRAVELING" and side != "away") or (
-                attr == "AFFINITY_FOR_CROWS" and int(game["weather"]) != BIRD_WEATHER) or (
-                attr == "HIGH_PRESSURE" and int(game["weather"]) != FLOOD_WEATHER):
+                attr == "AFFINITY_FOR_CROWS" and game["weather"] != BIRD_WEATHER) or (
+                attr == "HIGH_PRESSURE" and game["weather"] != FLOOD_WEATHER):
             continue
         attrs.add(attr)
     return attrs
@@ -471,7 +471,7 @@ def minimize_func(parameters, *data):
         BEST_RESULT = number_to_beat if (number_to_beat < BEST_RESULT) else BEST_RESULT
     special_case_list = special_case_list or []            
     park_mod_list_size = len(ballpark_list) * 3
-    team_mod_list_size = len(mod_list) * 3
+    team_mod_list_size = len(mod_list)
     special_cases_count = len(special_case_list)
     base_mofo_list_size = len(parameters) - special_cases_count - park_mod_list_size - team_mod_list_size
     terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_mofo_list_size])] * 3))}
@@ -479,11 +479,15 @@ def minimize_func(parameters, *data):
     ballpark_mods = collections.defaultdict(lambda: {"bpterm": {}})
     half_stlats = collections.defaultdict(lambda: {})
     mod_mode = True        
-    for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                  
-        use_a = 0.0 if (math.isnan(a)) else a            
-        use_b = 0.0 if (math.isnan(b)) else b            
-        use_c = 0.0 if (math.isnan(c)) else c            
-        mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(use_a, use_b, use_c)        
+    for mod, a in zip(mod_list, parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size]):                  
+        use_a = 0.0 if (math.isnan(a)) else a                      
+        mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = use_a
+    #attempting to use mods just as a single multuplier
+    #for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                  
+    #    use_a = 0.0 if (math.isnan(a)) else a            
+    #    use_b = 0.0 if (math.isnan(b)) else b            
+    #    use_c = 0.0 if (math.isnan(c)) else c            
+    #    mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(use_a, use_b, use_c)
     for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):   
         use_a = 0.0 if (math.isnan(a)) else a            
         use_b = 0.0 if (math.isnan(b)) else b            
@@ -496,7 +500,7 @@ def minimize_func(parameters, *data):
     quarter_fail = 100.0
     linear_fail = 100.0
     linear_error, check_fail_rate, web_margin, early_linear, last_linear, worstmod_linear_error, unmod_linear_error = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    max_linear_error, min_linear_error, max_error_value, min_error_value = 0.0, 150.0, 0.0, 0.0
+    max_linear_error, min_linear_error, unmod_max_linear_error, unmod_min_linear_error, max_error_value, min_error_value = 0.0, 150.0, 0.0, 150.0, 0.0, 0.0
     max_error_mod, min_error_mod = "", ""
     love_rate, instinct_rate, ono_rate, wip_rate, exk_rate, exb_rate, unmod_rate = 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0
     k9_max_err, k9_min_err, ljg_passed, ev_neg_count, lastlin_games = 0, 0, 0, 0, 1
@@ -872,9 +876,9 @@ def minimize_func(parameters, *data):
                     print("Found no games for day {}".format(day))
                     if day == 1:
                         MAX_DAY = 0
-                    else:
-                        MAX_DAY -= 2
-                        season_days -= 2
+                    #else:
+                    #    MAX_DAY -= 2
+                    #    season_days -= 2
                     break
                 else:
                     MAX_DAY = day
@@ -968,7 +972,7 @@ def minimize_func(parameters, *data):
                 game_attrs = get_attrs_from_paired_game(season_team_attrs, game)                        
                 awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]     
                 gamehomeTeam = get_team_name(game["home"]["team_id"], season, day)
-                gameawayTeam = get_team_name(game["away"]["team_id"], season, day)                    
+                gameawayTeam = get_team_name(game["away"]["team_id"], season, day)                         
                 if game["away"]["game_id"] in ADJUSTED_STAT_CACHE:                    
                     adjusted_stat_data = ADJUSTED_STAT_CACHE[game["away"]["game_id"]]
                 else:
@@ -1225,12 +1229,12 @@ def minimize_func(parameters, *data):
                     sorted_gameids = [x for _,x in sorted(zip(mod_vals, mod_gameids))]
                     mod_vals.sort()                        
                     mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value, mod_errors, mod_max_error_game, mod_other_errors = calc_linear_unex_error(mod_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD, modname)                                           
-                    mod_pos_vals.clear()
+                    mod_pos_vals.clear()                    
                     for val in mod_vals:
                         if val >= 0.5:
-                            mod_pos_vals.append(val)
+                            mod_pos_vals.append(val)                    
                     if modname == "unmod":
-                        unmod_linear_error = mod_linear_error
+                        unmod_linear_error = mod_linear_error                        
                         mod_rate = unmod_rate
                     elif not new_plusname == "":
                         mod_rate = (mod_rates[modname] + mod_rates[new_plusname]) / 2.0                        
@@ -1241,8 +1245,10 @@ def minimize_func(parameters, *data):
                     if not new_plusname == "":
                         EXPECTED_MOD_RATES[new_plusname] = mod_expected_average                    
                     linear_error_reduction = (1.0 - (abs(mod_rate - mod_expected_average) / 100.0)) * (100.0 - max(mod_expected_average, 25.0))
-                    linear_error += mod_linear_error - (linear_error_reduction ** 2.0)
+                    mod_linear_error = mod_linear_error - (linear_error_reduction ** 2.0)                                        
+                    mod_linear_error *= modcount if modname not in DIRECT_MOD_SOLVES else 1.0
                     linear_by_mod[modname] = mod_linear_error
+                    linear_error += mod_linear_error                    
                     if mod_linear_error > new_worstmod_linear_error:                        
                         new_worstmod_linear_error = mod_linear_error
                         new_worstmod = modname
@@ -1259,6 +1265,15 @@ def minimize_func(parameters, *data):
                         min_linear_error = mod_min_linear_error                    
                         min_error_value = mod_min_error_value
                         min_error_mod = modname
+                    if modname not in DIRECT_MOD_SOLVES:
+                        if mod_max_linear_error > unmod_max_linear_error:
+                            unmod_max_linear_error = mod_max_linear_error
+                            unmod_max_error_value = mod_max_error_value
+                            unmod_max_error_mod = modname
+                        if mod_min_linear_error < unmod_min_linear_error:
+                            unmod_min_linear_error = mod_min_linear_error
+                            unmod_min_error_value = mod_min_error_value
+                            unmod_min_error_mod = modname
                     errors.append(mod_errors)                    
                     other_errors = mod_other_errors     
                 sorted_win_loss = [x for _,x in sorted(zip(overall_vals, overall_win_loss))]
@@ -1429,12 +1444,12 @@ def minimize_func(parameters, *data):
         if len(win_loss) > 0:
             terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_mofo_list_size)])] * 3)))  
             half_output = "\n".join("{},{},{}".format(halfterm.stat, halfterm.event, a) for halfterm, a in zip(special_case_list, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]))
-            mods_output = "identifier,team,name,a,b,c"
-            for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
+            mods_output = "identifier,team,name,a"
+            for mod, a in zip(mod_list, parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size]):                
                 if mod.attr.lower() in mod_games:
-                    mods_output += "\n{},{},{},{},{},{}".format(mod.attr, mod.team, mod.stat, a, b, c)            
+                    mods_output += "\n{},{},{},{}".format(mod.attr, mod.team, mod.stat, a)            
                 else:
-                    mods_output += "\n{},{},{},{},{},{}".format(mod.attr, mod.team, mod.stat, 0, 0, 1)
+                    mods_output += "\n{},{},{},{}".format(mod.attr, mod.team, mod.stat, 0)
             #mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
             ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-(park_mod_list_size):])] * 3)))
             if outputdir:
@@ -1472,6 +1487,8 @@ def minimize_func(parameters, *data):
                 detailtext += "\nNet EV = {:.4f}, web EV = {:.4f}, season EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(expected_val, web_ev, (-1 * BEST_SEASON), mismatches, dadbets)                        
             detailtext += "\nMax linear error {:.2f}% ({:.2f} actual, {:.2f} calculated) - {}".format(max_linear_error, (max_error_value - max_linear_error), max_error_value, max_error_mod)            
             detailtext += "\nMin linear error {:.2f}% ({:.2f} actual, {:.2f} calculated) - {}".format(min_linear_error, (min_error_value - min_linear_error), min_error_value, min_error_mod)              
+            detailtext += "\nUnmod Max linear error {:.2f}% ({:.2f} actual, {:.2f} calculated) - {}".format(unmod_max_linear_error, (unmod_max_error_value - unmod_max_linear_error), unmod_max_error_value, unmod_max_error_mod)            
+            detailtext += "\nUnmod Min linear error {:.2f}% ({:.2f} actual, {:.2f} calculated) - {}".format(unmod_min_linear_error, (unmod_min_error_value - unmod_min_linear_error), unmod_min_error_value, unmod_min_error_mod)              
             detailtext += "\nOverall linear error {:.0f}, max {:.2f}% ({:.2f} actual, {:.2f} calculated), min {:.2f}% ({:.2f} actual, {:.2f} calculated)".format(overall_linear_error, overall_max_linear_error, (overall_max_error_value - overall_max_linear_error), overall_max_error_value, overall_min_linear_error, (overall_min_error_value - overall_min_linear_error), overall_min_error_value)                        
             #if len(errors) > 0 and not solve_for_ev:
             #    errors_output = ", ".join(map(str, errors))
@@ -1552,12 +1569,11 @@ def minimize_func(parameters, *data):
     CURRENT_ITERATION += 1           
     now = datetime.datetime.now()    
     #if (((now - LAST_CHECKTIME).total_seconds()) > 1800) and (workers > 1):    
-    if (((now - LAST_CHECKTIME).total_seconds()) > 240):    
+    if (((now - LAST_CHECKTIME).total_seconds()) > 225):    
+    #if CURRENT_ITERATION % 100 == 0:    
         #print("{} Taking our state-mandated 3 minute long rest per half hour of work".format(datetime.datetime.now()))
-        sleeptime, sleepmins = 0.0, 0.0         
-        while sleeptime < 0.5:
-            time.sleep(6)          
-            sleeptime += 0.10            
+        sleeptime, sleepmins = 0.0, 0.0   
+        time.sleep(45)        
         LAST_CHECKTIME = datetime.datetime.now()        
         #print("{} BACK TO WORK".format(datetime.datetime.now()))       
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)

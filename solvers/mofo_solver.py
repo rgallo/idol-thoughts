@@ -99,9 +99,9 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
             params.extend([float(row[2])])
         with open(os.path.join(init_dir, "{}-mods.csv".format(job_id))) as mod_file:            
             modsplitdata = [d.split(",") for d in mod_file.readlines()[1:] if d]
-        for row in modsplitdata:
+        for row in modsplitdata:            
             attr, team, stat = [val for val in row[:3]]                
-            mods[attr][stat] = [float(row[3]), float(row[4]), float(row[5])]            
+            mods[attr][stat] = [float(row[3])]    
         for modterm in team_mod_terms:                    
             if modterm.attr in mods:                                
                 for stlatname in mods[modterm.attr]:                    
@@ -202,31 +202,31 @@ def main():
     args = (get_mofo_results, mofo_base_terms, MOFO_HALF_TERMS, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map,
             game_list, team_attrs, number_to_beat, solve_for_ev, False, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
-                                    mutation=(0.01, 1.99), recombination=recombination, workers=workers, maxiter=10000,
+                                    mutation=(0.2, 1.8), recombination=recombination, workers=workers, maxiter=10000,
                                     init=init)
-    print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms,
-                                                                                   zip(*[iter(result.x)] * 3))))
-    result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, mofo_base_terms, halfbase_terms, team_mod_terms,
+    #print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms, zip(*[iter(result.x)] * 3))))
+
+    result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, mofo_base_terms, MOFO_HALF_TERMS, team_mod_terms,
                                                  BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
                                                  team_attrs, None, solve_for_ev, True, cmd_args.debug, False, False, cmd_args.output)
     #screw it, final file output stuff in here to try and make sure it actually happens
     park_mod_list_size = len(BALLPARK_TERMS) * 3
-    team_mod_list_size = len(team_mod_terms) * 3
+    team_mod_list_size = len(team_mod_terms)
     special_cases_count = len(MOFO_HALF_TERMS)
     base_mofo_list_size = len(mofo_base_terms) * 3
     terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms, zip(*[iter(result.x[:(base_mofo_list_size)])] * 3)))  
-    half_output = "\n".join("{},{},{}".format(halfterm.stat, halfterm.event, a) for halfterm, a in zip(special_case_list, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]))
+    half_output = "\n".join("{},{},{}".format(halfterm.stat, halfterm.event, a) for halfterm, a in zip(MOFO_HALF_TERMS, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]))
     #need to set unused mods to 0, 0, 1
-    mods_output = "identifier,team,name,a,b,c"
-    for mod, (a, b, c) in zip(team_mod_terms, zip(*[iter(result.x[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                
-        mods_output += "\n{},{},{},{},{},{}".format(mod.attr, mod.team, mod.stat, a, b, c)        
+    mods_output = "identifier,team,name,a"
+    for mod, a in zip(team_mod_terms, result.x[(base_mofo_list_size + special_cases_count):-park_mod_list_size]):                
+        mods_output += "\n{},{},{},{}".format(mod.attr, mod.team, mod.stat, a)        
     #mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
     ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(BALLPARK_TERMS, zip(*[iter(result.x[-(park_mod_list_size):])] * 3)))
 
     outputdir = cmd_args.output
     if solve_for_ev:
         base_solver.write_final(outputdir, "MOFOCoefficients.csv", "name,a,b,c\n" + terms_output)
-        base_solver.write_final(outputdir, "MOFOTeamModsCorrection.csv",  mods_output)
+        base_solver.write_final(outputdir, "MOFOTeamModsCorrection.csv", mods_output)
         base_solver.write_final(outputdir, "MOFOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
     else:
         base_solver.write_final(outputdir, "FOMOCoefficients.csv", "name,a,b,c\n" + terms_output)
@@ -234,6 +234,7 @@ def main():
         base_solver.write_final(outputdir, "FOMOTeamModsCorrection.csv", mods_output)
         base_solver.write_final(outputdir, "FOMOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
+    print("Solve complete")
     print(datetime.datetime.now())
 
 

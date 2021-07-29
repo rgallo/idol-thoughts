@@ -567,5 +567,52 @@
       "TRAVELING",
       "A"
     ]
+  },
+  "24": {
+    "Boston Flowers": [
+      "GROWTH"
+    ],
+    "Hellmouth Sunbeams": [
+      "BASE_INSTINCTS"
+    ],
+    "San Francisco Lovers": [
+      "LOVE"
+    ],
+    "Canada Moist Talkers": [
+      "HIGH_PRESSURE",
+      "H20"
+    ],
+    "Baltimore Crabs": [
+      "0"
+    ],
+    "Yellowstone Magic": [
+      "O_NO"
+    ],
+    "Miami Dale": [
+      "ELECTRIC"
+    ],
+    "Philly Pies": [
+      "AFFINITY_FOR_CROWS",
+      "AA"
+    ],
+    "Dallas Steaks": [
+      "AAA"
+    ],
+    "LA Unlimited Tacos": [
+      "ACIDIC"
+    ],
+    "Houston Spies": [
+      "PSYCHIC"
+    ],
+    "Hawai'i Fridays": [
+      "SINKING_SHIP"
+    ],
+    "Hades Tigers": [
+      "FIERY"
+    ],
+    "Charleston Shoe Thieves": [
+      "TRAVELING",
+      "A"
+    ]
   }
 }

@@ -1,9 +1,12 @@
 from collections import namedtuple
 
 MofoModTerm = namedtuple("MofoModTerm", ["attr", "team", "stat", "bounds"])
-DefaultBounds = [[0, 1], [0, 0], [0, 0]]
-BuffOnlyBounds = [[0.5, 1], [0, 0], [0, 0]]
-DebuffOnlyBounds = [[0, 0.5], [0, 0], [0, 0]]
+DefaultBounds = [[0, 1]]
+BuffOnlyBounds = [[0.5, 1]]
+DebuffOnlyBounds = [[0, 0.5]]
+#DefaultBounds = [[0, 1], [0, 0], [0, 0]]
+#BuffOnlyBounds = [[0.5, 1], [0, 0], [0, 0]]
+#DebuffOnlyBounds = [[0, 0.5], [0, 0], [0, 0]]
 
 MOFO_MOD_TERMS = [    
     MofoModTerm("LOVE", "opp", "Ruthlessness", DebuffOnlyBounds),
@@ -35,7 +38,7 @@ MOFO_MOD_TERMS = [
     MofoModTerm("PSYCHIC", "opp", "Unthwackability", DebuffOnlyBounds),
     MofoModTerm("PSYCHIC", "opp", "Overpowerment", DebuffOnlyBounds),
     MofoModTerm("PSYCHIC", "opp", "Shakespearianism", DebuffOnlyBounds),
-    MofoModTerm("PSYCHIC", "opp", "Coldness", DebuffOnlyBounds),
+    #MofoModTerm("PSYCHIC", "opp", "Coldness", DebuffOnlyBounds),
     MofoModTerm("PSYCHIC", "opp", "Omniscience", DebuffOnlyBounds),
     MofoModTerm("PSYCHIC", "opp", "Tenaciousness", DebuffOnlyBounds),
     MofoModTerm("PSYCHIC", "opp", "Watchfulness", DebuffOnlyBounds),
