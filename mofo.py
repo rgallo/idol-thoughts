@@ -9,6 +9,7 @@ from scipy.stats import hmean
 
 import helpers
 import math
+import numpy as np
 from helpers import StlatTerm, ParkTerm, geomean
 import os
 
@@ -54,11 +55,9 @@ def calc_player(terms, stlatname, stlatvalue, mods, parkmods, bloodmods, skip_mo
             denominator += sum(parkmodterms)
         if len(bloodmodterms) > 0:
             numerator += len(bloodmodterms)
-            denominator += sum(bloodmodterms)
-        if denominator > 0:
+            denominator += sum(bloodmodterms)    
+        if denominator > 0.0:
             multiplier *= (numerator / denominator)
-        else:
-            mutliplier = 0.0
     total = term.calc(stlatvalue) * multiplier
     return total
 
@@ -200,14 +199,15 @@ def calc_player_stlatmod(name, player_data, stlatterm):
     if base_multiplier > 0.0:
         multiplier = 1.0 / (2.0 * base_multiplier)
     else:
-        multiplier = 0.0
+        multiplier = 20000000000.0
     return multiplier
 
 def log_transform(value, base):
-    try:
-        transformed_value = (1.0 / (1.0 + (base ** (-1.0 * value))))
-    except OverflowError:
-        transformed_value = 1.0 if (value > 0) else 0.0
+    with np.errstate(over='raise'):
+        try:
+            transformed_value = (1.0 / (1.0 + (base ** (-1.0 * value))))
+        except:            
+            transformed_value = 1.0 if (value > 0) else 0.0
     return transformed_value
 
 def calc_defense(terms, player_mods, park_mods, player_stat_data, adjusted_stlats, bloodMods=None, overperform_pct=0):
