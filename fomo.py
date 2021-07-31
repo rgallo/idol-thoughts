@@ -20,7 +20,7 @@ def setup_playerbased(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPit
     ballpark_mods = helpers.load_bp_terms(ballpark_mods_url)
     homeTeamId = helpers.get_team_id(homeTeam)
     ballpark = ballparks.get(homeTeamId, collections.defaultdict(lambda: 0.5))
-    awayMods, homeMods = get_park_mods(ballpark, ballpark_mods)
+    awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)
     adjustments = mofo.instantiate_adjustments(terms, halfterms)
     return mods, terms, awayMods, homeMods, adjustments
 
