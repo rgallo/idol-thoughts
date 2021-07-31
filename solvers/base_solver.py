@@ -174,8 +174,8 @@ def get_attrs_from_game(season_team_attrs, game, side):
     team_attrs = season_team_attrs.get(get_team_name(game["team_id"], int(game["season"]), int(game["day"])), [])
     for attr in team_attrs:
         if (attr == "TRAVELING" and side != "away") or (
-                attr == "AFFINITY_FOR_CROWS" and game["weather"] != BIRD_WEATHER) or (
-                attr == "HIGH_PRESSURE" and game["weather"] != FLOOD_WEATHER):
+                attr == "AFFINITY_FOR_CROWS" and int(game["weather"]) != BIRD_WEATHER) or (
+                attr == "HIGH_PRESSURE" and int(game["weather"]) != FLOOD_WEATHER):
             continue
         attrs.add(attr)
     return attrs

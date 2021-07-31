@@ -543,8 +543,8 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
 def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, innings=9, outs=3, runtime_solution=False):          
     battingAttrs = [attr.lower() for attr in teamAttrs]
     reverb_weather, sun_weather, bh_weather = helpers.get_weather_idx("Reverb"), helpers.get_weather_idx("Sun 2"), helpers.get_weather_idx("Black Hole")
-    runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, average_on_base_position, steal_mod, clutch_factor, walk_mod = calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, None, innings)    
-    
+    runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, average_on_base_position, steal_mod, clutch_factor, walk_mod = calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, None, innings)        
+
     #run three "games" to get a more-representative average
     total_innings = innings * 3.0
     current_innings, atbats_in_inning = 0, 0  
@@ -554,7 +554,7 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
 
     runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
     runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
-    inning_outs = 0.0    
+    inning_outs = 0.0        
     batter_atbats = 0    
     last_player_out = ""
     stolen_bases, homers, hits = {}, {}, {}    
@@ -799,7 +799,7 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
     
     if ((weather == sun_weather) or (weather == bh_weather)) and runtime_solution:        
         adjusted_score = team_score - (math.floor(team_score / 1000.0) * 1000.0)
-        print("Adjusting team score for {} weather: team score = {}, adjusted score = {}".format("Sun 2" if weather == sun_weather else "Black Hole", team_score, adjusted_score))
+        #print("Adjusting team score for {} weather: team score = {}, adjusted score = {}".format("Sun 2" if weather == sun_weather else "Black Hole", team_score, adjusted_score))
         team_score = adjusted_score    
 
     if runtime_solution:
@@ -965,7 +965,7 @@ def blood_impact_calc(terms, mods, weather, away_home, teamMods, calc_team_data,
     return team_stlats, team_defense, batter_order, pitcherStlats
     
 def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods, adjusted_stat_data, adjustments, skip_mods=False):          
-    polarity_plus, polarity_minus = helpers.get_weather_idx("Polarity +"), helpers.get_weather_idx("Polarity -")
+    polarity_plus, polarity_minus = helpers.get_weather_idx("Polarity +"), helpers.get_weather_idx("Polarity -")    
     if weather == polarity_plus or weather == polarity_minus:
         return .5, .5    
 

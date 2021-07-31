@@ -42,7 +42,7 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])        
     awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)     
-    awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, away_game["weather"], team_stat_data, pitcher_stat_data, terms,
+    awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, int(away_game["weather"]), team_stat_data, pitcher_stat_data, terms,
                            awayMods, homeMods, adjusted_stat_data, adjustments)        
     if awayodds == .5:
         return 1, 0, awayodds, homeodds
