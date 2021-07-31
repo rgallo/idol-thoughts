@@ -41,8 +41,7 @@ def calc_team(terms, termset, mods, skip_mods=False):
 
 def calc_player(terms, stlatname, stlatvalue, mods, parkmods, bloodmods, skip_mods=False):    
     term = terms[stlatname]            
-    multiplier, numerator, denominator = 1.0, 0.0, 0.0
-    numerator
+    multiplier, numerator, denominator = 1.0, 0.0, 0.0    
     if not skip_mods:            
         modterms = (mods or {}).get(stlatname, [])          
         parkmodterms = (parkmods or {}).get(stlatname, []) 
@@ -58,6 +57,8 @@ def calc_player(terms, stlatname, stlatvalue, mods, parkmods, bloodmods, skip_mo
             denominator += sum(bloodmodterms)
         if denominator > 0:
             multiplier *= (numerator / denominator)
+        else:
+            mutliplier = 0.0
     total = term.calc(stlatvalue) * multiplier
     return total
 
@@ -196,7 +197,10 @@ def calc_player_stlatmod(name, player_data, stlatterm):
     base_multiplier = stlatterm
     #base_multiplier = log_transform(normalized_value, 100.0)    
     #forcing harmonic mean with quicker process time?
-    multiplier = 1.0 / (2.0 * base_multiplier)
+    if base_multiplier > 0.0:
+        multiplier = 1.0 / (2.0 * base_multiplier)
+    else:
+        multiplier = 0.0
     return multiplier
 
 def log_transform(value, base):
