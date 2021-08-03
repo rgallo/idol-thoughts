@@ -78,7 +78,7 @@ LAST_ITERATION_TIME = datetime.datetime.now()
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "A", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
 ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING", "SINKING_SHIP"}
-DIRECT_MOD_SOLVES = {"psychic", "acidic", "base_instincts", "electric", "fiery", "love", "high_pressure"}
+DIRECT_MOD_SOLVES = {"psychic", "a", "acidic", "base_instincts", "electric", "fiery", "love", "high_pressure"}
 CALC_MOD_SUCCESS = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electric", "fiery", "love", "high_pressure", "a", "0", "o_no", "h20"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
@@ -465,7 +465,7 @@ def minimize_func(parameters, *data):
     global MIN_DAY
     global MAX_DAY
     global BROAD_ERROR_THRESHOLD
-    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, final_solution, debug, debug2, debug3, outputdir= data    
+    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, final_solution, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, debug, debug2, debug3, outputdir = data    
     debug_print("func start: {}".format(starttime), debug3, run_id)
     if number_to_beat is not None:
         BEST_RESULT = number_to_beat if (number_to_beat < BEST_RESULT) else BEST_RESULT
@@ -473,29 +473,33 @@ def minimize_func(parameters, *data):
     park_mod_list_size = len(ballpark_list) * 3
     team_mod_list_size = len(mod_list)
     special_cases_count = len(special_case_list)
-    base_mofo_list_size = len(parameters) - special_cases_count - park_mod_list_size - team_mod_list_size
-    terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_mofo_list_size])] * 3))}
-    mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
-    ballpark_mods = collections.defaultdict(lambda: {"bpterm": {}})
-    half_stlats = collections.defaultdict(lambda: {})
-    mod_mode = True        
-    for mod, a in zip(mod_list, parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size]):                  
-        use_a = 0.0 if (math.isnan(a)) else a                      
-        mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = use_a
-    #attempting to use mods just as a single multuplier
-    #for mod, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size])] * 3)):                  
-    #    use_a = 0.0 if (math.isnan(a)) else a            
-    #    use_b = 0.0 if (math.isnan(b)) else b            
-    #    use_c = 0.0 if (math.isnan(c)) else c            
-    #    mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = StlatTerm(use_a, use_b, use_c)
-    for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):   
-        use_a = 0.0 if (math.isnan(a)) else a            
-        use_b = 0.0 if (math.isnan(b)) else b            
-        use_c = 0.0 if (math.isnan(c)) else c
-        ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(use_a, use_b, use_c)                   
-    for halfterm, a in zip(special_case_list, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]):        
-        use_a = 0.0 if (math.isnan(a)) else a            
-        half_stlats[halfterm.stat.lower()][halfterm.event.lower()] = use_a        
+    total_parameters = len(parameters)
+    base_mofo_list_size = total_parameters - special_cases_count - park_mod_list_size - team_mod_list_size
+    terms = solved_terms if solved_terms else collections.defaultdict(lambda: {})    
+    if base_mofo_list_size > 0:
+        for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_mofo_list_size])] * 3)):
+            use_a = 0.0 if (math.isnan(a)) else a            
+            use_b = 0.0 if (math.isnan(b)) else b            
+            use_c = 0.0 if (math.isnan(c)) else c
+            terms[stat] = StlatTerm(use_a, use_b, use_c)        
+    mods = solved_mods if solved_mods else collections.defaultdict(lambda: {"opp": {}, "same": {}})    
+    ballpark_mods = solved_ballpark_mods if solved_ballpark_mods else collections.defaultdict(lambda: {"bpterm": {}})
+    half_stlats = solved_halfterms if solved_halfterms else collections.defaultdict(lambda: {})
+    mod_mode = True
+    if team_mod_list_size > 0:
+        for mod, a in zip(mod_list, parameters[(base_mofo_list_size + special_cases_count):(total_parameters-park_mod_list_size)]):                  
+            use_a = 0.0 if (math.isnan(a)) else a                      
+            mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = use_a
+    if park_mod_list_size > 0:
+        for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):   
+            use_a = 0.0 if (math.isnan(a)) else a            
+            use_b = 0.0 if (math.isnan(b)) else b            
+            use_c = 0.0 if (math.isnan(c)) else c
+            ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(use_a, use_b, use_c)                   
+    if special_cases_count > 0:
+        for halfterm, a in zip(special_case_list, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]):        
+            use_a = 0.0 if (math.isnan(a)) else a            
+            half_stlats[halfterm.stat.lower()][halfterm.event.lower()] = use_a        
     game_counter, fail_counter, season_game_counter, half_fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 1000000000, 0, 0, 0, 0, 0
     quarter_fail = 100.0
     linear_fail = 100.0
@@ -1244,7 +1248,7 @@ def minimize_func(parameters, *data):
                     EXPECTED_MOD_RATES[modname] = mod_expected_average
                     if not new_plusname == "":
                         EXPECTED_MOD_RATES[new_plusname] = mod_expected_average                    
-                    linear_error_reduction = (1.0 - (abs(mod_rate - mod_expected_average) / 100.0)) * (100.0 - max(mod_expected_average, 25.0))
+                    linear_error_reduction = (1.0 - (abs(mod_rate - mod_expected_average) / 100.0)) * (100.0 - mod_expected_average)                                        
                     mod_linear_error = mod_linear_error - (linear_error_reduction ** 2.0)                                        
                     mod_linear_error *= modcount if modname not in DIRECT_MOD_SOLVES else 1.0
                     linear_by_mod[modname] = mod_linear_error

@@ -3,9 +3,7 @@ from __future__ import print_function
 
 import collections
 import copy
-import statistics
 import datetime
-from scipy.stats import hmean
 
 import helpers
 import math
@@ -36,7 +34,7 @@ def calc_team(terms, termset, mods, skip_mods=False):
         multiplier = 1.0 
         if not skip_mods:            
             modterms = (mods or {}).get(termname, [])             
-            multiplier *= statistics.harmonic_mean(modterms)                  
+            multiplier = sum(modterms) / len(modterms)
         total += term.calc(val) * multiplier
     return total
 
@@ -202,12 +200,11 @@ def calc_player_stlatmod(name, player_data, stlatterm):
         multiplier = 20000000000.0
     return multiplier
 
-def log_transform(value, base):
-    with np.errstate(over='raise'):
-        try:
-            transformed_value = (1.0 / (1.0 + (base ** (-1.0 * value))))
-        except:            
-            transformed_value = 1.0 if (value > 0) else 0.0
+def log_transform(value, base):    
+    try:
+        transformed_value = (1.0 / (1.0 + (base ** (-1.0 * value))))
+    except:                    
+        transformed_value = 1.0 if (value > 0) else 0.0
     return transformed_value
 
 def calc_defense(terms, player_mods, park_mods, player_stat_data, adjusted_stlats, bloodMods=None, overperform_pct=0):
@@ -968,7 +965,7 @@ def blood_impact_calc(terms, mods, weather, away_home, teamMods, calc_team_data,
         team_stlats, team_defense, batter_order, pitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, team_stat_data, team_pitcher_data, adjusted_stat_data, average_aa_impact, average_aaa_impact)
     return team_stlats, team_defense, batter_order, pitcherStlats
     
-def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods, adjusted_stat_data, adjustments, skip_mods=False):          
+def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods, adjusted_stat_data, adjustments, skip_mods=False, runtime_solution=False):          
     polarity_plus, polarity_minus = helpers.get_weather_idx("Polarity +"), helpers.get_weather_idx("Polarity -")    
     if weather == polarity_plus or weather == polarity_minus:
         return .5, .5    
@@ -980,16 +977,22 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
         away_team_stlats, away_team_defense, away_batter_order, awayPitcherStlats = blood_impact_calc(terms, mods, weather, "away", awayMods, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], pitcher_stat_data[awayPitcher], awayAttrs, homeAttrs, away_batter_order, adjusted_stat_data, adjustments)
     if "AAA" in homeAttrs or "AA" in homeAttrs or "A" in homeAttrs:
         home_team_stlats, home_team_defense, home_batter_order, homePitcherStlats = blood_impact_calc(terms, mods, weather, "home", homeMods, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], pitcher_stat_data[homePitcher], homeAttrs, awayAttrs, home_batter_order, adjusted_stat_data, adjustments)
-    
-    away_score = calc_team_score(mods, weather, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, away_batter_order, adjustments)
-    home_score = calc_team_score(mods, weather, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, home_batter_order, adjustments)   
+
+    if runtime_solution:
+        away_score, away_stolen_bases, away_homers, away_hits = calc_team_score(mods, weather, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, away_batter_order, adjustments, False, runtime_solution)
+        home_score, home_stolen_bases, home_homers, home_hits = calc_team_score(mods, weather, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, home_batter_order, adjustments, False, runtime_solution)
+    else:    
+        away_score = calc_team_score(mods, weather, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, away_batter_order, adjustments)
+        home_score = calc_team_score(mods, weather, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, home_batter_order, adjustments)   
 
     numerator = away_score - home_score
     denominator = abs(away_score + home_score)
     if not denominator:
         return .5, .5    
     away_formula = numerator / denominator        
-    away_odds = log_transform(away_formula, 100.0)    
+    away_odds = log_transform(away_formula, 100.0)
+    if runtime_solution:
+        return away_odds, 1.0 - away_odds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases
     return away_odds, 1.0 - away_odds
 
 def get_player_mods(mods, awayAttrs, homeAttrs, weather, away_home, player_stat_data):            
