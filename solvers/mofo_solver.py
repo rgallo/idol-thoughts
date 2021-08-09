@@ -6,6 +6,7 @@ import re
 import collections
 
 import numpy as np
+import math
 from scipy.optimize import differential_evolution
 import datetime
 import sys
@@ -32,7 +33,7 @@ import helpers
 #                   "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 
-def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments):    
+def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, runtime_solution):    
     awayMods, homeMods = [], []
     game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
     #special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
@@ -44,14 +45,24 @@ def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data,
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])        
     awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)     
-    awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, int(away_game["weather"]), team_stat_data, pitcher_stat_data, terms,
-                           awayMods, homeMods, adjusted_stat_data, adjustments)        
-    if awayodds == .5:
-        return 1, 0, awayodds, homeodds
-    if away_rbi == home_rbi and abs(awayodds - homeodds) <= 0.04:        
-        return 1, 0, awayodds, homeodds 
-    fail = 0 if ((awayodds > .5 and away_rbi > home_rbi) or (awayodds < .5 and away_rbi < home_rbi)) else 1
-    return 1, fail, awayodds, homeodds
+    if runtime_solution:
+        awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, int(away_game["weather"]), team_stat_data, pitcher_stat_data, terms, awayMods, homeMods, adjusted_stat_data, adjustments, skip_mods=False, runtime_solution=True)        
+        if awayodds == .5:
+            return 1, 0, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
+        if away_rbi == home_rbi and abs(awayodds - homeodds) <= 0.04:        
+            return 1, 0, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
+        fail = 0 if ((awayodds > .5 and away_rbi > home_rbi) or (awayodds < .5 and away_rbi < home_rbi)) else 1
+        return 1, fail, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
+    else:        
+        awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, int(away_game["weather"]), team_stat_data, pitcher_stat_data, terms,
+                               awayMods, homeMods, adjusted_stat_data, adjustments)        
+        if awayodds == .5:
+            return 1, 0, awayodds, homeodds
+        if away_rbi == home_rbi and abs(awayodds - homeodds) <= 0.04:        
+            return 1, 0, awayodds, homeodds 
+        fail = 0 if ((awayodds > .5 and away_rbi > home_rbi) or (awayodds < .5 and away_rbi < home_rbi)) else 1
+        return 1, fail, awayodds, homeodds
+    return 1, fail, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
 
 def get_season_team_attrs(team_attrs, season):
     attrs = []
@@ -64,6 +75,8 @@ def handle_args():
     parser.add_argument('--statfolder', help="path to stat folder")
     parser.add_argument('--ballparks', help="path to ballparks folder")
     parser.add_argument('--gamefile', help="path to game file")    
+    parser.add_argument('--batters', help="path to batter performance file")
+    parser.add_argument('--crimes', help="path to stolen bases performance file")
     parser.add_argument('--debug', help="print output", action='store_true')
     parser.add_argument('--debug2', help="print output", action='store_true')
     parser.add_argument('--debug3', help="print output", action='store_true')
@@ -96,37 +109,36 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
         with open(os.path.join(init_dir, "{}-terms.csv".format(job_id))) as terms_file:            
             termsplitdata = [d.split(",") for d in terms_file.readlines()[1:] if d]
         for row in termsplitdata:
-            params.extend([float(row[1]), float(row[2]), float(row[3])])
+            params.extend([float(row[1]), float(row[2]), float(row[3])])        
         with open(os.path.join(init_dir, "{}-halfterms.csv".format(job_id))) as halfterms_file:            
             halftermsplitdata = [d.split(",") for d in halfterms_file.readlines()[1:] if d]
         for row in halftermsplitdata:
-            params.extend([float(row[2])])
+            params.extend([float(row[2])])        
         with open(os.path.join(init_dir, "{}-mods.csv".format(job_id))) as mod_file:            
             modsplitdata = [d.split(",") for d in mod_file.readlines()[1:] if d]
         for row in modsplitdata:            
             attr, team, stat = [val for val in row[:3]]                
-            mods[attr][stat] = [float(row[3])]    
-        for modterm in team_mod_terms:                    
-            if modterm.attr in mods:                                
-                for stlatname in mods[modterm.attr]:                    
-                    if stlatname == modterm.stat:                                                                        
-                        params.extend(mods[modterm.attr][stlatname])
+            mods[attr.lower()][stat.lower()] = [float(row[3])]                      
+        for modterm in team_mod_terms:                              
+            if modterm.attr.lower() in mods:                                
+                for stlatname in mods[modterm.attr.lower()]:                    
+                    if stlatname == modterm.stat.lower():                                                                        
+                        params.extend(mods[modterm.attr.lower()][stlatname])
             else:                   
-                multiplier = random.uniform(0.0, 10.0) - 5.0
-                additive = random.uniform(0.0, 1.0)
-                exponent = random.uniform(1.0, 1.5)
-                params.extend([multiplier, additive, multiplier])        
+                print("Aha, we're generating too many nonsense values that's why")
+                multiplier = random.uniform(0.0, 1.0)                
+                params.extend(multiplier)        
         with open(os.path.join(init_dir, "{}-ballparkmods.csv".format(job_id))) as park_file:            
-            parksplitdata = [d.split(",") for d in park_file.readlines()[1:] if d]
-        for row in parksplitdata:
-            params.extend([float(row[2]), float(row[3]), float(row[4])])        
+            parksplitdata = [d.split(",") for d in park_file.readlines()[1:] if d]            
+        for row in parksplitdata:            
+            params.extend([float(row[2]), float(row[3]), float(row[4])])                
         with open(os.path.join(init_dir, "{}-details.txt".format(job_id))) as details_file:                            
             results.append((float(pattern.findall(details_file.read())[0][0]), params))               
     if is_random:
         random.shuffle(results)
     else:
         results.sort(key=lambda x: x[0], reverse=is_worst)       
-    final_list = [result[1] for result in results[:popsize]]        
+    final_list = [result[1] for result in results[:popsize]]    
     return np.array(final_list)
 
 def main():
@@ -192,6 +204,13 @@ def main():
     stat_file_map = base_solver.get_stat_file_map(cmd_args.statfolder)
     ballpark_file_map = base_solver.get_ballpark_map(cmd_args.ballparks)    
     game_list = base_solver.get_games(cmd_args.gamefile)
+    solve_batman_too = False
+    batter_list, crimes_list = None, None
+    if cmd_args.batters:
+        solve_batman_too = True
+        batter_list = base_solver.get_batters(cmd_args.batters)
+    if cmd_args.crimes:
+        crimes_list = base_solver.get_crimes(cmd_args.crimes)
     current_season = 1
     for row in game_list:
         current_season = int(row["season"]) if (int(row["season"]) > current_season) else current_season    
@@ -247,14 +266,14 @@ def main():
     popsize = 25     
     #init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'latinhypercube'
     #experimenting with sobol instead of latinhypercube
-    init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'sobol'
-    #print(len(init), ",".join(str(len(s)) for s in init))
+    init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'sobol'    
+    #print(len(init), ",".join(str(len(s)) for s in init))    
     recombination = float(cmd_args.rec)    
     print("Using recombination of {}".format(recombination))
     #if (workers > 2 and solve_for_ev) or (type(init) != str and not solve_for_ev):
     #    recombination = 0.5
     args = (get_mofo_results, mofo_base_terms, mofo_base_half_terms, team_mod_terms, mofo_ballpark_terms, stat_file_map, ballpark_file_map,
-            game_list, team_attrs, number_to_beat, solve_for_ev, False, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
+            game_list, team_attrs, number_to_beat, solve_for_ev, False, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output)
     np.seterr(over='raise')
     #with np.errstate(over='raise'):
     result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
@@ -264,32 +283,78 @@ def main():
 
     result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, mofo_base_terms, MOFO_HALF_TERMS, team_mod_terms,
                                                 BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
-                                                team_attrs, None, solve_for_ev, True, cmd_args.debug, False, False, cmd_args.output)
+                                                team_attrs, None, solve_for_ev, True, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, cmd_args.debug, False, False, cmd_args.output)
     #screw it, final file output stuff in here to try and make sure it actually happens
-    park_mod_list_size = len(BALLPARK_TERMS) * 3
+    park_mod_list_size = len(mofo_ballpark_terms) * 3
     team_mod_list_size = len(team_mod_terms)
-    special_cases_count = len(MOFO_HALF_TERMS)
+    special_cases_count = len(mofo_base_half_terms)
     base_mofo_list_size = len(mofo_base_terms) * 3
-    total_parameters = len(result.x)
-    terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms, zip(*[iter(result.x[:(base_mofo_list_size)])] * 3)))  
-    half_output = "\n".join("{},{},{}".format(halfterm.stat, halfterm.event, a) for halfterm, a in zip(MOFO_HALF_TERMS, result.x[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]))
-    #need to set unused mods to 0, 0, 1
+    total_parameters = len(result.x)    
+    
+    terms = solved_terms if solved_terms else collections.defaultdict(lambda: {})    
+    if base_mofo_list_size > 0:
+        for stat, (a, b, c) in zip(mofo_base_terms, zip(*[iter(result.x[:base_mofo_list_size])] * 3)):
+            use_a = 0.0 if (math.isnan(a)) else a            
+            use_b = 0.0 if (math.isnan(b)) else b            
+            use_c = 0.0 if (math.isnan(c)) else c
+            terms[stat] = StlatTerm(use_a, use_b, use_c)        
+    mods = solved_mods if solved_mods else collections.defaultdict(lambda: {"opp": {}, "same": {}})    
+    ballpark_mods = solved_ballpark_mods if solved_ballpark_mods else collections.defaultdict(lambda: {"bpterm": {}})
+    half_stlats = solved_halfterms if solved_halfterms else collections.defaultdict(lambda: {})
+    mod_mode = True
+    if team_mod_list_size > 0:
+        for mod, a in zip(team_mod_terms, result.x[(base_mofo_list_size + special_cases_count):(total_parameters-park_mod_list_size)]):                  
+            use_a = 0.0 if (math.isnan(a)) else a                      
+            mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = use_a
+    if park_mod_list_size > 0:
+        for bp, (a, b, c) in zip(mofo_ballpark_terms, zip(*[iter(result.x[-park_mod_list_size:])] * 3)):   
+            use_a = 0.0 if (math.isnan(a)) else a            
+            use_b = 0.0 if (math.isnan(b)) else b            
+            use_c = 0.0 if (math.isnan(c)) else c
+            ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(use_a, use_b, use_c)                   
+    if special_cases_count > 0:
+        for halfterm, a in zip(mofo_base_half_terms, result.x[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]):        
+            use_a = 0.0 if (math.isnan(a)) else a            
+            half_stlats[halfterm.stat.lower()][halfterm.event.lower()] = use_a       
+
+    terms_output = "name,a,b,c"
+    for stat, stlatterm in terms.items():                
+        if type(stlatterm) == dict:
+            continue
+        terms_output += "\n{},{},{},{}".format(stat, stlatterm.a, stlatterm.b, stlatterm.c)                
+    half_output = "name,event,a"            
+    for stat in half_stlats:
+        for event in half_stlats[stat]:
+            halfstat = half_stlats[stat][event]
+            if type(halfstat) == dict:
+                continue
+            half_output += "\n{},{},{}".format(stat, event, half_stlats[stat][event])            
     mods_output = "identifier,team,name,a"
-    for mod, a in zip(team_mod_terms, result.x[(base_mofo_list_size + special_cases_count):(total_parameters-park_mod_list_size)]):                
-        mods_output += "\n{},{},{},{}".format(mod.attr, mod.team, mod.stat, a)        
-    #mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
-    ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(BALLPARK_TERMS, zip(*[iter(result.x[-(park_mod_list_size):])] * 3)))
+    for attr in mods:                                
+        for team in mods[attr]:
+            for stat in mods[attr][team]:
+                modterm = mods[attr][team][stat]
+                if type(modterm) == dict:
+                    continue
+                mods_output += "\n{},{},{},{}".format(attr, team, stat, modterm)            
+    ballpark_mods_output = "ballparkstlat,playerstlat,a,b,c"
+    for bpstat in ballpark_mods:                
+        for playerstat in ballpark_mods[bpstat]:                    
+            bpterm = ballpark_mods[bpstat][playerstat]
+            if type(bpterm) == dict:
+                continue
+            ballpark_mods_output +="\n{},{},{},{},{}".format(bpstat, playerstat, bpterm.a, bpterm.b, bpterm.c)
 
     outputdir = cmd_args.output
     if solve_for_ev:
-        base_solver.write_final(outputdir, "MOFOCoefficients.csv", "name,a,b,c\n" + terms_output)
+        base_solver.write_final(outputdir, "MOFOCoefficients.csv", terms_output)
         base_solver.write_final(outputdir, "MOFOTeamModsCorrection.csv", mods_output)
-        base_solver.write_final(outputdir, "MOFOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
+        base_solver.write_final(outputdir, "MOFOBallparkCoefficients.csv", ballpark_mods_output)
     else:
-        base_solver.write_final(outputdir, "FOMOCoefficients.csv", "name,a,b,c\n" + terms_output)
-        base_solver.write_final(outputdir, "FOMOHalfTerms.csv", "name,event,a\n" + half_output)
+        base_solver.write_final(outputdir, "FOMOCoefficients.csv", terms_output)
+        base_solver.write_final(outputdir, "FOMOHalfTerms.csv", half_output)
         base_solver.write_final(outputdir, "FOMOTeamModsCorrection.csv", mods_output)
-        base_solver.write_final(outputdir, "FOMOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
+        base_solver.write_final(outputdir, "FOMOBallparkCoefficients.csv", ballpark_mods_output)
     print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
     print("Solve complete")
     print(datetime.datetime.now())

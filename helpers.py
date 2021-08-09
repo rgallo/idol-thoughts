@@ -118,8 +118,8 @@ def parse_mods(data):
     splitdata = [d.split(",") for d in data.split("\n")[1:] if d]
     for row in splitdata:
         attr, team, name = [val.lower() for val in row[:3]]
-        a, b, c = float(row[3]), float(row[4]), float(row[5])
-        mods[attr][team][name] = StlatTerm(a, b, c)
+        a = float(row[3])
+        mods[attr][team][name] = a
     return mods
 
 

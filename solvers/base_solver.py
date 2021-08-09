@@ -9,6 +9,7 @@ import os
 import re
 import uuid
 import math
+import copy
 from glob import glob
 
 from helpers import StlatTerm, ParkTerm, get_weather_idx
@@ -20,12 +21,24 @@ STAT_CACHE = {}
 BALLPARK_CACHE = {}
 GAME_CACHE = {}
 BATTER_CACHE = {}
+HITS_CACHE = {}
+HOMERS_CACHE = {}
+SEEDDOGS_CACHE = {}
+KS_CACHE = {}
+SHO_CACHE = {}
+MEATBALLS_CACHE = {}
+CHIPSBURGERS_CACHE = {}
+CHIPSMEATBALLS_CACHE = {}
+STEALS_CACHE = {}
+SEEDPICKLES_CACHE = {}
+DOGPICKLES_CACHE = {}
+TRIFECTA_CACHE = {}
 ADJUSTED_STAT_CACHE = {}
 
 MIN_SEASON = 22
 MAX_SEASON = 23
 
-BEST_RESULT = 80000000000000.0
+BEST_RESULT = 90000000000000000.0    
 BEST_SEASON = 80000000000000.0
 BEST_FAIL_RATE = 1.0
 BEST_LINEAR_ERROR = 1.0
@@ -73,6 +86,8 @@ ALL_MOD_GAMES = {}
 LINE_JUMP_GAMES = {}
 HAS_GAMES = {}
 WORST_ERROR_GAME = {}
+ACTIVE_DAYS = []
+IDLE_DAYS = []
 LAST_ITERATION_TIME = datetime.datetime.now()
 
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "A", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
@@ -106,6 +121,38 @@ def get_batters(filename):
     with open(filename) as f:
         filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
     return filedata
+
+def get_crimes(filename):
+    with open(filename) as f:
+        filedata = [{k: v for k, v in row.items()} for row in csv.DictReader(f, skipinitialspace=True)]
+    return filedata
+
+def pair_crimes_with_batter(crimes, team_stat_data, season, day):
+    select_crimes = [crime for crime in crimes if int(crime["season"]) == season and int(crime["day"]) == day]
+    stolen_bases = collections.defaultdict(lambda: {})
+    for crime in select_crimes:        
+        fulltext = crime["event_text"]
+        fulltext = fulltext.replace("{","")
+        fulltext = fulltext.replace("}","")
+        splittext = fulltext.split(",")
+        for line in splittext:
+            if "steals" in line:
+                parsedline = line.split(" steals ")
+                criminal_name = parsedline[0]                
+            elif ("Grind Rail" in line and "Safe!" in line):
+                parsedline = line.split(" hops ")
+                criminal_name = parsedline[0]                
+            else:
+                continue
+            criminal_name = criminal_name.replace("\"","")
+            criminal_team = get_team_name(crime["batter_team_id"], season, day)
+            for batter in team_stat_data[criminal_team]:                
+                if team_stat_data[criminal_team][batter]["name"] == criminal_name:
+                    #print("Criminal {} found! Guilty of a successful base steal because of text {}".format(criminal_name, line))
+                    if batter not in stolen_bases:
+                        stolen_bases[batter] = 0
+                    stolen_bases[batter] += 1                    
+    return stolen_bases
 
 def get_ballpark_map(ballpark_folder):
     filelist = [f for f in os.listdir(ballpark_folder) if os.path.isfile(os.path.join(ballpark_folder, f))]
@@ -465,7 +512,9 @@ def minimize_func(parameters, *data):
     global MIN_DAY
     global MAX_DAY
     global BROAD_ERROR_THRESHOLD
-    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, final_solution, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, debug, debug2, debug3, outputdir = data    
+    global ACTIVE_DAYS
+    global IDLE_DAYS
+    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, final_solution, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, debug, debug2, debug3, outputdir = data    
     debug_print("func start: {}".format(starttime), debug3, run_id)
     if number_to_beat is not None:
         BEST_RESULT = number_to_beat if (number_to_beat < BEST_RESULT) else BEST_RESULT
@@ -503,6 +552,7 @@ def minimize_func(parameters, *data):
     game_counter, fail_counter, season_game_counter, half_fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 1000000000, 0, 0, 0, 0, 0
     quarter_fail = 100.0
     linear_fail = 100.0
+    batman_error = 0.0
     linear_error, check_fail_rate, web_margin, early_linear, last_linear, worstmod_linear_error, unmod_linear_error = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     max_linear_error, min_linear_error, unmod_max_linear_error, unmod_min_linear_error, max_error_value, min_error_value = 0.0, 150.0, 0.0, 150.0, 0.0, 0.0
     max_error_mod, min_error_mod = "", ""
@@ -515,7 +565,30 @@ def minimize_func(parameters, *data):
     reject_solution, viability_unchecked, new_pass, addfails, stats_regened, early_linear_checked = False, True, False, False, False, True
     line_jumpers, reorder_failsfirst, reorder_keys, ev_set, ev_by_team, games_by_mod, vals_by_mod = {}, {}, {}, {}, {}, {}, {}
     all_vals, win_loss, gameids, early_vals, early_sorted, pos_vals = [], [], [], [], [], []
-    worst_vals, worst_win_loss, worst_gameids, overall_vals, overall_win_loss, overall_gameids = [], [], [], [], [], []
+    worst_vals, worst_win_loss, worst_gameids, overall_vals, overall_win_loss, overall_gameids, remove_list = [], [], [], [], [], [], []
+
+    if solve_batman_too:
+        solved_hits, solved_homers = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})        
+        solved_seeddogs, real_seeddogs = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})        
+        solved_ks, solved_era, solved_meatballs = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})
+        solved_chipsmeatballs = collections.defaultdict(lambda: {})
+        seeds_score, seeds_score_earned, seeds_score_max = 0.0, 0.0, 0.0
+        dogs_score, dogs_score_earned, dogs_score_max = 0.0, 0.0, 0.0
+        seeddogs_score, seeddogs_score_earned, seeddogs_score_max = 0.0, 0.0, 0.0
+        chips_score, chips_score_earned, chips_score_max = 0.0, 0.0, 0.0
+        burgers_score, burgers_score_earned, burgers_score_max = 0.0, 0.0, 0.0
+        meatballs_score, meatballs_score_earned, meatballs_score_max = 0.0, 0.0, 0.0
+        chipsburgers_score, chipsburgers_score_earned, chipsburgers_score_max = 0.0, 0.0, 0.0
+        chipsmeatballs_score, chipsmeatballs_score_earned, chipsmeatballs_score_max = 0.0, 0.0, 0.0
+        hitters, sluggers, seeddogers, chips_pitchers, sho_pitchers = 0, 0, 0, 0, 0
+        if crimes_list is not None:
+            solved_steals, solved_seedpickles = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})
+            solved_dogpickles, solved_trifecta = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})            
+            pickles_score, pickles_score_earned, pickles_score_max = 0.0, 0.0, 0.0
+            seedpickles_score, seedpickles_score_earned, seedpickles_score_max = 0.0, 0.0, 0.0
+            dogpickles_score, dogpickles_score_earned, dogpickles_score_max = 0.0, 0.0, 0.0
+            trifecta_score, trifecta_score_earned, trifecta_score_max = 0.0, 0.0, 0.0
+            thieves = 0
 
     adjustments = {}
     for stlat in half_stlats:
@@ -968,22 +1041,128 @@ def minimize_func(parameters, *data):
                 BALLPARK_CACHE[(season, day)] = ballparks
             else:
                 ballparks = cached_ballparks                
-            good_game_list = []
+            good_game_list = []            
+            if solve_batman_too:                
+                using_cached_batters = True
+                real_hits = HITS_CACHE.get((season, day))                
+                if CURRENT_ITERATION > 1 and not real_hits:
+                    print("Missing cached hits for day {}".format(day))                    
+                if not real_hits:                    
+                    batter_perf_data = [row for row in batter_list if row["season"] == str(season) and row["day"] == str(day)]                                    
+                    using_cached_batters = False
+                    if not batter_perf_data:                            
+                        HITS_CACHE[(season, day)] = []
+                        HOMERS_CACHE[(season, day)] = []
+                        SEEDDOGS_CACHE[(season, day)] = []
+                        SHO_CACHE[(season, day)] = []
+                        KS_CACHE[(season, day)] = []
+                        MEATBALLS_CACHE[(season, day)] = []
+                        CHIPSBURGERS_CACHE[(season, day)] = []
+                        CHIPSMEATBALLS_CACHE[(season, day)] = []
+                        continue
+                    real_hits, real_homers, real_seeddogs, real_meatballs, real_ks, real_chipsmeatballs, real_chipsburgers = {}, {}, {}, {}, {}, {}, {}
+                    real_sho = []                    
+                    if crimes_list is not None:
+                        real_seedpickles, real_dogpickles, real_trifecta = {}, {}, {}
+                        real_steals = pair_crimes_with_batter(crimes_list, team_stat_data, season, day)                        
+                    for batter in batter_perf_data:                
+                        real_hits[batter["batter_id"]] = int(batter["hits"])
+                        real_homers[batter["batter_id"]] = int(batter["home_runs"])
+                        real_seeddogs[batter["batter_id"]] = (int(batter["hits"]) * 1.5) + (int(batter["home_runs"]) * 4.0)
+                        if crimes_list is not None:
+                            if batter["batter_id"] not in real_steals:
+                                real_steals[batter["batter_id"]] = 0
+                            real_seedpickles[batter["batter_id"]] = (real_steals[batter["batter_id"]] * 3.0) + (real_hits[batter["batter_id"]] * 1.5)
+                            real_dogpickles[batter["batter_id"]] = (real_steals[batter["batter_id"]] * 3.0) + (real_homers[batter["batter_id"]] * 4.0)
+                            real_trifecta[batter["batter_id"]] = (real_steals[batter["batter_id"]] * 3.0) + (real_hits[batter["batter_id"]] * 1.5) + (real_homers[batter["batter_id"]] * 4.0)
+                        if batter["pitcher_id"] not in real_meatballs:
+                            real_meatballs[batter["pitcher_id"]] = 0
+                            real_chipsmeatballs[batter["pitcher_id"]] = 0
+                        real_meatballs[batter["pitcher_id"]] += int(batter["home_runs"])
+                        real_chipsmeatballs[batter["pitcher_id"]] += int(batter["home_runs"])
+                    sorted_real_hits, sorted_real_homers = dict(sorted(real_hits.items(), key=lambda k: k[1], reverse=True)), dict(sorted(real_homers.items(), key=lambda k: k[1], reverse=True))
+                    sorted_real_seeddogs = dict(sorted(real_seeddogs.items(), key=lambda k: k[1], reverse=True))
+                    HITS_CACHE[(season, day)] = copy.deepcopy(sorted_real_hits)
+                    HOMERS_CACHE[(season, day)] = copy.deepcopy(sorted_real_homers)
+                    SEEDDOGS_CACHE[(season, day)] = copy.deepcopy(sorted_real_seeddogs)                    
+                    if crimes_list is not None:
+                        sorted_real_steals, sorted_real_seedpickles = dict(sorted(real_steals.items(), key=lambda k: k[1], reverse=True)), dict(sorted(real_seedpickles.items(), key=lambda k: k[1], reverse=True))
+                        sorted_real_dogpickles, sorted_real_trifecta = dict(sorted(real_dogpickles.items(), key=lambda k: k[1], reverse=True)), dict(sorted(real_trifecta.items(), key=lambda k: k[1], reverse=True))
+                        STEALS_CACHE[(season, day)] = copy.deepcopy(sorted_real_steals)
+                        SEEDPICKLES_CACHE[(season, day)] = copy.deepcopy(sorted_real_seedpickles)
+                        DOGPICKLES_CACHE[(season, day)] = copy.deepcopy(sorted_real_dogpickles)
+                        TRIFECTA_CACHE[(season, day)] = copy.deepcopy(sorted_real_trifecta)
+                else:
+                    #if we have a cache of hits, we'll have the other caches too
+                    real_homers = HOMERS_CACHE.get((season, day))
+                    real_seeddogs = SEEDDOGS_CACHE.get((season, day))   
+                    real_sho = SHO_CACHE.get((season, day))
+                    real_ks = KS_CACHE.get((season, day))
+                    real_meatballs = MEATBALLS_CACHE.get((season, day))
+                    real_chipsburgers = CHIPSBURGERS_CACHE.get((season, day))
+                    real_chipsmeatballs = CHIPSMEATBALLS_CACHE.get((season, day))
+                    if crimes_list is not None:
+                        real_steals = STEALS_CACHE.get((season, day))
+                        real_seedpickles = SEEDPICKLES_CACHE.get((season, day))
+                        real_dogpickles = DOGPICKLES_CACHE.get((season, day))
+                        real_trifecta = TRIFECTA_CACHE.get((season, day))
             for game in paired_games:
                 if game["away"]["game_id"] in LINE_JUMP_GAMES:
                     print("Should never see this at this point; no games are being line jumped")
                     continue
+                homePitcher, homePitcherTeam = pitchers.get(game["home"]["pitcher_id"])
+                if int(pitcher_stat_data[homePitcher]["innings"]) > 9:
+                    #print("Skipping game because of extra innings")
+                    continue
+                if int(pitcher_stat_data[homePitcher]["innings"]) < 8:
+                    #print("Skipping game because of too few innings")
+                    continue
                 game_attrs = get_attrs_from_paired_game(season_team_attrs, game)                        
                 awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]     
                 gamehomeTeam = get_team_name(game["home"]["team_id"], season, day)
-                gameawayTeam = get_team_name(game["away"]["team_id"], season, day)                         
+                gameawayTeam = get_team_name(game["away"]["team_id"], season, day)     
+                if not using_cached_batters:
+                    if float(game["home"]["opposing_team_rbi"]) == 0.0:
+                        real_sho.append(game["home"]["pitcher_id"])
+                        real_chipsburgers[game["home"]["pitcher_id"]] = int(game["home"]["strikeouts"])
+                    if float(game["away"]["opposing_team_rbi"]) == 0.0:
+                        real_sho.append(game["away"]["pitcher_id"])
+                        real_chipsburgers[game["away"]["pitcher_id"]] = int(game["away"]["strikeouts"])
+                    real_ks[game["home"]["pitcher_id"]] = int(game["home"]["strikeouts"])
+                    real_ks[game["away"]["pitcher_id"]] = int(game["away"]["strikeouts"])
+                    if game["home"]["pitcher_id"] not in real_chipsmeatballs:
+                        real_chipsmeatballs[game["home"]["pitcher_id"]] = 0.0
+                    real_chipsmeatballs[game["home"]["pitcher_id"]] += int(game["home"]["strikeouts"]) * 0.2
+                    if game["away"]["pitcher_id"] not in real_chipsmeatballs:
+                        real_chipsmeatballs[game["away"]["pitcher_id"]] = 0.0
+                    real_chipsmeatballs[game["away"]["pitcher_id"]] += int(game["away"]["strikeouts"]) * 0.2
                 if game["away"]["game_id"] in ADJUSTED_STAT_CACHE:                    
                     adjusted_stat_data = ADJUSTED_STAT_CACHE[game["away"]["game_id"]]
                 else:
                     adjusted_stat_data = calculate_adjusted_stat_data(awayAttrs, homeAttrs, gameawayTeam, gamehomeTeam, team_stat_data)
                     ADJUSTED_STAT_CACHE[game["away"]["game_id"]] = adjusted_stat_data
                 ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
-                game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments)                
+                if solve_batman_too:
+                    #try:
+                    game_game_counter, game_fail_counter, game_away_val, game_home_val, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, True)          
+                    solved_hits, solved_homers = {**solved_hits, **away_hits, **home_hits}, {**solved_homers, **away_homers, **home_homers}
+                    if crimes_list is not None:
+                        solved_steals = {**solved_steals, **away_stolen_bases, **home_stolen_bases}
+                    solved_ks[game["away"]["pitcher_id"]], solved_ks[game["home"]["pitcher_id"]] = away_pitcher_ks, home_pitcher_ks
+                    solved_era[game["away"]["pitcher_id"]], solved_era[game["home"]["pitcher_id"]] = away_pitcher_era, home_pitcher_era
+                    total_away_homers, total_home_homers = sum(away_homers.values()), sum(home_homers.values())
+                    solved_meatballs[game["away"]["pitcher_id"]], solved_meatballs[game["home"]["pitcher_id"]] = total_home_homers, total_away_homers
+                    #except ValueError:
+                    #    print("Missing values for some reason? Day {}, Game {}".format(day, game["away"]["game_id"]))
+                    #    batter_remove_data = [row for row in batter_list if row["season"] == str(season) and row["day"] == str(day) and row["game_id"] == game["away"]["game_id"]]
+                    #    for batter in batter_remove_data:
+                    #        if batter["batter_id"] in HITS_CACHE[(season, day)]:
+                    #            HITS_CACHE[(season, day)].pop(batter["batter_id"])
+                    #            HOMERS_CACHE[(season, day)].pop(batter["batter_id"])
+                    #            SEEDDOGS_CACHE[(season, day)].pop(batter["batter_id"])
+                    #    continue                    
+                else:
+                    game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, False)                
                 if not is_cached and game_game_counter:
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
@@ -1115,36 +1294,209 @@ def minimize_func(parameters, *data):
                                 vals_by_mod["unmod"][game["away"]["game_id"]]["away_win"] = 0
                                 vals_by_mod["unmod"][game["away"]["game_id"]]["home_win"] = 1
                             if solve_for_ev:
-                                unmod_web_fails -= game_web_ev                            
-                if game_game_counter == 2:                    
-                    k9_max_err = game_away_val if (game_away_val > k9_max_err) else k9_max_err
-                    k9_max_err = game_home_val if (game_home_val > k9_max_err) else k9_max_err
-                    k9_min_err = game_away_val if (game_away_val < k9_min_err) else k9_min_err
-                    k9_min_err = game_home_val if (game_home_val < k9_min_err) else k9_min_err                    
-                    if (k9_max_err - k9_min_err) > WORST_ERROR:
-                        reject_solution = True
-                        #print("Rejecting solution, game away err = {}, game home err = {}, worst error = {}".format(game_away_val, game_home_val, WORST_ERROR))
+                                unmod_web_fails -= game_web_ev                                            
+            if solve_batman_too:
+                #seeddogs has to be determined sometime and requires going through all of the players anyway, unfortunately
+                for playerid in solved_hits:
+                    solved_seeddogs[playerid] = (solved_hits[playerid] * 1.5) + (solved_homers[playerid] * 4.0)
+                for playerid in solved_ks:
+                    #for chipsburgers, we would still be prioritizing lowest SHO chance, above all else, so it's a sort by solved era lowest to highest                    
+                    solved_chipsmeatballs[playerid] = (solved_ks[playerid] * 0.2) + solved_meatballs[playerid]
+                #need to sort real and solved events                
+                sorted_solved_hits, sorted_solved_homers = dict(sorted(solved_hits.items(), key=lambda k: k[1], reverse=True)), dict(sorted(solved_homers.items(), key=lambda k: k[1], reverse=True))
+                sorted_solved_seeddogs, sorted_solved_meatballs = dict(sorted(solved_seeddogs.items(), key=lambda k: k[1], reverse=True)), dict(sorted(solved_meatballs.items(), key=lambda k: k[1], reverse=True))
+                sorted_solved_ks, sorted_solved_era = dict(sorted(solved_ks.items(), key=lambda k: k[1], reverse=True)), dict(sorted(solved_era.items(), key=lambda k: k[1], reverse=False))
+                sorted_solved_chipsmeatballs = dict(sorted(solved_chipsmeatballs.items(), key=lambda k: k[1], reverse=True))
+                if crimes_list is not None:                    
+                    for playerid in solved_steals:
+                        #somehow getting players who are in solved steals, but not solved hits?                        
+                        solved_seedpickles[playerid] = (solved_hits[playerid] * 1.5) + (solved_steals[playerid] * 3.0)
+                        solved_dogpickles[playerid] = (solved_homers[playerid] * 4.0) + (solved_steals[playerid] * 3.0)
+                        solved_trifecta[playerid] = (solved_hits[playerid] * 1.5) + (solved_homers[playerid] * 4.0) + (solved_steals[playerid] * 3.0)
+                    sorted_solved_steals = dict(sorted(solved_steals.items(), key=lambda k: k[1], reverse=True)) 
+                    sorted_solved_seedpickles = dict(sorted(solved_seedpickles.items(), key=lambda k: k[1], reverse=True))
+                    sorted_solved_dogpickles = dict(sorted(solved_dogpickles.items(), key=lambda k: k[1], reverse=True))
+                    sorted_solved_trifecta = dict(sorted(solved_trifecta.items(), key=lambda k: k[1], reverse=True))
+
+                if not using_cached_batters:
+                    remove_list.clear()                    
+                    for batter in HITS_CACHE[(season, day)]:
+                        if batter not in solved_hits:                            
+                            remove_list.append(batter)
+                    if len(remove_list) > 0:
+                        pre_removal_hits_leader = next(iter(HITS_CACHE[(season, day)]))
+                        pre_removal_homers_leader = next(iter(HOMERS_CACHE[(season, day)]))
+                        pre_removal_seeddogs_leader = next(iter(SEEDDOGS_CACHE[(season, day)]))                        
+                        for batter in remove_list:
+                            HITS_CACHE[(season, day)].pop(batter)
+                            HOMERS_CACHE[(season, day)].pop(batter)
+                            SEEDDOGS_CACHE[(season, day)].pop(batter)
+                            if crimes_list is not None:
+                                if batter in STEALS_CACHE[(season, day)]:
+                                    STEALS_CACHE[(season, day)].pop(batter)
+                                    SEEDPICKLES_CACHE[(season, day)].pop(batter)
+                                    DOGPICKLES_CACHE[(season, day)].pop(batter)
+                                    TRIFECTA_CACHE[(season, day)].pop(batter)
+                        for batter in batter_perf_data:
+                            if (batter["batter_id"] in remove_list) and (batter["pitcher_id"] in real_meatballs):                                 
+                                real_meatballs[batter["pitcher_id"]] -= int(batter["home_runs"])
+                                real_chipsmeatballs[batter["pitcher_id"]] -= int(batter["home_runs"])
+                        if real_hits[pre_removal_hits_leader] != real_hits[next(iter(HITS_CACHE[(season, day)]))]:
+                            print("Hits leader changed value from not being a solver option: Previous {}, new {}".format(real_hits[pre_removal_hits_leader], real_hits[next(iter(HITS_CACHE[(season, day)]))]))
+                        if real_homers[pre_removal_homers_leader] != real_homers[next(iter(HOMERS_CACHE[(season, day)]))]:
+                            print("Homers leader changed value from not being a solver option: Previous {}, new {}".format(real_homers[pre_removal_homers_leader], real_homers[next(iter(HOMERS_CACHE[(season, day)]))]))
+                        if real_seeddogs[pre_removal_seeddogs_leader] != real_seeddogs[next(iter(SEEDDOGS_CACHE[(season, day)]))]:
+                            print("Seeddogs leader changed value from not being a solver option: Previous {}, new {}".format(real_seeddogs[pre_removal_seeddogs_leader], real_seeddogs[next(iter(SEEDDOGS_CACHE[(season, day)]))]))
+                    sorted_real_ks, sorted_real_chipsmeatballs = dict(sorted(real_ks.items(), key=lambda k: k[1], reverse=True)), dict(sorted(real_chipsmeatballs.items(), key=lambda k: k[1], reverse=True))
+                    sorted_real_meatballs = dict(sorted(real_meatballs.items(), key=lambda k: k[1], reverse=True))
+                    MEATBALLS_CACHE[(season, day)] = copy.deepcopy(sorted_real_meatballs)                   
+                    KS_CACHE[(season, day)] = copy.deepcopy(sorted_real_ks)                    
+                    CHIPSMEATBALLS_CACHE[(season, day)] = copy.deepcopy(sorted_real_chipsmeatballs)
+                    if len(real_sho) > 0:
+                        SHO_CACHE[(season, day)] = copy.deepcopy(real_sho)
+                        sorted_real_chipsburgers = dict(sorted(real_chipsburgers.items(), key=lambda k: k[1], reverse=True))
+                        CHIPSBURGERS_CACHE[(season, day)] = copy.deepcopy(sorted_real_chipsburgers)
+                    else:
+                        if CURRENT_ITERATION == 1:
+                            print("No shutouts on day {}".format(day))
+                        SHO_CACHE[(season, day)] = []
+                        CHIPSBURGERS_CACHE[(season, day)] = []
+                    remove_list.clear()
+                    for pitcher in MEATBALLS_CACHE[(season, day)]:
+                        if pitcher not in solved_ks:
+                            remove_list.append(pitcher)
+                    if len(remove_list) > 0:
+                        for pitcher in remove_list:
+                            MEATBALLS_CACHE[(season, day)].pop(pitcher)
+                            CHIPSMEATBALLS_CACHE[(season, day)].pop(pitcher)
+                    real_hits = copy.deepcopy(HITS_CACHE.get((season, day)))
+                    real_homers = copy.deepcopy(HOMERS_CACHE.get((season, day)))
+                    real_seeddogs = copy.deepcopy(SEEDDOGS_CACHE.get((season, day)))
+                    real_ks = copy.deepcopy(KS_CACHE.get((season, day)))
+                    real_sho = copy.deepcopy(SHO_CACHE.get((season, day)))
+                    real_meatballs = copy.deepcopy(MEATBALLS_CACHE.get((season, day)))
+                    real_chipsburgers = copy.deepcopy(CHIPSBURGERS_CACHE.get((season, day)))
+                    real_chipsmeatballs = copy.deepcopy(CHIPSMEATBALLS_CACHE.get((season, day)))
+                    if crimes_list is not None:
+                        real_steals = copy.deepcopy(STEALS_CACHE.get((season, day)))
+                        real_seedpickles = copy.deepcopy(SEEDPICKLES_CACHE.get((season, day)))
+                        real_dogpickles = copy.deepcopy(DOGPICKLES_CACHE.get((season, day)))
+                        real_trifecta = copy.deepcopy(TRIFECTA_CACHE.get((season, day)))
+
+                best_seeds_score = real_hits[next(iter(real_hits))]
+                best_dogs_score = real_homers[next(iter(real_homers))]
+                best_seeddogs_player = next(iter(real_seeddogs))
+                best_seeddogs_score = ((real_hits[best_seeddogs_player] * 1.5) + (real_homers[best_seeddogs_player] * 4.0))
+                best_chips_score = real_ks[next(iter(real_ks))]                
+                best_meatballs_score = real_meatballs[next(iter(real_meatballs))]
+                best_chipsmeatballs_player = next(iter(real_chipsmeatballs))
+                best_chipsmeatballs_score = (real_ks[best_chipsmeatballs_player] * 0.2) + real_meatballs[best_chipsmeatballs_player]
+                if crimes_list is not None:
+                    best_pickles_score = real_steals[next(iter(real_steals))]
+                    best_seedpickles_player = next(iter(real_seedpickles))
+                    best_seedpickles_score = (real_hits[best_seedpickles_player] * 1.5) + (real_steals[best_seedpickles_player] * 3.0)
+                    best_dogpickles_player = next(iter(real_dogpickles))
+                    best_dogpickles_score = (real_homers[best_dogpickles_player] * 4.0) + (real_steals[best_dogpickles_player] * 3.0)
+                    best_trifecta_player = next(iter(real_trifecta))
+                    best_trifecta_score = (real_hits[best_trifecta_player] * 1.5) + (real_homers[best_trifecta_player] * 4.0) + (real_steals[best_trifecta_player] * 3.0)
+
+                    for solved_steals_leader in sorted_solved_steals:
+                        if solved_steals_leader in real_steals:
+                            solved_pickles_score = real_steals[solved_steals_leader]                            
+                            pickles_score_earned += solved_pickles_score * 3.0
+                            pickles_score_max += best_pickles_score * 3.0   
+                            thieves += 1
+                            break
+
+                    for solved_seedpickles_leader in sorted_solved_seedpickles:
+                        if solved_seedpickles_leader in real_steals:
+                            solved_seedpickles_score = (real_hits[solved_seedpickles_leader] * 1.5) + (real_steals[solved_seedpickles_leader] * 3.0)
+                            seedpickles_score_earned += solved_seedpickles_score
+                            seedpickles_score_max += best_seedpickles_score                               
+                            break
+
+                    for solved_dogpickles_leader in sorted_solved_dogpickles:
+                        if solved_dogpickles_leader in real_steals:
+                            solved_dogpickles_score = (real_homers[solved_dogpickles_leader] * 4.0) + (real_steals[solved_dogpickles_leader] * 3.0)
+                            dogpickles_score_earned += solved_dogpickles_score
+                            dogpickles_score_max += best_dogpickles_score                               
+                            break
+
+                    for solved_trifecta_leader in sorted_solved_trifecta:
+                        if solved_trifecta_leader in real_steals:
+                            solved_trifecta_score = (real_hits[solved_trifecta_leader] * 1.5) + (real_homers[solved_trifecta_leader] * 4.0) + (real_steals[solved_trifecta_leader] * 3.0)
+                            trifecta_score_earned += solved_trifecta_score
+                            trifecta_score_max += best_trifecta_score                               
+                            break
+
+                if len(real_sho) > 0:
+                    best_burgers_score = 12.5
+                    best_chipsburgers_player = next(iter(real_chipsburgers))
+                    best_chipsburgers_score = (real_ks[best_chipsburgers_player] * 0.2) + 12.5
+                    sho_pitchers += 1
+                else:
+                    best_burgers_score, best_chipsburgers_score = 0.0, 0.0
+                #in this case, we need to not penalize the solution just because a batter was queued up by the stlats data that didn't end up performing
+                #the solution is still potentially good, but we need to find the top hitter among those we solved for that actually got batstats to compare against the batstat leader
+                #for the solution to be good, we need the best hitters and sluggers to be consistently identified from the stlats data
+                #solved_hits_leader = next(iter(sorted_solved_hits))
+                for solved_hits_leader in sorted_solved_hits:
+                    if solved_hits_leader in real_hits:
+                        solved_seeds_score = real_hits[solved_hits_leader]                        
+                        seeds_score_earned += solved_seeds_score * 1.5
+                        seeds_score_max += best_seeds_score * 1.5   
+                        hitters += 1
+                        break               
+                    
+                #solved_homers_leader = next(iter(sorted_solved_homers))
+                for solved_homers_leader in sorted_solved_homers:
+                    if solved_homers_leader in real_homers:
+                        solved_dogs_score = real_homers[solved_homers_leader]
+                        dogs_ratio = solved_dogs_score / best_dogs_score
+                        dogs_score_earned += solved_dogs_score * 4.0
+                        dogs_score_max += best_dogs_score * 4.0                        
+                        sluggers += 1
+                        break                
+
+                #solved_seeddogs_player = next(iter(sorted_solved_seeddogs))
+                for solved_seeddogs_player in sorted_solved_seeddogs:
+                    if solved_seeddogs_player in real_hits:
+                        solved_seeddogs_score = ((real_hits[solved_seeddogs_player] * 1.5) + (real_homers[solved_seeddogs_player] * 4.0))                                 
+                        seeddogs_score_earned += solved_seeddogs_score
+                        seeddogs_score_max += best_seeddogs_score                        
+                        seeddogers += 1
                         break
-                    if abs(game_away_val) <= 4:             
-                        pass_within_four += 1
-                        if abs(game_away_val) <= 3:                                                
-                            pass_within_three += 1
-                            if abs(game_away_val) <= 2:                                                
-                                pass_within_two += 1
-                                if abs(game_away_val) <= 1:
-                                    pass_within_one += 1
-                                    if game_away_val == 0:
-                                        pass_exact += 1                   
-                    if abs(game_home_val) <= 4:  
-                        pass_within_four += 1
-                        if abs(game_home_val) <= 3:                                                
-                            pass_within_three += 1
-                            if abs(game_home_val) <= 2:                                                
-                                pass_within_two += 1
-                                if abs(game_home_val) <= 1:
-                                    pass_within_one += 1
-                                    if abs(game_home_val) == 0:
-                                        pass_exact += 1         
+
+                chips_pitchers += 1
+                solved_ks_leader = next(iter(sorted_solved_ks))                
+                solved_chips_score = real_ks[solved_ks_leader]
+                chips_score_earned += solved_chips_score * 0.2
+                chips_score_max += best_chips_score * 0.2
+
+                solved_meatballs_leader = next(iter(sorted_solved_meatballs))
+                solved_meatballs_score = real_meatballs[solved_meatballs_leader]
+                meatballs_score_earned += solved_meatballs_score
+                meatballs_score_max += best_meatballs_score
+
+                solved_chipsmeatballs_leader = next(iter(sorted_solved_chipsmeatballs))
+                solved_chipsmeatballs_score = (real_ks[solved_chipsmeatballs_leader] * 0.2) + real_meatballs[solved_chipsmeatballs_leader]
+                chipsmeatballs_score_earned += solved_chipsmeatballs_score
+                chipsmeatballs_score_max += best_chipsmeatballs_score
+
+                solved_burgers_leader = next(iter(sorted_solved_era))
+                if len(real_sho) > 0:
+                    burgers_score_max += best_burgers_score
+                    chipsburgers_score_max += best_chipsburgers_score
+                    if solved_burgers_leader in real_sho:
+                        burgers_score_earned += 12.5
+                        chipsburgers_score_earned += 12.5 + (real_ks[solved_burgers_leader] * 0.2)
+                
+                solved_hits.clear(), solved_homers.clear(), solved_seeddogs.clear(), solved_ks.clear(), solved_era.clear(), solved_meatballs.clear(), solved_chipsmeatballs.clear() 
+                sorted_solved_hits.clear(), sorted_solved_homers.clear(), sorted_solved_seeddogs.clear(), sorted_solved_ks.clear(), sorted_solved_era.clear()
+                sorted_solved_meatballs.clear(), sorted_solved_chipsmeatballs.clear()
+                if crimes_list is not None:
+                    solved_steals.clear(), solved_seedpickles.clear(), solved_dogpickles.clear(), solved_trifecta.clear(), sorted_solved_steals.clear() 
+                    sorted_solved_seedpickles.clear(), sorted_solved_dogpickles.clear(), sorted_solved_trifecta.clear()
             if not is_cached:
                 GAME_CACHE[(season, day)] = good_game_list
         if season not in HAS_GAMES:
@@ -1168,9 +1520,58 @@ def minimize_func(parameters, *data):
     best_plusname = PLUS_NAME
     max_mod_rates, mod_vals, mod_win_loss, mod_gameids, errors, mod_pos_vals = [], [], [], [], [], []
     other_errors, linear_by_mod = {}, {}
-    linear_fail = 900000000000.0
+    linear_fail = 9000000000000000.0    
     season_fail = 100000000.0
     calculate_solution = True
+    batman_score, correction_adjustment = 1.0, 1.0
+    if solve_batman_too:
+        pickles_penalty, seedpickles_penalty, dogpickles_penalty, trifecta_penalty = 0.0, 0.0, 0.0, 0.0        
+        seeds_score = seeds_score_earned / seeds_score_max
+        dogs_score = dogs_score_earned / dogs_score_max
+        seeddogs_score = seeddogs_score_earned / seeddogs_score_max
+        chips_score = chips_score_earned / chips_score_max
+        meatballs_score = meatballs_score_earned / meatballs_score_max
+        chipsmeatballs_score = chipsmeatballs_score_earned / chipsmeatballs_score_max
+        burgers_score, chipsburgers_score = 0.0, 0.0
+        if burgers_score_max > 0.0:
+            burgers_score = burgers_score_earned / burgers_score_max         
+            chipsburgers_score = chipsburgers_score_earned / chipsburgers_score_max         
+        if crimes_list is not None:
+            pickles_score = pickles_score_earned / pickles_score_max
+            seedpickles_score = seedpickles_score_earned / seedpickles_score_max
+            dogpickles_score = dogpickles_score_earned / dogpickles_score_max
+            trifecta_score = trifecta_score_earned / trifecta_score_max
+            sum_max_earnings = max(seeds_score_max, dogs_score_max, seeddogs_score_max, pickles_score_max, seedpickles_score_max, dogpickles_score_max, trifecta_score_max, chips_score_max, meatballs_score_max, chipsmeatballs_score_max, burgers_score_max, chipsburgers_score_max)
+            pickles_penalty = (((1.0 - pickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (pickles_score_max / sum_max_earnings)
+            seedpickles_penalty = (((1.0 - seedpickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (seedpickles_score_max / sum_max_earnings)
+            dogpickles_penalty = (((1.0 - dogpickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (dogpickles_score_max / sum_max_earnings)
+            trifecta_penalty = (((1.0 - trifecta_score) * 100.0) ** 6.0) * thieves * 100.0 * (trifecta_score_max / sum_max_earnings)
+        else:
+            sum_max_earnings = max(seeds_score_max, dogs_score_max, seeddogs_score_max, chips_score_max, meatballs_score_max, chipsmeatballs_score_max, burgers_score_max, chipsburgers_score_max)        
+        #print("Pitcher earnings (% of max possible) - Chips {:.2f}%, Burgers {:.2f}%, Meatballs {:.2f}%, Chips+Burgers {:.2f}%, Chips+Meatballs {:.2f}%".format(chips_score * 100.0, burgers_score * 100.0, meatballs_score * 100.0, chipsburgers_score * 100.0, chipsmeatballs_score * 100.0))
+        #each of these scores is how close to maximum value we achieved, so 4.0 - these is a multiplier that punishes our solution the farther it is from optimum earnings, minimum 1.0        
+        #batman_score = (((2.0 - seeds_score) ** 4.0) + ((2.0 - dogs_score) ** 4.0) + ((2.0 - seeddogs_score) ** 4.0)) / 3.0
+        #correction_adjustment = (((1.0 + seeds_score) ** 4.0) + ((1.0 + dogs_score) ** 4.0) + ((1.0 + seeddogs_score) ** 4.0)) / 48.0
+        if CURRENT_ITERATION == 1:
+            print("Max BATMAN earnings = seeds {:.0f}, dogs {:.0f}, seeds+dogs {:.0f}".format(seeds_score_max, dogs_score_max, seeddogs_score_max))
+            if crimes_list is not None:
+                print("Max ENOCH earnings = pickles {:.0f}, seeds+pickes {:.0f}, dogs+pickles {:.0f}, trifecta {:.0f}".format(pickles_score_max, seedpickles_score_max, dogpickles_score_max, trifecta_score_max))
+            print("Max pitching earnings = chips {:.0f}, burgers {:.0f}, meatballs {:.0f}, chips+burgers {:.0f}, chips+meatballs {:.0f}".format(chips_score_max, burgers_score_max, meatballs_score_max, chipsburgers_score_max, chipsmeatballs_score_max))
+            print("{} Shutout pitchers, {} pitchers, {} batters".format(sho_pitchers, chips_pitchers, hitters))        
+        seeds_penalty = (((1.0 - seeds_score) * 100.0) ** 6.0) * hitters * 100.0 * (seeds_score_max / sum_max_earnings)
+        dogs_penalty = (((1.0 - dogs_score) * 100.0) ** 6.0) * sluggers * 100.0 * (dogs_score_max / sum_max_earnings)
+        seeddogs_penalty = (((1.0 - seeddogs_score) * 100.0) ** 6.0) * seeddogers * 100.0 * (seeddogs_score_max / sum_max_earnings)
+        #chips is the sole indicator of if we're hitting strikeouts leaders correctly, which should inform the correct solution... therefore, should be weighted as equally-important to the final solution as the highest-snack earner
+        chips_penalty = (((1.0 - chips_score) * 100.0) ** 6.0) * chips_pitchers * 100.0
+        #shutouts are more-diffuclt to predict, but earn a lot... we don't want to be forcing solutions to give us a bunch of shutouts first, so we need to penalize these less as they are just harder to predict period
+        burgers_penalty = (((1.0 - burgers_score) * 100.0) ** 4.0) * sho_pitchers * 100.0 * (burgers_score_max / sum_max_earnings)
+        chipsburgers_penalty = (((1.0 - chipsburgers_score) * 100.0) ** 4.0) * sho_pitchers * 100.0 * (chipsburgers_score_max / sum_max_earnings)
+        meatballs_penalty = (((1.0 - meatballs_score) * 100.0) ** 6.0) * chips_pitchers * 100.0 * (meatballs_score_max / sum_max_earnings)
+        chipsmeatballs_penalty = (((1.0 - chipsmeatballs_score) * 100.0) ** 6.0) * chips_pitchers * 100.0 * (chipsmeatballs_score_max / sum_max_earnings)
+        batman_error = seeds_penalty + dogs_penalty + seeddogs_penalty + chips_penalty + burgers_penalty + chipsburgers_penalty + meatballs_penalty + chipsmeatballs_penalty + pickles_penalty + seedpickles_penalty + dogpickles_penalty + trifecta_penalty
+        #print("Batman error = {:.0f}".format(batman_error))        
+        linear_error += batman_error   
+        
     if (game_counter < ALL_GAMES) and (CURRENT_ITERATION > 1) and not reject_solution:
         print("Somehow ended up with fewer games. Games = {}, all games = {}".format(game_counter, ALL_GAMES))
         reject_solution = True
@@ -1178,8 +1579,7 @@ def minimize_func(parameters, *data):
         if len(win_loss) > 0:        
             #Remember to negate ev is when we can pass it through and make better results when EV is bigger
             expected_val, mismatches, dadbets, web_ev, current_mofo_ev, current_web_ev = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-            if solve_for_ev:
-                print("shouldn't be in here")
+            if solve_for_ev:                
                 for thisgame in ev_set:
                     game_expected_val, game_mismatches, game_dadbets, game_web_ev, game_season_ev, game_season_web_ev = game_ev_calculate(ev_set, solve_for_ev)                    
                     expected_val += game_expected_val
@@ -1248,11 +1648,13 @@ def minimize_func(parameters, *data):
                     EXPECTED_MOD_RATES[modname] = mod_expected_average
                     if not new_plusname == "":
                         EXPECTED_MOD_RATES[new_plusname] = mod_expected_average                    
-                    linear_error_reduction = (1.0 - (abs(mod_rate - mod_expected_average) / 100.0)) * (100.0 - mod_expected_average)                                        
-                    mod_linear_error = mod_linear_error - (linear_error_reduction ** 2.0)                                        
+                    linear_error_reduction = (1.0 - (abs(mod_rate - mod_expected_average) / 100.0)) * (100.0 - mod_expected_average)    
+                    #include batman modifier before subtraction, to make sure large batman errors don't inflate a large negative number
+                    mod_linear_error = (mod_linear_error * batman_score) - ((linear_error_reduction ** 2.0) * correction_adjustment)
                     mod_linear_error *= modcount if modname not in DIRECT_MOD_SOLVES else 1.0
+                    mod_linear_error *= 0.1
                     linear_by_mod[modname] = mod_linear_error
-                    linear_error += mod_linear_error                    
+                    linear_error += mod_linear_error
                     if mod_linear_error > new_worstmod_linear_error:                        
                         new_worstmod_linear_error = mod_linear_error
                         new_worstmod = modname
@@ -1284,14 +1686,15 @@ def minimize_func(parameters, *data):
                 sorted_gameids = [x for _,x in sorted(zip(overall_vals, overall_gameids))]
                 overall_vals.sort()                    
                 overall_linear_error, overall_max_linear_error, overall_min_linear_error, overall_max_error_value, overall_min_error_value, overall_errors, overall_max_error_game, overall_other_errors = calc_linear_unex_error(overall_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD, "overall")                  
+                overall_linear_error += (overall_linear_error * modcount * batman_score) - (((expected_average * 100.0) ** 2.0) * correction_adjustment)
+                overall_linear_error *= 0.1
                 linear_error += overall_linear_error
                 linear_by_mod["overall"] = overall_linear_error
                 if overall_linear_error > new_worstmod_linear_error:  
                     new_worstmod_linear_error = overall_linear_error
                     new_worstmod = "overall"                   
-                    best_plusname = ""                   
-                #any overall improvements on the back of an unmod reduction right now are net neutral... we want them to be net negative, so make unmod weigh more
-                linear_error += (overall_linear_error * modcount) - ((expected_average * 100.0) ** 2.0)
+                    best_plusname = ""                                   
+                
             major_errors = 0.0                       
             linear_points = linear_error
             if not mod_mode:
@@ -1445,29 +1848,38 @@ def minimize_func(parameters, *data):
                 BEST_UNMOD = unmod_rate if (abs(unmod_rate - 25.0) < abs(BEST_UNMOD - 25.0)) else BEST_UNMOD                                
                 #BEST_MOD_RATES["error"] = (max_linear_error - min_linear_error) if ((max_linear_error - min_linear_error) < BEST_MOD_RATES["error"]) else BEST_MOD_RATES["error"]
         debug_print("-"*20, debug, run_id)
-        if len(win_loss) > 0:
-            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(base_mofo_list_size)])] * 3)))  
-            half_output = "\n".join("{},{},{}".format(halfterm.stat, halfterm.event, a) for halfterm, a in zip(special_case_list, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]))
+        if len(win_loss) > 0:        
+            terms_output = "name,a,b,c"
+            for stat, stlatterm in terms.items():                
+                terms_output += "\n{},{},{},{}".format(stat, stlatterm.a, stlatterm.b, stlatterm.c)                
+            half_output = "name,event,a"            
+            for stat in half_stlats:
+                for event in half_stlats[stat]:
+                    half_output += "\n{},{},{}".format(stat, event, half_stlats[stat][event])            
             mods_output = "identifier,team,name,a"
-            for mod, a in zip(mod_list, parameters[(base_mofo_list_size + special_cases_count):-park_mod_list_size]):                
-                if mod.attr.lower() in mod_games:
-                    mods_output += "\n{},{},{},{}".format(mod.attr, mod.team, mod.stat, a)            
-                else:
-                    mods_output += "\n{},{},{},{}".format(mod.attr, mod.team, mod.stat, 0)
-            #mods_output = "\n".join("{},{},{},{},{},{}".format(modstat.attr, modstat.team, modstat.stat, a, b, c) for modstat, (a, b, c) in zip(mod_list, zip(*[iter(parameters[(((base_mofo_list_size) + special_cases_count)):-(park_mod_list_size)])] * 3)))            
-            ballpark_mods_output = "\n".join("{},{},{},{},{}".format(bpstat.ballparkstat, bpstat.playerstat, a, b, c) for bpstat, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-(park_mod_list_size):])] * 3)))
+            for attr in mods:                                
+                for team in mods[attr]:
+                    for stat in mods[attr][team]:
+                        mods_output += "\n{},{},{},{}".format(attr, team, stat, mods[attr][team][stat])            
+            ballpark_mods_output = "ballparkstlat,playerstlat,a,b,c"
+            for bpstat in ballpark_mods:                
+                for playerstat in ballpark_mods[bpstat]:                    
+                    bpterm = ballpark_mods[bpstat][playerstat]
+                    if type(bpterm) == dict:
+                        continue
+                    ballpark_mods_output +="\n{},{},{},{},{}".format(bpstat, playerstat, bpterm.a, bpterm.b, bpterm.c)            
             if outputdir:
                 if final_solution:                    
-                    write_final(outputdir, "MOFOCoefficients.csv", "name,a,b,c\n" + terms_output)
-                    write_final(outputdir, "MOFOHalfTerms.csv", "name,event,a\n" + half_output)
+                    write_final(outputdir, "MOFOCoefficients.csv", terms_output)
+                    write_final(outputdir, "MOFOHalfTerms.csv", half_output)
                     write_final(outputdir, "MOFOTeamModsCorrection.csv", mods_output)
-                    write_final(outputdir, "MOFOBallparkCoefficients.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
+                    write_final(outputdir, "MOFOBallparkCoefficients.csv", ballpark_mods_output)
                     write_parameters(outputdir, run_id, "solution.json", parameters)
                 else:
-                    write_file(outputdir, run_id, "terms.csv", "name,a,b,c\n" + terms_output)
-                    write_file(outputdir, run_id, "halfterms.csv", "name,event,a\n" + half_output)
+                    write_file(outputdir, run_id, "terms.csv", terms_output)
+                    write_file(outputdir, run_id, "halfterms.csv", half_output)
                     write_file(outputdir, run_id, "mods.csv",  mods_output)
-                    write_file(outputdir, run_id, "ballparkmods.csv", "ballparkstlat,playerstlat,a,b,c\n" + ballpark_mods_output)
+                    write_file(outputdir, run_id, "ballparkmods.csv", ballpark_mods_output)
                     write_parameters(outputdir, run_id, "solution.json", parameters)
             debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug2, run_id)
             detailtext = "{} games".format(game_counter)
@@ -1499,7 +1911,12 @@ def minimize_func(parameters, *data):
             #    detailtext += "\nMajor errors at: " + errors_output
             #elif not solve_for_ev:
             #    detailtext += "\nNo major errors"
-            detailtext += "\nFail error points = {:.0f}, Linearity error points = {:.0f}, total = {:.0f}, fail rate {:.2f}%, expected {:.2f}%".format(fail_points, linear_points, linear_fail, fail_rate * 100.0, (1.0 - expected_average) * 100.0)
+            detailtext += "\nBATMAN error = {:.0f}, total = {:.0f}, fail rate {:.2f}%, expected {:.2f}%".format(batman_error, linear_fail, fail_rate * 100.0, (1.0 - expected_average) * 100.0)
+            if solve_batman_too:
+                detailtext += "\nBATMAN earnings (% of max possible) - Seeds {:.2f}%, Dogs {:.2f}%, Seeds+Dogs {:.2f}%".format(seeds_score * 100.0, dogs_score * 100.0, seeddogs_score * 100.0)
+                if crimes_list is not None:
+                    detailtext += "\nENOCH earnings (% of max possible) - Pickles {:.2f}%, Seeds+Pickles {:.2f}%, Dogs+Pickles {:.2f}%, Trifecta {:.2f}%".format(pickles_score * 100.0, seedpickles_score * 100.0, dogpickles_score * 100.0, trifecta_score * 100.0)
+                detailtext += "\nPitcher earnings (% of max possible) - Chips {:.2f}%, Burgers {:.2f}%, Meatballs {:.2f}%, Chips+Burgers {:.2f}%, Chips+Meatballs {:.2f}%".format(chips_score * 100.0, burgers_score * 100.0, meatballs_score * 100.0, chipsburgers_score * 100.0, chipsmeatballs_score * 100.0)                
             debug_print(detailtext, debug, run_id)
             if outputdir:
                 write_file(outputdir, run_id, "details.txt", detailtext)
