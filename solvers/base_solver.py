@@ -139,9 +139,9 @@ def pair_crimes_with_batter(crimes, team_stat_data, season, day):
             if "steals" in line:
                 parsedline = line.split(" steals ")
                 criminal_name = parsedline[0]                
-            elif ("Grind Rail" in line and "Safe!" in line):
-                parsedline = line.split(" hops ")
-                criminal_name = parsedline[0]                
+            #elif ("Grind Rail" in line and "Safe!" in line):
+            #    parsedline = line.split(" hops ")
+            #    criminal_name = parsedline[0]                
             else:
                 continue
             criminal_name = criminal_name.replace("\"","")
