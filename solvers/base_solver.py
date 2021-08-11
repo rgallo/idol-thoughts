@@ -1525,7 +1525,7 @@ def minimize_func(parameters, *data):
     calculate_solution = True
     batman_score, correction_adjustment = 1.0, 1.0
     if solve_batman_too:
-        pickles_penalty, seedpickles_penalty, dogpickles_penalty, trifecta_penalty = 0.0, 0.0, 0.0, 0.0        
+        pickles_penalty, seedpickles_penalty, dogpickles_penalty, trifecta_penalty = 0.0, 0.0, 0.0, 0.0                
         seeds_score = seeds_score_earned / seeds_score_max
         dogs_score = dogs_score_earned / dogs_score_max
         seeddogs_score = seeddogs_score_earned / seeddogs_score_max
@@ -1542,12 +1542,14 @@ def minimize_func(parameters, *data):
             dogpickles_score = dogpickles_score_earned / dogpickles_score_max
             trifecta_score = trifecta_score_earned / trifecta_score_max
             sum_max_earnings = max(seeds_score_max, dogs_score_max, seeddogs_score_max, pickles_score_max, seedpickles_score_max, dogpickles_score_max, trifecta_score_max, chips_score_max, meatballs_score_max, chipsmeatballs_score_max, burgers_score_max, chipsburgers_score_max)
-            pickles_penalty = (((1.0 - pickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (pickles_score_max / sum_max_earnings)
+            single_bats_earnings = max(seeds_score_max, dogs_score_max, pickles_score_max)
+            pickles_penalty = (((1.0 - pickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (single_bats_earnings / sum_max_earnings)
             seedpickles_penalty = (((1.0 - seedpickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (seedpickles_score_max / sum_max_earnings)
             dogpickles_penalty = (((1.0 - dogpickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (dogpickles_score_max / sum_max_earnings)
             trifecta_penalty = (((1.0 - trifecta_score) * 100.0) ** 6.0) * thieves * 100.0 * (trifecta_score_max / sum_max_earnings)
         else:
             sum_max_earnings = max(seeds_score_max, dogs_score_max, seeddogs_score_max, chips_score_max, meatballs_score_max, chipsmeatballs_score_max, burgers_score_max, chipsburgers_score_max)        
+            single_bats_earnings = max(seeds_score_max, dogs_score_max)
         #print("Pitcher earnings (% of max possible) - Chips {:.2f}%, Burgers {:.2f}%, Meatballs {:.2f}%, Chips+Burgers {:.2f}%, Chips+Meatballs {:.2f}%".format(chips_score * 100.0, burgers_score * 100.0, meatballs_score * 100.0, chipsburgers_score * 100.0, chipsmeatballs_score * 100.0))
         #each of these scores is how close to maximum value we achieved, so 4.0 - these is a multiplier that punishes our solution the farther it is from optimum earnings, minimum 1.0        
         #batman_score = (((2.0 - seeds_score) ** 4.0) + ((2.0 - dogs_score) ** 4.0) + ((2.0 - seeddogs_score) ** 4.0)) / 3.0
@@ -1558,8 +1560,8 @@ def minimize_func(parameters, *data):
                 print("Max ENOCH earnings = pickles {:.0f}, seeds+pickes {:.0f}, dogs+pickles {:.0f}, trifecta {:.0f}".format(pickles_score_max, seedpickles_score_max, dogpickles_score_max, trifecta_score_max))
             print("Max pitching earnings = chips {:.0f}, burgers {:.0f}, meatballs {:.0f}, chips+burgers {:.0f}, chips+meatballs {:.0f}".format(chips_score_max, burgers_score_max, meatballs_score_max, chipsburgers_score_max, chipsmeatballs_score_max))
             print("{} Shutout pitchers, {} pitchers, {} batters".format(sho_pitchers, chips_pitchers, hitters))        
-        seeds_penalty = (((1.0 - seeds_score) * 100.0) ** 6.0) * hitters * 100.0 * (seeds_score_max / sum_max_earnings)
-        dogs_penalty = (((1.0 - dogs_score) * 100.0) ** 6.0) * sluggers * 100.0 * (dogs_score_max / sum_max_earnings)
+        seeds_penalty = (((1.0 - seeds_score) * 100.0) ** 6.0) * hitters * 100.0 * (single_bats_earnings / sum_max_earnings)
+        dogs_penalty = (((1.0 - dogs_score) * 100.0) ** 6.0) * sluggers * 100.0 * (single_bats_earnings / sum_max_earnings)
         seeddogs_penalty = (((1.0 - seeddogs_score) * 100.0) ** 6.0) * seeddogers * 100.0 * (seeddogs_score_max / sum_max_earnings)
         #chips is the sole indicator of if we're hitting strikeouts leaders correctly, which should inform the correct solution... therefore, should be weighted as equally-important to the final solution as the highest-snack earner
         chips_penalty = (((1.0 - chips_score) * 100.0) ** 6.0) * chips_pitchers * 100.0
@@ -1913,9 +1915,11 @@ def minimize_func(parameters, *data):
             #    detailtext += "\nNo major errors"
             detailtext += "\nBATMAN error = {:.0f}, total = {:.0f}, fail rate {:.2f}%, expected {:.2f}%".format(batman_error, linear_fail, fail_rate * 100.0, (1.0 - expected_average) * 100.0)
             if solve_batman_too:
-                detailtext += "\nBATMAN earnings (% of max possible) - Seeds {:.2f}%, Dogs {:.2f}%, Seeds+Dogs {:.2f}%".format(seeds_score * 100.0, dogs_score * 100.0, seeddogs_score * 100.0)
+                thresholds = {}
+                thresholds["seeds"], thresholds["dogs"], thresholds["seeddogs"], thresholds["pickles"], thresholds["seedpickles"], thresholds["dogpickles"], thresholds["trifecta"] = 0.4944, 0.2389, 0.4818, 0.3636, 0.3987, 0.3732, 0.4016
+                detailtext += "\nBATMAN earnings (% of max possible) - Seeds {:.2f}%{}, Dogs {:.2f}%{}, Seeds+Dogs {:.2f}%{}".format(seeds_score * 100.0, ("!" if seeds_score > thresholds["seeds"] else ""), dogs_score * 100.0, ("!" if dogs_score > thresholds["dogs"] else ""), seeddogs_score * 100.0, ("!" if seeddogs_score > thresholds["seeddogs"] else ""))
                 if crimes_list is not None:
-                    detailtext += "\nENOCH earnings (% of max possible) - Pickles {:.2f}%, Seeds+Pickles {:.2f}%, Dogs+Pickles {:.2f}%, Trifecta {:.2f}%".format(pickles_score * 100.0, seedpickles_score * 100.0, dogpickles_score * 100.0, trifecta_score * 100.0)
+                    detailtext += "\nENOCH earnings (% of max possible) - Pickles {:.2f}%{}, Seeds+Pickles {:.2f}%{}, Dogs+Pickles {:.2f}%{}, Trifecta {:.2f}%{}".format(pickles_score * 100.0, ("!" if pickles_score > thresholds["pickles"] else ""), seedpickles_score * 100.0, ("!" if seedpickles_score > thresholds["seedpickles"] else ""), dogpickles_score * 100.0, ("!" if dogpickles_score > thresholds["dogpickles"] else ""), trifecta_score * 100.0, ("!" if trifecta_score > thresholds["trifecta"] else ""))
                 detailtext += "\nPitcher earnings (% of max possible) - Chips {:.2f}%, Burgers {:.2f}%, Meatballs {:.2f}%, Chips+Burgers {:.2f}%, Chips+Meatballs {:.2f}%".format(chips_score * 100.0, burgers_score * 100.0, meatballs_score * 100.0, chipsburgers_score * 100.0, chipsmeatballs_score * 100.0)                
             debug_print(detailtext, debug, run_id)
             if outputdir:

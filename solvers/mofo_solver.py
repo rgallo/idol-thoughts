@@ -137,7 +137,15 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
     if is_random:
         random.shuffle(results)
     else:
-        results.sort(key=lambda x: x[0], reverse=is_worst)       
+        results.sort(key=lambda x: x[0], reverse=is_worst)   
+        worst_value = 0.0
+        count_results = 0
+        for result in results:
+            worst_value = max(result[0], worst_value)
+            count_results += 1
+            if count_results == popsize:
+                break
+        print("Highest result in the set = {}".format(worst_value))
     final_list = [result[1] for result in results[:popsize]]    
     return np.array(final_list)
 
