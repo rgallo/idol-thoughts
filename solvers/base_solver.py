@@ -21,6 +21,7 @@ STAT_CACHE = {}
 BALLPARK_CACHE = {}
 GAME_CACHE = {}
 BATTER_CACHE = {}
+ATTRS_CACHE = {}
 HITS_CACHE = {}
 HOMERS_CACHE = {}
 SEEDDOGS_CACHE = {}
@@ -331,15 +332,14 @@ def check_rejects(min_condition, max_condition, eventlist, stages, batman_unexva
                 return True                                                             
     return False
 
-def calc_linear_unex_error(vals, wins_losses, gameids, threshold, modname=None):    
+def calc_linear_unex_error(vals, wins_losses, modname=None):    
     max_error_game = ""
     error, max_error, min_error, max_error_val, min_error_val, current_val = 0.0, 0.0, 150.0, 0.0, 0.0, 0.0    
     exponent = 4 if (modname in DIRECT_MOD_SOLVES or modname == "overall") else 6
     window_size, half_window = 100, 50
     #window_size = 300 if (modname == "unmod" or modname == "overall") else 100
     #half_window = 150 if (modname == "unmod" or modname == "overall") else 50
-    wins, major_errors = [], []
-    other_errors = {}
+    wins = []
     win_threshold = False    
     idx = (window_size - 1)
     wins = wins_losses[:idx]    
@@ -358,20 +358,14 @@ def calc_linear_unex_error(vals, wins_losses, gameids, threshold, modname=None):
                 error += current_error ** exponent                               
                 if ((current_val - actual_val) > max_error):
                     max_error = (current_val - actual_val)
-                    max_error_val = current_val            
-                    max_error_game = gameids[idx]
+                    max_error_val = current_val                                
                 if ((current_val - actual_val) < min_error):
                     min_error = (current_val - actual_val)
-                    min_error_val = current_val                
-                if (current_val - actual_val) >= threshold:
-                    if gameids[idx] not in other_errors:
-                        other_errors[gameids[idx]] = {}
-                        other_errors[gameids[idx]]["mofo"] = current_val
-                        other_errors[gameids[idx]]["actual"] = actual_val            
+                    min_error_val = current_val                                       
         idx += 1    
     error += (max_error ** (exponent + 2)) + (abs(min_error ** (exponent + 2)))    
     error *= 0.01
-    return error, max_error, min_error, max_error_val, min_error_val, major_errors, max_error_game, other_errors
+    return error, max_error, min_error, max_error_val, min_error_val
 
 def store_ev_by_team(ev_by_team, hometeam, awayteam, web_ev, mofo_ev):
     if hometeam not in ev_by_team:
@@ -566,6 +560,7 @@ def minimize_func(parameters, *data):
     line_jumpers, reorder_failsfirst, reorder_keys, ev_set, ev_by_team, games_by_mod, vals_by_mod = {}, {}, {}, {}, {}, {}, {}
     all_vals, win_loss, gameids, early_vals, early_sorted, pos_vals = [], [], [], [], [], []
     worst_vals, worst_win_loss, worst_gameids, overall_vals, overall_win_loss, overall_gameids, remove_list = [], [], [], [], [], [], []
+    awayAttrs, homeAttrs = [], []
 
     if solve_batman_too:
         solved_hits, solved_homers = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})        
@@ -601,334 +596,8 @@ def minimize_func(parameters, *data):
         games_available = 1188    
 
     if solve_for_ev and (ALL_GAMES > 0):
-        fail_threshold = BEST_FAILCOUNT        
-    if (CURRENT_ITERATION > 1) and (ALL_GAMES < 700) and solve_for_ev:
-        #not enough games to want to take advantage of line jumping
-        LINE_JUMP_GAMES.clear()
-    for gameid in LINE_JUMP_GAMES:   
-        if reject_solution:
-            break
-        current_best_mod_rates = EXPECTED_MOD_RATES.values()            
-        game = LINE_JUMP_GAMES[gameid]
-        season = int(game["away"]["season"])
-        day = int(game["away"]["day"])
-        pitchers, team_stat_data, pitcher_stat_data, last_stat_filename = None, None, None, None
-        season_team_attrs = team_attrs.get(str(season), {})        
-        cached_games = GAME_CACHE.get((season, day))                            
-        games = cached_games        
-        paired_games = pair_games(games)
-        schedule = get_schedule_from_paired_games(paired_games, season, day)
-        day_mods = get_attrs_from_paired_games(season_team_attrs, paired_games)
-        cached_stats = STAT_CACHE.get((season, day))
-        team_stat_data, pitcher_stat_data, pitchers = cached_stats                        
-        cached_ballparks = BALLPARK_CACHE.get((season, day))          
-        ballparks = cached_ballparks          
-        ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
-        game_attrs = get_attrs_from_paired_game(season_team_attrs, game)
-        awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]                
-        special_game_attrs = (homeAttrs.union(awayAttrs)) - ALLOWED_IN_BASE    
-        game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjustments)                        
-        game_counter += game_game_counter        
-        if game_game_counter == 1:   
-            ev_set[game["away"]["game_id"]] = {}
-            ev_set[game["away"]["game_id"]]["mofoodds"] = game_away_val
-            ev_set[game["away"]["game_id"]]["webodds"] = float(game["away"]["webodds"])   
-            ev_set[game["away"]["game_id"]]["season"] = season
-            all_vals.append(game_away_val)   
-            gameids.append(game["away"]["game_id"])
-            if game_fail_counter == 0:
-                ev_set[game["away"]["game_id"]]["favorite_won"] = True
-            else:
-                ev_set[game["away"]["game_id"]]["favorite_won"] = False
-            if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):                
-                win_loss.append(1)
-                win_loss.append(0)                
-            else:                
-                win_loss.append(0)
-                win_loss.append(1)
-            gameids.append(game["home"]["game_id"])
-            all_vals.append(game_home_val)
-            game_ev, game_mismatch, game_dadbets, game_web_ev, season_ev, season_web_ev = game_ev_calculate(ev_set, game["away"]["game_id"])             
-            if solve_for_ev:
-                game_fail_counter = -game_ev   
-                web_margin -= game_web_ev      
-                gamehomeTeam = get_team_name(game["home"]["team_id"], season, day)
-                gameawayTeam = get_team_name(game["away"]["team_id"], season, day)
-                ev_by_team = store_ev_by_team(ev_by_team, gamehomeTeam, gameawayTeam, game_web_ev, game_ev)   
-                max_team_ev, min_team_ev = -1000.0, 1000.0
-                for team in ev_by_team:
-                    max_team_ev = ev_by_team[team]["net_ev"] if (ev_by_team[team]["net_ev"] > max_team_ev) else max_team_ev
-                    min_team_ev = ev_by_team[team]["net_ev"] if (ev_by_team[team]["net_ev"] < min_team_ev) else min_team_ev                
-                max_run_span = min_team_ev if (min_team_ev < max_run_span) else max_run_span
-        fail_counter += game_fail_counter             
-        if game_game_counter == 1:       
-            if mod_mode:
-                max_fail_rate = 0.0
-                game_attrs = get_attrs_from_paired_game(season_team_attrs, game)                        
-                awayAttrs = game_attrs["away"]
-                homeAttrs = game_attrs["home"]
-                awayMods, homeMods = 0, 0
-                lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
-                lowerHomeAttrs = [attr.lower() for attr in homeAttrs]
-                for name in lowerAwayAttrs:  
-                    if name.upper() in FORCE_REGEN:
-                        continue                  
-                    if name not in mod_games:                        
-                        mod_fails[name] = 0
-                        mod_games[name] = 0
-                        mod_web_fails[name] = 0                    
-                    if name not in games_by_mod:                        
-                        games_by_mod[name] = {}
-                        vals_by_mod[name] = {}
-                    mod_fails[name] += game_fail_counter
-                    mod_games[name] += game_game_counter                    
-                    if game["away"]["game_id"] not in games_by_mod[name]:
-                        games_by_mod[name][game["away"]["game_id"]] = game
-                        vals_by_mod[name][game["away"]["game_id"]] = {}
-                        vals_by_mod[name][game["away"]["game_id"]]["mofo_away"] = game_away_val
-                        vals_by_mod[name][game["away"]["game_id"]]["mofo_home"] = game_home_val
-                        if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
-                            vals_by_mod[name][game["away"]["game_id"]]["away_win"] = 1
-                            vals_by_mod[name][game["away"]["game_id"]]["home_win"] = 0
-                        else:
-                            vals_by_mod[name][game["away"]["game_id"]]["away_win"] = 0
-                            vals_by_mod[name][game["away"]["game_id"]]["home_win"] = 1
-                    if solve_for_ev:
-                        mod_web_fails[name] -= game_web_ev
-                    check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name])  
-                    if (WORST_MOD == name) and (mod_games[name] == ALL_MOD_GAMES[name]) and ((PLUS_NAME == "") or (mod_games[PLUS_NAME] == ALL_MOD_GAMES[PLUS_NAME])):
-                        worst_vals.clear()
-                        worst_win_loss.clear()
-                        worst_gameids.clear()
-                        if PLUS_NAME != "":
-                            for thisgameid in vals_by_mod[PLUS_NAME]:
-                                worst_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_away"])
-                                worst_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_home"])
-                                worst_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["away_win"])
-                                worst_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["home_win"])
-                                worst_gameids.append(thisgameid)
-                                worst_gameids.append(thisgameid)   
-                                if thisgameid not in overall_gameids:
-                                    overall_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_away"])
-                                    overall_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_home"])
-                                    overall_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["away_win"])
-                                    overall_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["home_win"])
-                                    overall_gameids.append(thisgameid)
-                                    overall_gameids.append(thisgameid)
-                        for thisgameid in vals_by_mod[name]:
-                            worst_vals.append(vals_by_mod[name][thisgameid]["mofo_away"])
-                            worst_vals.append(vals_by_mod[name][thisgameid]["mofo_home"])
-                            worst_win_loss.append(vals_by_mod[name][thisgameid]["away_win"])
-                            worst_win_loss.append(vals_by_mod[name][thisgameid]["home_win"])
-                            worst_gameids.append(thisgameid)
-                            worst_gameids.append(thisgameid)   
-                            if thisgameid not in overall_gameids:
-                                overall_vals.append(vals_by_mod[name][thisgameid]["mofo_away"])
-                                overall_vals.append(vals_by_mod[name][thisgameid]["mofo_home"])
-                                overall_win_loss.append(vals_by_mod[name][thisgameid]["away_win"])
-                                overall_win_loss.append(vals_by_mod[name][thisgameid]["home_win"])
-                                overall_gameids.append(thisgameid)
-                                overall_gameids.append(thisgameid)
-                        sorted_win_loss = [x for _,x in sorted(zip(worst_vals, worst_win_loss))]
-                        sorted_gameids = [x for _,x in sorted(zip(worst_vals, worst_gameids))]
-                        worst_vals.sort()                    
-                        worstmod_linear_error, worst_max_linear_error, worst_min_linear_error, worst_max_error_value, worst_min_error_value, worst_errors, worst_max_error_game, worst_other_errors = calc_linear_unex_error(worst_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD)  
-                        if worstmod_linear_error > LAST_BEST:                             
-                            #reject_solution = True
-                            REJECTS += 1     
-                            #break
-                        if worst_max_linear_error > max_linear_error:
-                            max_linear_error = worst_max_linear_error
-                            max_error_value = worst_max_error_value
-                            max_error_mod = name
-                        if worst_min_linear_error < min_linear_error:
-                            min_linear_error = worst_min_linear_error                    
-                            min_error_value = worst_min_error_value
-                            min_error_mod = name
-                    awayMods += 1                          
-                if reject_solution:
-                    break
-                if awayMods > 1:
-                    multi_mod_fails += game_fail_counter
-                    multi_mod_games += game_game_counter
-                for name in lowerHomeAttrs:
-                    if name.upper() in FORCE_REGEN:
-                        continue
-                    if name not in mod_games:                        
-                        mod_fails[name] = 0
-                        mod_games[name] = 0
-                        mod_web_fails[name] = 0
-                    if name not in games_by_mod:                        
-                        games_by_mod[name] = {}
-                        vals_by_mod[name] = {}
-                    mod_fails[name] += game_fail_counter
-                    mod_games[name] += game_game_counter  
-                    try:
-                        trycatch = game["away"]["game_id"] not in games_by_mod[name]
-                    except Exception as e:
-                        print("Exception condition hit")
-                        print(e)
-                        print(game)
-                        print(type(game))
-                        print(name)
-                        print(len(games_by_mod[name]))
-                        print(game["away"])
-                        print(game["away"]["game_id"])
-                        print("Error thrown, game = {}, modname = {}, {} games for mod at error".format(game, name, len(games_by_mod[name])))
-                    if game["away"]["game_id"] not in games_by_mod[name]:
-                        games_by_mod[name][game["away"]["game_id"]] = game
-                        vals_by_mod[name][game["away"]["game_id"]] = {}
-                        vals_by_mod[name][game["away"]["game_id"]]["mofo_away"] = game_away_val
-                        vals_by_mod[name][game["away"]["game_id"]]["mofo_home"] = game_home_val
-                        if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
-                            vals_by_mod[name][game["away"]["game_id"]]["away_win"] = 1
-                            vals_by_mod[name][game["away"]["game_id"]]["home_win"] = 0
-                        else:
-                            vals_by_mod[name][game["away"]["game_id"]]["away_win"] = 0
-                            vals_by_mod[name][game["away"]["game_id"]]["home_win"] = 1
-                    if solve_for_ev:
-                        mod_web_fails[name] -= game_web_ev
-                    check_fail_rate = (mod_fails[name] / ALL_MOD_GAMES[name])
-                    if (WORST_MOD == name) and (mod_games[name] == ALL_MOD_GAMES[name]) and ((PLUS_NAME == "") or (mod_games[PLUS_NAME] == ALL_MOD_GAMES[PLUS_NAME])):
-                        worst_vals.clear()
-                        worst_win_loss.clear()
-                        worst_gameids.clear()
-                        if PLUS_NAME != "":
-                            for thisgameid in vals_by_mod[PLUS_NAME]:
-                                worst_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_away"])
-                                worst_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_home"])
-                                worst_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["away_win"])
-                                worst_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["home_win"])
-                                worst_gameids.append(thisgameid)
-                                worst_gameids.append(thisgameid)   
-                                if thisgameid not in overall_gameids:
-                                    overall_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_away"])
-                                    overall_vals.append(vals_by_mod[PLUS_NAME][thisgameid]["mofo_home"])
-                                    overall_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["away_win"])
-                                    overall_win_loss.append(vals_by_mod[PLUS_NAME][thisgameid]["home_win"])
-                                    overall_gameids.append(thisgameid)
-                                    overall_gameids.append(thisgameid)
-                        for thisgameid in vals_by_mod[name]:
-                            worst_vals.append(vals_by_mod[name][thisgameid]["mofo_away"])
-                            worst_vals.append(vals_by_mod[name][thisgameid]["mofo_home"])
-                            worst_win_loss.append(vals_by_mod[name][thisgameid]["away_win"])
-                            worst_win_loss.append(vals_by_mod[name][thisgameid]["home_win"])
-                            worst_gameids.append(thisgameid)
-                            worst_gameids.append(thisgameid)   
-                            if thisgameid not in overall_gameids:
-                                overall_vals.append(vals_by_mod[name][thisgameid]["mofo_away"])
-                                overall_vals.append(vals_by_mod[name][thisgameid]["mofo_home"])
-                                overall_win_loss.append(vals_by_mod[name][thisgameid]["away_win"])
-                                overall_win_loss.append(vals_by_mod[name][thisgameid]["home_win"])
-                                overall_gameids.append(thisgameid)
-                                overall_gameids.append(thisgameid)                                       
-                        sorted_win_loss = [x for _,x in sorted(zip(worst_vals, worst_win_loss))]
-                        sorted_gameids = [x for _,x in sorted(zip(worst_vals, worst_gameids))]
-                        worst_vals.sort()                    
-                        worstmod_linear_error, worst_max_linear_error, worst_min_linear_error, worst_max_error_value, worst_min_error_value, worst_errors, worst_max_error_game, worst_other_errors = calc_linear_unex_error(worst_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD)  
-                        if worstmod_linear_error > LAST_BEST:                             
-                            #reject_solution = True
-                            REJECTS += 1     
-                            #break
-                        if worst_max_linear_error > max_linear_error:
-                            max_linear_error = worst_max_linear_error
-                            max_error_value = worst_max_error_value
-                            max_error_mod = name
-                        if worst_min_linear_error < min_linear_error:
-                            min_linear_error = worst_min_linear_error                    
-                            min_error_value = worst_min_error_value
-                            min_error_mod = name
-                    homeMods += 1  
-                if reject_solution:
-                    break
-                if homeMods > 1:
-                    multi_mod_fails += game_fail_counter
-                    multi_mod_games += game_game_counter
-                    if solve_for_ev:
-                        multi_mod_web_fails -= game_web_ev
-                if awayMods > 0 and homeMods > 0:
-                    mvm_fails += game_fail_counter
-                    mvm_games += game_game_counter  
-                    if solve_for_ev:
-                        mvm_web_fails -= game_web_ev
-                if awayMods == 0 and homeMods == 0:
-                    unmod_fails += game_fail_counter  
-                    unmod_games += game_game_counter
-                    if "unmod" not in games_by_mod:
-                        games_by_mod["unmod"] = {}                                
-                        vals_by_mod["unmod"] = {}
-                    if game["away"]["game_id"] not in games_by_mod["unmod"]:
-                        games_by_mod["unmod"][game["away"]["game_id"]] = game
-                        vals_by_mod["unmod"][game["away"]["game_id"]] = {}
-                        vals_by_mod["unmod"][game["away"]["game_id"]]["mofo_away"] = game_away_val
-                        vals_by_mod["unmod"][game["away"]["game_id"]]["mofo_home"] = game_home_val
-                        if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):
-                            vals_by_mod["unmod"][game["away"]["game_id"]]["away_win"] = 1
-                            vals_by_mod["unmod"][game["away"]["game_id"]]["home_win"] = 0
-                        else:
-                            vals_by_mod["unmod"][game["away"]["game_id"]]["away_win"] = 0
-                            vals_by_mod["unmod"][game["away"]["game_id"]]["home_win"] = 1
-                    if solve_for_ev:
-                        unmod_web_fails -= game_web_ev
-                    check_fail_rate = (unmod_fails / ALL_UNMOD_GAMES)
-                    if unmod_games == ALL_UNMOD_GAMES:
-                        worst_vals.clear()
-                        worst_win_loss.clear()
-                        worst_gameids.clear()
-                        for thisgameid in vals_by_mod["unmod"]:
-                            worst_vals.append(vals_by_mod["unmod"][thisgameid]["mofo_away"])
-                            worst_vals.append(vals_by_mod["unmod"][thisgameid]["mofo_home"])
-                            worst_win_loss.append(vals_by_mod["unmod"][thisgameid]["away_win"])
-                            worst_win_loss.append(vals_by_mod["unmod"][thisgameid]["home_win"])
-                            worst_gameids.append(thisgameid)
-                            worst_gameids.append(thisgameid)
-                            if thisgameid not in overall_gameids:
-                                overall_vals.append(vals_by_mod["unmod"][thisgameid]["mofo_away"])
-                                overall_vals.append(vals_by_mod["unmod"][thisgameid]["mofo_home"])
-                                overall_win_loss.append(vals_by_mod["unmod"][thisgameid]["away_win"])
-                                overall_win_loss.append(vals_by_mod["unmod"][thisgameid]["home_win"])
-                                overall_gameids.append(thisgameid)
-                                overall_gameids.append(thisgameid)
-                        sorted_win_loss = [x for _,x in sorted(zip(worst_vals, worst_win_loss))]
-                        sorted_gameids = [x for _,x in sorted(zip(worst_vals, worst_gameids))]
-                        worst_vals.sort()                    
-                        unmod_linear_error, worst_max_linear_error, worst_min_linear_error, worst_max_error_value, worst_min_error_value, worst_errors, worst_max_error_game, worst_other_errors = calc_linear_unex_error(worst_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD)  
-                        if WORST_MOD == "unmod":
-                            worstmod_linear_error = unmod_linear_error
-                        if unmod_linear_error > LAST_UNMOD:
-                            #reject_solution = True
-                            REJECTS += 1
-                            #break    
-                        if worst_max_linear_error > max_linear_error:
-                            max_linear_error = worst_max_linear_error
-                            max_error_value = worst_max_error_value
-                            max_error_mod = "unmod"
-                        if worst_min_linear_error < min_linear_error:
-                            min_linear_error = worst_min_linear_error                    
-                            min_error_value = worst_min_error_value
-                            min_error_mod = "unmod"
-                if reject_solution:                             
-                    break
-            if solve_for_ev:   
-                reorder_keys[game["away"]["game_id"]] = game                                
-                if game_fail_counter > 0:
-                    line_jumpers[game["away"]["game_id"]] = game                
-                else:                
-                    new_pass = True
-                    ljg_passed += PASSED_GAMES
-                    if ljg_passed >= 1.0:
-                        line_jumpers[game["away"]["game_id"]] = game                
-                        ljg_passed -= 1          
-                ev_neg_count = fail_counter - web_margin if ((fail_counter - web_margin) > ev_neg_count) else ev_neg_count            
-                if ev_neg_count >= fail_threshold:                                          
-                    reject_solution = True                        
-                    REJECTS += 1                                        
-                    break
-                if max_run_span < LAST_SPAN:
-                    reject_solution = True                        
-                    REJECTS += 1       
-                    #print("Solution rejected for too large a span. {:.2f} this run, {:.2f} last best, {} games".format((max_team_ev - min_team_ev), LAST_SPAN, game_counter))
-                    break
+        fail_threshold = BEST_FAILCOUNT            
+    LINE_JUMP_GAMES.clear()    
 
     seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))
     dayrange = range(MIN_DAY, MAX_DAY + 1)
@@ -1116,9 +785,22 @@ def minimize_func(parameters, *data):
                     continue
                 if int(pitcher_stat_data[homePitcher]["innings"]) < 8:
                     #print("Skipping game because of too few innings")
-                    continue
-                game_attrs = get_attrs_from_paired_game(season_team_attrs, game)                        
-                awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]     
+                    continue                
+                if game["away"]["game_id"] in ATTRS_CACHE:
+                    awayAttrs = ATTRS_CACHE[game["away"]["game_id"]][game["away"]["team_id"]]
+                    homeAttrs = ATTRS_CACHE[game["away"]["game_id"]][game["home"]["team_id"]]
+                else:                          
+                    awayAttrs.clear(), homeAttrs.clear()
+                    game_attrs = get_attrs_from_paired_game(season_team_attrs, game)
+                    for attr in game_attrs["away"]:
+                        if attr.lower() != "":
+                            awayAttrs.append(attr.lower())
+                    for attr in game_attrs["home"]:
+                        if attr.lower() != "":
+                            homeAttrs.append(attr.lower())                    
+                    ATTRS_CACHE[game["away"]["game_id"]] = {}
+                    ATTRS_CACHE[game["away"]["game_id"]][game["away"]["team_id"]] = copy.deepcopy(awayAttrs)
+                    ATTRS_CACHE[game["away"]["game_id"]][game["home"]["team_id"]] = copy.deepcopy(homeAttrs)                                        
                 gamehomeTeam = get_team_name(game["home"]["team_id"], season, day)
                 gameawayTeam = get_team_name(game["away"]["team_id"], season, day)     
                 if not using_cached_batters:
@@ -1144,7 +826,7 @@ def minimize_func(parameters, *data):
                 ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
                 if solve_batman_too:
                     #try:
-                    game_game_counter, game_fail_counter, game_away_val, game_home_val, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, True)          
+                    game_game_counter, game_fail_counter, game_away_val, game_home_val, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = calc_func(game, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, True)          
                     solved_hits, solved_homers = {**solved_hits, **away_hits, **home_hits}, {**solved_homers, **away_homers, **home_homers}
                     if crimes_list is not None:
                         solved_steals = {**solved_steals, **away_stolen_bases, **home_stolen_bases}
@@ -1229,8 +911,8 @@ def minimize_func(parameters, *data):
                                                    
                     if mod_mode:                        
                         awayMods, homeMods = 0, 0
-                        lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
-                        lowerHomeAttrs = [attr.lower() for attr in homeAttrs]
+                        lowerAwayAttrs = awayAttrs
+                        lowerHomeAttrs = homeAttrs
                         allAttrs_lol = [lowerAwayAttrs, lowerHomeAttrs]
                         allAttrs_set = set().union(*allAttrs_lol)                        
                         allModAttrs_set = allAttrs_set.intersection(CALC_MOD_SUCCESS)
@@ -1299,6 +981,10 @@ def minimize_func(parameters, *data):
                 #seeddogs has to be determined sometime and requires going through all of the players anyway, unfortunately
                 for playerid in solved_hits:
                     solved_seeddogs[playerid] = (solved_hits[playerid] * 1.5) + (solved_homers[playerid] * 4.0)
+                    if crimes_list is not None:
+                        solved_seedpickles[playerid] = (solved_hits[playerid] * 1.5) + (solved_steals[playerid] * 3.0)
+                        solved_dogpickles[playerid] = (solved_homers[playerid] * 4.0) + (solved_steals[playerid] * 3.0)
+                        solved_trifecta[playerid] = (solved_hits[playerid] * 1.5) + (solved_homers[playerid] * 4.0) + (solved_steals[playerid] * 3.0)
                 for playerid in solved_ks:
                     #for chipsburgers, we would still be prioritizing lowest SHO chance, above all else, so it's a sort by solved era lowest to highest                    
                     solved_chipsmeatballs[playerid] = (solved_ks[playerid] * 0.2) + solved_meatballs[playerid]
@@ -1308,21 +994,16 @@ def minimize_func(parameters, *data):
                 sorted_solved_ks, sorted_solved_era = dict(sorted(solved_ks.items(), key=lambda k: k[1], reverse=True)), dict(sorted(solved_era.items(), key=lambda k: k[1], reverse=False))
                 sorted_solved_chipsmeatballs = dict(sorted(solved_chipsmeatballs.items(), key=lambda k: k[1], reverse=True))
                 if crimes_list is not None:                    
-                    for playerid in solved_steals:
-                        #somehow getting players who are in solved steals, but not solved hits?                        
-                        solved_seedpickles[playerid] = (solved_hits[playerid] * 1.5) + (solved_steals[playerid] * 3.0)
-                        solved_dogpickles[playerid] = (solved_homers[playerid] * 4.0) + (solved_steals[playerid] * 3.0)
-                        solved_trifecta[playerid] = (solved_hits[playerid] * 1.5) + (solved_homers[playerid] * 4.0) + (solved_steals[playerid] * 3.0)
                     sorted_solved_steals = dict(sorted(solved_steals.items(), key=lambda k: k[1], reverse=True)) 
                     sorted_solved_seedpickles = dict(sorted(solved_seedpickles.items(), key=lambda k: k[1], reverse=True))
                     sorted_solved_dogpickles = dict(sorted(solved_dogpickles.items(), key=lambda k: k[1], reverse=True))
                     sorted_solved_trifecta = dict(sorted(solved_trifecta.items(), key=lambda k: k[1], reverse=True))
 
                 if not using_cached_batters:
-                    remove_list.clear()                    
+                    remove_list.clear()                                                            
                     for batter in HITS_CACHE[(season, day)]:
                         if batter not in solved_hits:                            
-                            remove_list.append(batter)
+                            remove_list.append(batter)                                                 
                     if len(remove_list) > 0:
                         pre_removal_hits_leader = next(iter(HITS_CACHE[(season, day)]))
                         pre_removal_homers_leader = next(iter(HOMERS_CACHE[(season, day)]))
@@ -1509,7 +1190,7 @@ def minimize_func(parameters, *data):
         fail_rate = 1.0   
     if len(win_loss) == 0:
         TOTAL_GAME_COUNTER = game_counter if (game_counter > TOTAL_GAME_COUNTER) else TOTAL_GAME_COUNTER         
-
+            
     fail_points, linear_points = 10000000000.0, 10000000000.0    
     max_fail_rate, expected_average = 0.0, 0.25
     longest_modname = 0
@@ -1518,7 +1199,7 @@ def minimize_func(parameters, *data):
     max_mod_unmod, max_error_game, new_plusname = "", "", ""
     new_worstmod = WORST_MOD
     best_plusname = PLUS_NAME
-    max_mod_rates, mod_vals, mod_win_loss, mod_gameids, errors, mod_pos_vals = [], [], [], [], [], []
+    max_mod_rates, mod_vals, mod_win_loss, mod_gameids, errors, mod_pos_vals, sorted_win_loss = [], [], [], [], [], [], []
     other_errors, linear_by_mod = {}, {}
     linear_fail = 9000000000000000.0    
     season_fail = 100000000.0
@@ -1631,10 +1312,12 @@ def minimize_func(parameters, *data):
                         new_plusname = modname
                         linear_by_mod[modname] = 0.0
                         continue
-                    sorted_win_loss = [x for _,x in sorted(zip(mod_vals, mod_win_loss))]
-                    sorted_gameids = [x for _,x in sorted(zip(mod_vals, mod_gameids))]
+                    sorted_win_loss.clear()
+                    for _,x in sorted(zip(mod_vals, mod_win_loss)):
+                        sorted_win_loss.append(x)
+                    #sorted_win_loss = [x for _,x in sorted(zip(mod_vals, mod_win_loss))]                    
                     mod_vals.sort()                        
-                    mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value, mod_errors, mod_max_error_game, mod_other_errors = calc_linear_unex_error(mod_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD, modname)                                           
+                    mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value = calc_linear_unex_error(mod_vals, sorted_win_loss, modname)                    
                     mod_pos_vals.clear()                    
                     for val in mod_vals:
                         if val >= 0.5:
@@ -1663,8 +1346,7 @@ def minimize_func(parameters, *data):
                         if not new_plusname == "":
                             best_plusname = new_plusname
                         else:
-                            best_plusname = ""
-                    max_error_game = mod_max_error_game if (mod_max_linear_error > max_linear_error) else max_error_game
+                            best_plusname = ""                    
                     if mod_max_linear_error > max_linear_error:
                         max_linear_error = mod_max_linear_error
                         max_error_value = mod_max_error_value
@@ -1682,12 +1364,12 @@ def minimize_func(parameters, *data):
                             unmod_min_linear_error = mod_min_linear_error
                             unmod_min_error_value = mod_min_error_value
                             unmod_min_error_mod = modname
-                    errors.append(mod_errors)                    
-                    other_errors = mod_other_errors     
-                sorted_win_loss = [x for _,x in sorted(zip(overall_vals, overall_win_loss))]
-                sorted_gameids = [x for _,x in sorted(zip(overall_vals, overall_gameids))]
+                sorted_win_loss.clear()
+                for _,x in sorted(zip(overall_vals, overall_win_loss)):
+                    sorted_win_loss.append(x)
+                #sorted_win_loss = [x for _,x in sorted(zip(overall_vals, overall_win_loss))]                
                 overall_vals.sort()                    
-                overall_linear_error, overall_max_linear_error, overall_min_linear_error, overall_max_error_value, overall_min_error_value, overall_errors, overall_max_error_game, overall_other_errors = calc_linear_unex_error(overall_vals, sorted_win_loss, sorted_gameids, ERROR_THRESHOLD, "overall")                  
+                overall_linear_error, overall_max_linear_error, overall_min_linear_error, overall_max_error_value, overall_min_error_value = calc_linear_unex_error(overall_vals, sorted_win_loss, "overall")                  
                 overall_linear_error += (overall_linear_error * modcount * batman_score) - (((expected_average * 100.0) ** 2.0) * correction_adjustment)
                 overall_linear_error *= 0.1
                 linear_error += overall_linear_error
@@ -1828,10 +1510,10 @@ def minimize_func(parameters, *data):
         #            else:
         #                LINE_JUMP_GAMES[newgame] = games_by_mod["unmod"][newgame]
         LAST_UNMOD = unmod_linear_error
-        WORST_ERROR_GAME.clear()           
-        WORST_ERROR_GAME[max_error_game] = {}
-        WORST_ERROR_GAME[max_error_game]["mofo"] = max_error_value
-        WORST_ERROR_GAME[max_error_game]["actual"] = max_error_value - max_linear_error                        
+        #WORST_ERROR_GAME.clear()           
+        #WORST_ERROR_GAME[max_error_game] = {}
+        #WORST_ERROR_GAME[max_error_game]["mofo"] = max_error_value
+        #WORST_ERROR_GAME[max_error_game]["actual"] = max_error_value - max_linear_error                        
         ERROR_THRESHOLD = max_linear_error          
         if solve_for_ev:                                
             LAST_SPAN = (max_run_span * 1.05) if (max_run_span < 0) else (max_run_span * 0.95)                   
@@ -1916,7 +1598,7 @@ def minimize_func(parameters, *data):
             detailtext += "\nBATMAN error = {:.0f}, total = {:.0f}, fail rate {:.2f}%, expected {:.2f}%".format(batman_error, linear_fail, fail_rate * 100.0, (1.0 - expected_average) * 100.0)
             if solve_batman_too:
                 thresholds = {}
-                thresholds["seeds"], thresholds["dogs"], thresholds["seeddogs"], thresholds["pickles"], thresholds["seedpickles"], thresholds["dogpickles"], thresholds["trifecta"] = 0.4944, 0.2389, 0.4818, 0.3636, 0.3987, 0.3732, 0.4016
+                thresholds["seeds"], thresholds["dogs"], thresholds["seeddogs"], thresholds["pickles"], thresholds["seedpickles"], thresholds["dogpickles"], thresholds["trifecta"] = 0.4902, 0.1897, 0.4886, 0.3649, 0.3906, 0.3681, 0.4327
                 detailtext += "\nBATMAN earnings (% of max possible) - Seeds {:.2f}%{}, Dogs {:.2f}%{}, Seeds+Dogs {:.2f}%{}".format(seeds_score * 100.0, ("!" if seeds_score > thresholds["seeds"] else ""), dogs_score * 100.0, ("!" if dogs_score > thresholds["dogs"] else ""), seeddogs_score * 100.0, ("!" if seeddogs_score > thresholds["seeddogs"] else ""))
                 if crimes_list is not None:
                     detailtext += "\nENOCH earnings (% of max possible) - Pickles {:.2f}%{}, Seeds+Pickles {:.2f}%{}, Dogs+Pickles {:.2f}%{}, Trifecta {:.2f}%{}".format(pickles_score * 100.0, ("!" if pickles_score > thresholds["pickles"] else ""), seedpickles_score * 100.0, ("!" if seedpickles_score > thresholds["seedpickles"] else ""), dogpickles_score * 100.0, ("!" if dogpickles_score > thresholds["dogpickles"] else ""), trifecta_score * 100.0, ("!" if trifecta_score > thresholds["trifecta"] else ""))

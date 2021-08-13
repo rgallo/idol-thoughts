@@ -8,9 +8,59 @@ import json
 import helpers
 import os
 import mofo
+import copy
 
 from dotenv import load_dotenv
 from solvers import base_solver
+
+def pair_games(games):
+    gamelist = collections.defaultdict(lambda: [])
+    for game in games:
+        gamelist[game["game_id"]].append(game)    
+    results = []
+    for game_id, games in gamelist.items():        
+        if (len(games) == 2) and (games[0]["pitcher_is_home"] != games[1]["pitcher_is_home"]):            
+            results.append({("home" if game["pitcher_is_home"] == "True" else "away"): game for game in games})
+        else:
+            #this is a circumstance where the game has more then two rows
+            #we want to find the pitcher with the most innings of the multiple pitchers, give them the remaining innings
+            #and still build the game into the paired games result
+            #print("More than two rows for this game")            
+            home_game_found, away_game_found = False, False
+            max_home_innings_pitched, max_away_innings_pitched, total_home_innings_pitched, total_away_innings_pitched = 0, 0, 0, 0
+            home_opp_rbi, away_opp_rbi = 0, 0
+            for game in games:
+                if (game["pitcher_is_home"] == "True"):
+                    #print("Home pitcher who pitched {} innings".format(game["innings_pitched"]))
+                    if int(game["innings_pitched"]) > max_home_innings_pitched:
+                        home_pitcher_id = game["pitcher_id"]
+                        max_home_innings_pitched = int(game["innings_pitched"])                    
+                    total_home_innings_pitched += int(game["innings_pitched"])
+                    home_opp_rbi += float(game["opposing_team_rbi"])
+                if (game["pitcher_is_home"] == "False"):
+                    #print("Away pitcher who pitched {} innings".format(game["innings_pitched"]))
+                    if int(game["innings_pitched"]) > max_away_innings_pitched:
+                        away_pitcher_id = game["pitcher_id"]
+                        max_away_innings_pitched = int(game["innings_pitched"])                    
+                    total_away_innings_pitched += int(game["innings_pitched"])
+                    away_opp_rbi += float(game["opposing_team_rbi"])
+            for game in games:
+                if home_game_found and away_game_found:
+                    break
+                if (game["pitcher_is_home"] == "True") and (int(game["innings_pitched"]) == max_home_innings_pitched) and (not home_game_found):                    
+                    home_game = copy.deepcopy(game)
+                    home_game["innings_pitched"] = total_home_innings_pitched
+                    home_game["opposing_team_rbi"] = home_opp_rbi
+                    home_game["pitcher_id"] = home_pitcher_id                                                       
+                    home_game_found = True
+                if (game["pitcher_is_home"] == "False") and (int(game["innings_pitched"]) == max_away_innings_pitched) and (not away_game_found):                    
+                    away_game = copy.deepcopy(game)
+                    away_game["innings_pitched"] = total_away_innings_pitched
+                    away_game["opposing_team_rbi"] = away_opp_rbi
+                    away_game["pitcher_id"] = away_pitcher_id                                                           
+                    away_game_found = True    
+            results.append({"home": home_game, "away": away_game})                    
+    return results
 
 def setup_playerbased(homeTeamId, weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, ballparks, team_stat_data, pitcher_stat_data):
     terms_url = os.getenv("FOMO_TERMS")        
@@ -44,6 +94,8 @@ def process_games(game_list, batter_list, crimes_list, stat_file_map, ballpark_f
     solved_hits_score, solved_homers_score, solved_seeddogs_score, solved_pickles_score, solved_seedpickles_score, solved_dogpickles_score, solved_trifecta_score = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     real_hits_score, real_homers_score, real_seeddogs_score, real_steals_score, real_seedpickles_score, real_dogpickles_score, real_trifecta_score = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     idle_seeds_score, idle_dogs_score, idle_seeddogs_score, idle_pickles_score, idle_seedpickles_score, idle_dogpickles_score, idle_trifecta_score = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    player_names_by_id = {}
+    awayAttrs, homeAttrs = [], []
     static_idle_hours = 8
     first_idle_day = 15
     static_active_hours = 24 - static_idle_hours
@@ -72,7 +124,7 @@ def process_games(game_list, batter_list, crimes_list, stat_file_map, ballpark_f
             continue
         pitchers, team_stat_data, pitcher_stat_data, last_stat_filename, ballparks = (None, ) * 5     
         season_team_attrs = team_attrs.get(str(season), {})
-        paired_games = base_solver.pair_games(games)            
+        paired_games = pair_games(games)
         schedule = base_solver.get_schedule_from_paired_games(paired_games, season, day)
         day_mods = base_solver.get_attrs_from_paired_games(season_team_attrs, paired_games)
         stat_filename = stat_file_map.get((season, day))
@@ -107,6 +159,10 @@ def process_games(game_list, batter_list, crimes_list, stat_file_map, ballpark_f
             if ballparks is None:  # this should use the previous value of ballparks by default, use default if not
                 ballparks = collections.defaultdict(lambda: collections.defaultdict(lambda: 0.5))
         real_steals = base_solver.pair_crimes_with_batter(crimes_list, team_stat_data, season, day)
+        player_names_by_id.clear()
+        for team in team_stat_data:
+            for playerid in team_stat_data[team]:
+                player_names_by_id[playerid] = team_stat_data[team][playerid]["name"]
         if day > 1:
             sorted_season_hits, sorted_season_homers = dict(sorted(season_hits.items(), key=lambda k: k[1], reverse=True)), dict(sorted(season_homers.items(), key=lambda k: k[1], reverse=True))
             sorted_season_seeddogs, sorted_season_steals = dict(sorted(season_seeddogs.items(), key=lambda k: k[1], reverse=True)), dict(sorted(season_steals.items(), key=lambda k: k[1], reverse=True))
@@ -114,10 +170,19 @@ def process_games(game_list, batter_list, crimes_list, stat_file_map, ballpark_f
             sorted_season_dogpickles = dict(sorted(season_dogpickles.items(), key=lambda k: k[1], reverse=True))
             sorted_season_trifecta = dict(sorted(season_trifecta.items(), key=lambda k: k[1], reverse=True))
         #get all data stuff sorted        
-        for game in paired_games:                                     
+        for game in paired_games:                    
             away_game, home_game = game["away"], game["home"]    
-            game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)                        
-            awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]                
+            awayAttrs.clear(), homeAttrs.clear()
+            game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)    
+            for attr in game_attrs["away"]:
+                if attr.lower() != "":
+                    awayAttrs.append(attr.lower())
+            for attr in game_attrs["home"]:
+                if attr.lower() != "":
+                    homeAttrs.append(attr.lower())                        
+            if (pitchers.get(away_game["pitcher_id"]) == None) or (pitchers.get(home_game["pitcher_id"]) == None):
+                #print("At least one pitcher id comes back as None")
+                continue
             awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
             homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])
             #try:
@@ -172,8 +237,13 @@ def process_games(game_list, batter_list, crimes_list, stat_file_map, ballpark_f
                     idle_seeds_score += real_hits[idle_idol_seeds] * 1500.0
                     solved_hits_score += real_hits[idle_idol_seeds] * 1500.0                    
                 if idle_idol_dogs in real_homers:
-                    idle_dogs_score += real_homers[idle_idol_dogs] * 4000.0                
+                    idle_dogs_score += real_homers[idle_idol_dogs] * 4000.0     
+                    #print("Passive Season dogs idol for day {} = {} with {} season homers".format(day, idle_idol_dogs_name, season_homers[idle_idol_dogs]))                    
                     solved_homers_score += real_homers[idle_idol_dogs] * 4000.0
+                #for playerid in sorted_season_homers:                
+                #    if playerid in solved_homers:                                                                                            
+                #        print("Active Season dogs idol for day {} = {} with {} season homers".format(day, player_names_by_id[playerid], season_homers[idle_idol_dogs]))
+                #        break
                 if idle_idol_seeddogs in real_hits:
                     idle_seeddogs_score += real_hits[idle_idol_seeddogs] * 1500.0
                     idle_seeddogs_score += real_homers[idle_idol_seeddogs] * 4000.0
@@ -210,7 +280,9 @@ def process_games(game_list, batter_list, crimes_list, stat_file_map, ballpark_f
                     if playerid in solved_homers:
                         idle_idol_dogs = playerid
                         if idle_idol_dogs in real_homers:
-                            idle_dogs_score += real_homers[idle_idol_dogs] * 4000.0                    
+                            idle_dogs_score += real_homers[idle_idol_dogs] * 4000.0
+                            idle_idol_dogs_name = player_names_by_id[playerid]
+                        #print("Active Season dogs idol for day {} = {} with {} season homers".format(day, idle_idol_dogs_name, season_homers[idle_idol_dogs]))
                         break
                 for playerid in sorted_season_seeddogs:
                     if playerid in solved_hits:
@@ -246,10 +318,7 @@ def process_games(game_list, batter_list, crimes_list, stat_file_map, ballpark_f
                             idle_trifecta_score += real_steals[idle_idol_trifecta] * 3000.0
                             idle_trifecta_score += real_hits[idle_idol_trifecta] * 1500.0
                             idle_trifecta_score += real_homers[idle_idol_trifecta] * 4000.0
-                        break
-
-            sorted_season_hits.clear(), sorted_season_homers.clear(), sorted_season_seeddogs.clear(), sorted_season_steals.clear() 
-            sorted_season_seedpickles.clear(), sorted_season_dogpickles.clear(), sorted_season_trifecta.clear()
+                        break            
         
         if day in active_days:              
             active_seeds_idol = next(iter(sorted_solved_hits))
@@ -306,8 +375,8 @@ def process_games(game_list, batter_list, crimes_list, stat_file_map, ballpark_f
 
         solved_hits.clear(), solved_homers.clear(), solved_seeddogs.clear(), solved_steals.clear(), solved_seedpickles.clear(), solved_dogpickles.clear(), solved_trifecta.clear()
         real_hits.clear(), real_homers.clear(), real_seeddogs.clear(), real_steals.clear(), real_seedpickles.clear(), real_dogpickles.clear(), real_trifecta.clear()        
-        sorted_solved_hits.clear(), sorted_solved_homers.clear(), sorted_solved_seeddogs.clear(), sorted_solved_steals.clear(), sorted_solved_seedpickles.clear(), sorted_solved_dogpickles.clear(), sorted_solved_trifecta.clear()
-        sorted_real_hits.clear(), sorted_real_homers.clear(), sorted_real_seeddogs.clear(), sorted_real_steals.clear(), sorted_real_seedpickles.clear(), sorted_real_dogpickles.clear(), sorted_real_trifecta.clear()        
+        #sorted_solved_hits.clear(), sorted_solved_homers.clear(), sorted_solved_seeddogs.clear(), sorted_solved_steals.clear(), sorted_solved_seedpickles.clear(), sorted_solved_dogpickles.clear(), sorted_solved_trifecta.clear()
+        #sorted_real_hits.clear(), sorted_real_homers.clear(), sorted_real_seeddogs.clear(), sorted_real_steals.clear(), sorted_real_seedpickles.clear(), sorted_real_dogpickles.clear(), sorted_real_trifecta.clear()        
     
     if idle_seeds_score >= solved_hits_score:
         print("Seeds better off idling.")
@@ -375,6 +444,6 @@ def main():
     seed_score, dogs_score, seed_dogs_score, pickles_score, seedpickles_score, dogpickles_score, trifecta_score, season_seeds_threshold, season_dogs_threshold, season_seeddogs_threshold, season_pickles_threshold, season_seedpickles_threshold, season_dogpickles_threshold, season_trifecta_threshold = process_games(game_list, batter_list, crimes_list, stat_file_map, ballpark_file_map, team_attrs, season, dayrange)
     print("Scores are in % of optimum earnings potential, defined as % of top idle earner for the season")
     print("Scores:     Seeds = {:.2f}%, dogs = {:.2f}%, seeds + dogs = {:.2f}%, pickles = {:.2f}%, seeds + pickles = {:.2f}%, dogs + pickles = {:.2f}%, trifecta = {:.2f}%".format(seed_score, dogs_score, seed_dogs_score, pickles_score, seedpickles_score, dogpickles_score, trifecta_score))
-    print("Thresholds: Seeds = {:.2f}%, dogs = {:.2f}%, seeds + dogs = {:.2f}%, pickles = {:.2f}%, seeds + pickles = {:.2f}%, dogs + pickles = {:.2f}%, trifecta = {:.2f}%".format(season_seeds_threshold, season_dogs_threshold, season_seeddogs_threshold, season_pickles_threshold, season_seedpickles_threshold, season_dogpickles_threshold, season_trifecta_threshold))
+    print("Thresholds: \nSeeds = {:.2f}%\ndogs = {:.2f}%\nseeds + dogs = {:.2f}%\npickles = {:.2f}%\nseeds + pickles = {:.2f}%\ndogs + pickles = {:.2f}%\ntrifecta = {:.2f}%".format(season_seeds_threshold, season_dogs_threshold, season_seeddogs_threshold, season_pickles_threshold, season_seedpickles_threshold, season_dogpickles_threshold, season_trifecta_threshold))
 if __name__ == "__main__":
     main()

@@ -389,7 +389,10 @@ def get_team_attributes(attributes={}):
 def adjust_stlats(row, game, day, roster_size, raw_player_attrs, team_attrs=None):
     blood_count = 12.0
     blood_pct = 1.0 / blood_count
-    player_attrs = [attr.upper() for attr in raw_player_attrs.split(";")]      
+    player_attrs = []
+    for attr in raw_player_attrs.split(";"):
+        if attr.lower() != "":
+            player_attrs.append(attr.upper())      
     new_row = row.copy()
     if game:
         team = row["team"]
@@ -448,7 +451,7 @@ def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_
         if not team_stat_data[awayTeam][playerid]["shelled"]:
             adjusted_batting_stlats = {"patheticism": team_stat_data[awayTeam][playerid]["patheticism"], "tragicness": team_stat_data[awayTeam][playerid]["tragicness"], "thwackability": team_stat_data[awayTeam][playerid]["thwackability"], "divinity": team_stat_data[awayTeam][playerid]["divinity"], "moxie": team_stat_data[awayTeam][playerid]["moxie"], "musclitude": team_stat_data[awayTeam][playerid]["musclitude"], "martyrdom": team_stat_data[awayTeam][playerid]["martyrdom"]}
             adjusted_running_stlats = {"laserlikeness": team_stat_data[awayTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[awayTeam][playerid]["baseThirst"], "continuation": team_stat_data[awayTeam][playerid]["continuation"], "groundFriction": team_stat_data[awayTeam][playerid]["groundFriction"], "indulgence": team_stat_data[awayTeam][playerid]["indulgence"]}
-        if "A" in awayAttrs or "AA" in awayAttrs or "AAA" in awayAttrs:
+        if "a" in awayAttrs or "aa" in awayAttrs or "aaa" in awayAttrs:
             adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
             if not team_stat_data[awayTeam][playerid]["shelled"]:
                 adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
@@ -468,7 +471,7 @@ def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_
         if not team_stat_data[homeTeam][playerid]["shelled"]:            
             adjusted_batting_stlats = {"patheticism": team_stat_data[homeTeam][playerid]["patheticism"], "tragicness": team_stat_data[homeTeam][playerid]["tragicness"], "thwackability": team_stat_data[homeTeam][playerid]["thwackability"], "divinity": team_stat_data[homeTeam][playerid]["divinity"], "moxie": team_stat_data[homeTeam][playerid]["moxie"], "musclitude": team_stat_data[homeTeam][playerid]["musclitude"], "martyrdom": team_stat_data[homeTeam][playerid]["martyrdom"]}
             adjusted_running_stlats = {"laserlikeness": team_stat_data[homeTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[homeTeam][playerid]["baseThirst"], "continuation": team_stat_data[homeTeam][playerid]["continuation"], "groundFriction": team_stat_data[homeTeam][playerid]["groundFriction"], "indulgence": team_stat_data[homeTeam][playerid]["indulgence"]}
-        if "A" in homeAttrs or "AA" in homeAttrs or "AAA" in homeAttrs:
+        if "a" in homeAttrs or "aa" in homeAttrs or "aaa" in homeAttrs:
             adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
             if not team_stat_data[homeTeam][playerid]["shelled"]:
                 adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
@@ -527,21 +530,27 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
         games.update({game["awayTeamName"]: game for game in schedule})
     pitcherstatdata = collections.defaultdict(lambda: {})
     teamstatdata = collections.defaultdict(lambda: collections.defaultdict(lambda: {}))
+    player_attrs = []
     for row in filedata:
-        player_attrs = row["permAttr"] + ";" + row["seasAttr"] + ";" + row["weekAttr"] + ";" + row["gameAttr"]
+        player_attrs_string = row["permAttr"] + ";" + row["seasAttr"] + ";" + row["weekAttr"] + ";" + row["gameAttr"]
+        for attr in player_attrs_string.split(";"):
+            if attr.lower() != "":
+                player_attrs.append(attr.lower())
         team = row["team"]
         player_id = row["id"]
         roster_size = sum(1 for player in filedata if player["team"] == team)        
         if games:
             game = games.get(team)            
-            new_row = adjust_stlats(row, game, day, roster_size, player_attrs, team_attrs)
+            new_row = adjust_stlats(row, game, day, roster_size, player_attrs_string, team_attrs)
         else:
             new_row = row
         if new_row["position"] == "rotation":
             for key in (PITCHING_STLATS + ["pitchingStars"]):
                 pitcherstatdata[new_row["name"]][key] = float(new_row[key])
             pitcherstatdata[new_row["name"]]["ispitcher"] = True
-            pitcherstatdata[new_row["name"]]["attrs"] = player_attrs
+            pitcherstatdata[new_row["name"]]["attrs"] = []
+            for attr in player_attrs:
+                pitcherstatdata[new_row["name"]]["attrs"].append(attr)
             if game:                
                 if team == game["homeTeamName"]:
                     pitcherstatdata[new_row["name"]]["innings"] = game["homeInningsPitched"]                    
@@ -550,23 +559,27 @@ def load_stat_data_pid(filepath, schedule=None, day=None, team_attrs=None):
             else:
                 pitcherstatdata[new_row["name"]]["innings"] = 9                
         elif new_row["position"] == "lineup":            
-            if "SHELLED" not in player_attrs and "ELSEWHERE" not in player_attrs:
+            if "shelled" not in player_attrs and "elsewhere" not in player_attrs:
                 for key in (BATTING_STLATS + BASERUNNING_STLATS + ["battingStars", "baserunningStars"]):
                     teamstatdata[team][player_id][key] = float(new_row[key])                
                 teamstatdata[team][player_id]["ispitcher"] = False
-                teamstatdata[team][player_id]["shelled"] = ("SHELLED" in player_attrs)
+                teamstatdata[team][player_id]["shelled"] = ("shelled" in player_attrs)
                 teamstatdata[team][player_id]["turnOrder"] = int(new_row["turnOrder"])                
-            if "ELSEWHERE" not in player_attrs:
+            if "elsewhere" not in player_attrs:
                 for key in (DEFENSE_STLATS + ["defenseStars"]):
                     teamstatdata[team][player_id][key] = float(new_row[key])                          
                 teamstatdata[team][player_id]["ispitcher"] = False
-                teamstatdata[team][player_id]["shelled"] = ("SHELLED" in player_attrs)
-                teamstatdata[team][player_id]["reverberating"] = ("REVERBERATING" in player_attrs)
-                teamstatdata[team][player_id]["repeating"] = ("REPEATING" in player_attrs)
+                teamstatdata[team][player_id]["shelled"] = ("shelled" in player_attrs)
+                teamstatdata[team][player_id]["reverberating"] = ("reverberating" in player_attrs)
+                teamstatdata[team][player_id]["repeating"] = ("repeating" in player_attrs)
             if player_id in teamstatdata[team]:  # these are defaultdicts so we don't want to add skipped players                
                 teamstatdata[team][player_id]["team"] = team
                 teamstatdata[team][player_id]["name"] = new_row["name"]
-                teamstatdata[team][player_id]["attrs"] = player_attrs       
+                teamstatdata[team][player_id]["attrs"] = []
+                for attr in player_attrs:
+                    if attr.lower() != "":
+                        teamstatdata[team][player_id]["attrs"].append(attr.lower())
+        player_attrs.clear()
     return teamstatdata, pitcherstatdata
 
 

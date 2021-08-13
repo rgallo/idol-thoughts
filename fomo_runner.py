@@ -61,7 +61,13 @@ def process_fomo(game, team_stat_data, pitcher_stat_data, day):
     awayPitcherId, homePitcherId = game["awayPitcher"], game["homePitcher"]
     awayTeam, homeTeam = game["awayTeamName"], game["homeTeamName"]
     awayEmoji, homeEmoji = game['awayTeamEmoji'], game['homeTeamEmoji']
-    awayAttrs, homeAttrs = get_team_attributes()[awayTeam], get_team_attributes()[homeTeam]    
+    awayAttrs, homeAttrs = [], []
+    for attr in get_team_attributes()[awayTeam]:
+        if attr.lower != "":
+            awayAttrs.append(attr.lower())
+    for attr in get_team_attributes()[homeTeam]:
+        if attr.lower != "":
+            homeAttrs.append(attr.lower())    
     awayFOMO, homeFOMO = fomo.calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs, day, game["weather"])
     results.append(FOMOData(awayPitcher, awayPitcherId, awayTeam, gameId, awayEmoji, homeTeam, homeEmoji,
                                game["awayTeamNickname"], game["homeTeamNickname"], game["awayOdds"], awayFOMO))

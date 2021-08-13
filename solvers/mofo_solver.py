@@ -33,13 +33,11 @@ import helpers
 #                   "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 
-def get_mofo_results(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, runtime_solution):    
-    awayMods, homeMods = [], []
-    game_attrs = base_solver.get_attrs_from_paired_game(season_team_attrs, game)
+def get_mofo_results(game, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, runtime_solution):    
+    awayMods, homeMods = [], []    
     #special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
     #if special_game_attrs:        
-    #    return 0, 0, 0, 0    
-    awayAttrs, homeAttrs = game_attrs["away"], game_attrs["home"]    
+    #    return 0, 0, 0, 0        
     away_game, home_game = game["away"], game["home"]    
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])           
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    

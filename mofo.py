@@ -262,9 +262,8 @@ def calc_pitching(terms, pitcher_mods, park_mods, pitcher_stat_data, bloodMods=N
     return player_unthwackability, player_ruthlessness, player_overpowerment, player_shakespearianism, player_coldness
 
 def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, blood_calc=None, innings=9, outs=3):
-    battingAttrs = [attr.lower() for attr in teamAttrs]
-    opponentAttrs = [attr.lower() for attr in oppAttrs]
-    pitcherAttrs = [attr.lower() for attr in pitcher_data["attrs"].split(";")]    
+    battingAttrs, opponentAttrs = teamAttrs, oppAttrs    
+    pitcherAttrs = pitcher_data["attrs"]
     strike_out_chance, caught_out_chance, attempt_steal_chance, walk_chance, hit_modifier, sacrifice_chance, runner_advance_chance, homerun_multipliers, caught_steal_base_chance, caught_steal_home_chance = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
     single_chance, double_chance, triple_chance, homerun_chance, score_multiplier, average_on_base_position, steal_mod, caught_steal_outs = {}, {}, {}, {}, {}, {}, {}, {}
 
@@ -305,11 +304,10 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
     strike_log = (ruthlessness - adjustments["ruth_strike"])
     strike_chance = log_transform(strike_log, 100.0)
     clutch_log = (coldness - adjustments["cold_clutch_factor"])
-    clutch_factor = log_transform(clutch_log, 100.0)    
-    playerAttrs = []
+    clutch_factor = log_transform(clutch_log, 100.0)            
         
-    for playerid in sorted_batters:                                                      
-        playerAttrs = [attr.lower() for attr in team_data[playerid]["attrs"].split(";")]
+    for playerid in sorted_batters:                                                                    
+        playerAttrs = team_data[playerid]["attrs"]
         homer_multiplier = pitcher_homer_multiplier
         hit_multiplier = pitcher_hit_multiplier
         homer_multiplier *= -1.0 if "subtractor" in playerAttrs else 1.0
@@ -495,9 +493,7 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
         #need to approximate caught stealing outs for blood calcing        
         average_bases_to_steal = (2.0 * average_on_base_position[playerid]["first"]) + average_on_base_position[playerid]["second"]
         average_home_to_steal = average_on_base_position[playerid]["first"] + average_on_base_position[playerid]["second"] + average_on_base_position[playerid]["third"]
-        caught_steal_outs[playerid] = min((caught_steal_base_chance[playerid] * attempt_steal_chance[playerid] * average_bases_to_steal) + (caught_steal_home_chance[playerid] * attempt_steal_chance[playerid] * average_home_to_steal), 1.0)
-        
-        playerAttrs.clear()
+        caught_steal_outs[playerid] = min((caught_steal_base_chance[playerid] * attempt_steal_chance[playerid] * average_bases_to_steal) + (caught_steal_home_chance[playerid] * attempt_steal_chance[playerid] * average_home_to_steal), 1.0)      
 
     if blood_calc:                        
         outs_per_lineup = sum(strike_out_chance.values()) + sum(caught_steal_outs.values()) + sum(caught_out_chance.values())            
@@ -541,8 +537,8 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
 
     return runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, average_on_base_position, steal_mod, clutch_factor, walk_mod
 
-def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, innings=9, outs=3, runtime_solution=False):          
-    battingAttrs = [attr.lower() for attr in teamAttrs]
+def calc_team_score(mods, weather, away_home, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, opp_score=None, innings=9, outs=3, runtime_solution=False):      
+    battingAttrs = teamAttrs    
     reverb_weather, sun_weather, bh_weather = helpers.get_weather_idx("Reverb"), helpers.get_weather_idx("Sun 2"), helpers.get_weather_idx("Black Hole")
     runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, average_on_base_position, steal_mod, clutch_factor, walk_mod = calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, None, innings)        
 
@@ -551,13 +547,13 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
     total_innings = int(innings) * 3
     current_innings, atbats_in_inning = 0, 0  
     current_outs = 0.0
-    team_score = 100.0 if "home_field" in battingAttrs else 0.0
+    team_score = 100.0 if ("home_field" in battingAttrs and away_home == "home") else 0.0
     inning_score = 0.0
 
     runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
     runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
     inning_outs, strikeouts = 0.0, 0.0
-    batter_atbats = 0    
+    batter_atbats = 0        
     last_player_out = ""
     stolen_bases, homers, hits = {}, {}, {}    
     loop_checker = {}
@@ -567,8 +563,8 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
         starting_lineup_inning_outs, starting_lineup_inning_score = inning_outs, inning_score
         innings_since_lineup_start = 0
         for playerid in sorted_batters:
-            batter_atbats += 1
-            playerAttrs = [attr.lower() for attr in team_data[playerid]["attrs"].split(";")]
+            batter_atbats += 1                        
+            playerAttrs = team_data[playerid]["attrs"]
             base = 20.0 if (("extra_base" in battingAttrs) or ("extra_base" in playerAttrs)) else 25.0                   
             if base == 25.0:
                 homerun_score = ((100.0 - (10.0 * score_mod)) * (1.0 + runners_on_first + runners_on_second + runners_on_third)) * homerun_chance[playerid] * homerun_multipliers[playerid]
@@ -616,7 +612,11 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
                 loop_checker[playerid][str(batter_atbats - atbats_in_inning)] = [team_score, current_innings, 1]
                 inning_score += player_score
                 atbats_in_inning = batter_atbats
-                team_score += inning_score                
+                team_score += inning_score      
+                if (away_home == "home") and (current_innings == 8):
+                    if team_score > (opp_score / 3.0):
+                        #home team will only need 8 innings to win
+                        total_innings = 8 * 3
                 inning_score = 0.0
                 runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
                 runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
@@ -695,6 +695,10 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
                     inning_score += player_score
                     atbats_in_inning = batter_atbats
                     team_score += inning_score                    
+                    if (away_home == "home") and (current_innings == 8):
+                        if team_score > (opp_score / 3.0):
+                            #home team will only need 8 innings to win
+                            total_innings = 8 * 3
                     inning_score = 0.0
                     runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
                     runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
@@ -734,15 +738,19 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
                         loop_checker[playerid][str(batter_atbats - atbats_in_inning)] = [team_score, current_innings, 3]
                         inning_score += player_score
                         atbats_in_inning = batter_atbats
-                        team_score += inning_score                
+                        team_score += inning_score        
+                        if (away_home == "home") and (current_innings == 8):
+                            if team_score > (opp_score / 3.0):
+                                #home team will only need 8 innings to win
+                                total_innings = 8 * 3
                         inning_score = 0.0
                         runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
                         runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
                         if current_innings >= total_innings:                
                             break
                     else:
-                        inning_score += player_score
-            playerAttrs.clear()                
+                        inning_score += player_score    
+            
 
         if (current_innings < total_innings):        
             if loop_encountered:
@@ -753,6 +761,12 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
                 innings_in_loop = current_innings - loop_checker[playerid][str(batter_atbats - atbats_in_inning)][1]
                 #we will have not added the most-recent inning, but we know we get a loop of innings from there and can replicate that loop N times and be at the same state
                 #as the inning where we detected the start of a new loop is our current inning, we need to make sure that gets included in our replicated loop count
+                #check for home game 8 innings versus 9
+                if away_home == "home":
+                    presumptive_score = team_score + inning_score
+                    eight_inning_score = presumptive_score * (8.0 / current_innings)
+                    if eight_inning_score > (opp_score / 3.0):
+                        total_innings = 8 * 3
                 current_innings -= 1
                 full_lineup_count = math.floor((total_innings - current_innings) / innings_in_loop)                
                 #print("Iterating through {} replicates of the loop of {} innings, current innings {}".format(full_lineup_count, innings_in_loop, current_innings))
@@ -774,14 +788,25 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
                 #this means we have gone through the entire lineup and not even gotten one out
                 #most likely this will continue, so we are just going to macro score these cases to save time
                 #first, we need to determine how many innings remain
+                #let's change how we do this; we should determine how many lineup runs it will take to get to a single inning
+                outs_per_lineup_run = (inning_outs - starting_lineup_inning_outs)
+                if outs_per_lineup_run == 0:
+                    lineup_runs_per_inning = outs / 0.0001
+                else: 
+                    lineup_runs_per_inning = outs / outs_per_lineup_run
+                if away_home == "home":
+                    presumptive_score = team_score + (inning_score * lineup_runs_per_inning)                    
+                    eight_inning_score = presumptive_score * (8.0 / (current_innings + 1))                    
+                    if eight_inning_score > (opp_score / 3.0):
+                        total_innings = 8 * 3
                 remaining_innings = total_innings - current_innings
                 #next, we need to determine how many passes through the lineup it will take at our current rate to complete the remaining innings
                 remaining_outs = ((remaining_innings * 3) - inning_outs)
                 #we need to have a fail case for accumulating ZERO outs in a lineup pass; a truly absurd number
-                if (inning_outs - starting_lineup_inning_outs) == 0:
+                if outs_per_lineup_run == 0:
                     lineup_passes = remaining_outs / 0.0001
                 else:
-                    lineup_passes = remaining_outs / (inning_outs - starting_lineup_inning_outs)
+                    lineup_passes = remaining_outs / outs_per_lineup_run
                 #then, we need to take the amount of score we have accumulated in our pass through the lineup and multiply it by our lineup passes, including the pass we just did in our total
                 lineup_score = (inning_score - starting_lineup_inning_score) * (lineup_passes + 1)
                 #increase team score by this amount
@@ -803,6 +828,11 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
                 if ((runners_on_first + runners_on_second + runners_on_third + runners_on_fourth) == 0.0) and ((runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth) == 0.0):
                     #this means we're going to replicate this result a number of times as we completed the lineup before accumulating whatever remains                    
                     last_pass = True
+                    if away_home == "home":
+                        presumptive_score = team_score
+                        eight_inning_score = presumptive_score * (8.0 / current_innings)
+                        if eight_inning_score > (opp_score / 3.0):
+                            total_innings = 8 * 3
                     remaining_innings = total_innings - current_innings
                     total_iterations = math.floor(remaining_innings / current_innings)
                     print("Discovered a replicate point at inning {}, {} innings remain, {} replicates".format(current_innings, remaining_innings, total_iterations))
@@ -824,8 +854,7 @@ def calc_team_score(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_d
     #if ((weather == sun_weather) or (weather == bh_weather)) and runtime_solution:        
     #    adjusted_score = team_score - (math.floor(team_score / 1000.0) * 1000.0)
     #    #print("Adjusting team score for {} weather: team score = {}, adjusted score = {}".format("Sun 2" if weather == sun_weather else "Black Hole", team_score, adjusted_score))
-    #    team_score = adjusted_score    
-
+    #    team_score = adjusted_score            
     if runtime_solution:
         for playerid in sorted_batters:
             if playerid not in hits:
@@ -863,9 +892,9 @@ def calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMo
         base_omniscience, base_watchfulness, base_chasiness, base_anticapitalism, base_tenaciousness = calc_defense(terms, playerMods, parkMods, player_stat_data, adjusted_stat_data, None, overperform_pct)
         player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness = base_omniscience, base_watchfulness, base_chasiness, base_anticapitalism, base_tenaciousness
         for blood in BLOOD_LIST_DEFENSE:            
-            if (((away_home == "away") and ("A" in awayAttrs)) or ((away_home == "home") and ("A" in homeAttrs))) and ("same" in mods[blood]):
+            if (((away_home == "away") and ("a" in awayAttrs)) or ((away_home == "home") and ("a" in homeAttrs))) and ("same" in mods[blood]):
                 opp_same = "same"                
-            elif (((away_home == "away") and ("A" in homeAttrs)) or ((away_home == "home") and ("A" in awayAttrs))) and ("opp" in mods[blood]):
+            elif (((away_home == "away") and ("a" in homeAttrs)) or ((away_home == "home") and ("a" in awayAttrs))) and ("opp" in mods[blood]):
                 opp_same = "opp"
             else:
                 continue            
@@ -879,9 +908,9 @@ def calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMo
         base_unthwackability, base_ruthlessness, base_overpowerment, base_shakespearianism, base_coldness = calc_pitching(terms, playerMods, parkMods, player_stat_data, None)
         player_unthwackability, player_ruthlessness, player_overpowerment, player_shakespearianism, player_coldness = base_unthwackability, base_ruthlessness, base_overpowerment, base_shakespearianism, base_coldness
         for blood in BLOOD_LIST_PITCHING:            
-            if (((away_home == "away") and ("A" in awayAttrs)) or ((away_home == "home") and ("A" in homeAttrs))) and ("same" in mods[blood]):
+            if (((away_home == "away") and ("a" in awayAttrs)) or ((away_home == "home") and ("a" in homeAttrs))) and ("same" in mods[blood]):
                 opp_same = "same"                
-            elif (((away_home == "away") and ("A" in homeAttrs)) or ((away_home == "home") and ("A" in awayAttrs))) and ("opp" in mods[blood]):
+            elif (((away_home == "away") and ("a" in homeAttrs)) or ((away_home == "home") and ("a" in awayAttrs))) and ("opp" in mods[blood]):
                 opp_same = "opp"
             else:
                 continue                
@@ -896,9 +925,9 @@ def calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMo
         player_patheticism, player_tragicness, player_thwackability, player_divinity, player_moxie, player_musclitude, player_martyrdom = base_patheticism, base_tragicness, base_thwackability, base_divinity, base_moxie, base_musclitude, base_martyrdom
         player_laserlikeness, player_basethirst, player_continuation, player_groundfriction, player_indulgence = base_laserlikeness, base_basethirst, base_continuation, base_groundfriction, base_indulgence
         for blood in BLOOD_LIST_OFFENSE:            
-            if (((away_home == "away") and ("A" in awayAttrs)) or ((away_home == "home") and ("A" in homeAttrs))) and ("same" in mods[blood]):
+            if (((away_home == "away") and ("a" in awayAttrs)) or ((away_home == "home") and ("a" in homeAttrs))) and ("same" in mods[blood]):
                 opp_same = "same"                
-            elif (((away_home == "away") and ("A" in homeAttrs)) or ((away_home == "home") and ("A" in awayAttrs))) and ("opp" in mods[blood]):
+            elif (((away_home == "away") and ("a" in homeAttrs)) or ((away_home == "home") and ("a" in awayAttrs))) and ("opp" in mods[blood]):
                 opp_same = "opp"
             else:
                 continue                
@@ -931,7 +960,7 @@ def calc_ablood_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, awa
 def calc_pitcher_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, player_stat_data):       
     playerMods = get_player_mods(mods, awayAttrs, homeAttrs, weather, away_home, player_stat_data)    
     calced_stlats = {}    
-    if ("A" in awayAttrs) or ("A" in homeAttrs):
+    if ("a" in awayAttrs) or ("a" in homeAttrs):
         calced_stlats["unthwackability"], calced_stlats["ruthlessness"], calced_stlats["overpowerment"], calced_stlats["shakespearianism"], calced_stlats["coldness"] = calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMods, teamMods, player_stat_data, "pitching")
     else:
         calced_stlats["unthwackability"], calced_stlats["ruthlessness"], calced_stlats["overpowerment"], calced_stlats["shakespearianism"], calced_stlats["coldness"] = calc_pitching(terms, playerMods, teamMods, player_stat_data)
@@ -982,13 +1011,13 @@ def blood_impact_calc(terms, mods, weather, away_home, teamMods, calc_team_data,
         awayAttrs, homeAttrs = teamAttrs, oppAttrs
     else:
         awayAttrs, homeAttrs = oppAttrs, teamAttrs
-    if "AA" in teamAttrs:
+    if "aa" in teamAttrs:
         average_aa_impact = calc_probs_from_stats(mods, weather, calc_team_data, calc_opp_data, calc_pitcher_data, team_stat_data, opp_stat_data, opp_pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, "aa", innings)
         team_stlats, team_defense, batter_order, pitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, team_stat_data, team_pitcher_data, adjusted_stat_data, average_aa_impact)
-    if "AAA" in teamAttrs:
+    if "aaa" in teamAttrs:
         average_aaa_impact = calc_probs_from_stats(mods, weather, calc_team_data, calc_opp_data, calc_pitcher_data, team_stat_data, opp_stat_data, opp_pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, "aaa", innings)
         team_stlats, team_defense, batter_order, pitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, team_stat_data, team_pitcher_data, adjusted_stat_data, average_aaa_impact)
-    if "A" in teamAttrs:
+    if "a" in teamAttrs:
         average_aa_impact, average_aaa_impact = calc_probs_from_stats(mods, weather, calc_team_data, calc_opp_data, calc_pitcher_data, team_stat_data, opp_stat_data, opp_pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, "a", innings)
         team_stlats, team_defense, batter_order, pitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, team_stat_data, team_pitcher_data, adjusted_stat_data, average_aa_impact, average_aaa_impact)
     return team_stlats, team_defense, batter_order, pitcherStlats
@@ -1002,17 +1031,17 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
     away_team_stlats, away_team_defense, away_batter_order, awayPitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, "away", team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], adjusted_stat_data)
     home_team_stlats, home_team_defense, home_batter_order, homePitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, homeMods, weather, "home", team_stat_data[homeTeam], pitcher_stat_data[homePitcher], adjusted_stat_data)
 
-    if "AAA" in awayAttrs or "AA" in awayAttrs or "A" in awayAttrs:
-        away_team_stlats, away_team_defense, away_batter_order, awayPitcherStlats = blood_impact_calc(terms, mods, weather, "away", awayMods, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], pitcher_stat_data[awayPitcher], awayAttrs, homeAttrs, away_batter_order, adjusted_stat_data, adjustments, innings=pitcher_stat_data[homePitcher]["innings"])
-    if "AAA" in homeAttrs or "AA" in homeAttrs or "A" in homeAttrs:
-        home_team_stlats, home_team_defense, home_batter_order, homePitcherStlats = blood_impact_calc(terms, mods, weather, "home", homeMods, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], pitcher_stat_data[homePitcher], homeAttrs, awayAttrs, home_batter_order, adjusted_stat_data, adjustments, innings=pitcher_stat_data[awayPitcher]["innings"])
+    if "aaa" in awayAttrs or "aa" in awayAttrs or "a" in awayAttrs:
+        away_team_stlats, away_team_defense, away_batter_order, awayPitcherStlats = blood_impact_calc(terms, mods, weather, "away", awayMods, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], pitcher_stat_data[awayPitcher], awayAttrs, homeAttrs, away_batter_order, adjusted_stat_data, adjustments, innings=9)
+    if "aaa" in homeAttrs or "aa" in homeAttrs or "a" in homeAttrs:
+        home_team_stlats, home_team_defense, home_batter_order, homePitcherStlats = blood_impact_calc(terms, mods, weather, "home", homeMods, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], pitcher_stat_data[homePitcher], homeAttrs, awayAttrs, home_batter_order, adjusted_stat_data, adjustments, innings=9)
     
     if runtime_solution:
-        away_score, away_stolen_bases, away_homers, away_hits, home_pitcher_ks = calc_team_score(mods, weather, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, away_batter_order, adjustments, innings=pitcher_stat_data[homePitcher]["innings"], outs=3, runtime_solution=runtime_solution)
-        home_score, home_stolen_bases, home_homers, home_hits, away_pitcher_ks = calc_team_score(mods, weather, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, home_batter_order, adjustments, innings=pitcher_stat_data[awayPitcher]["innings"], outs=3, runtime_solution=runtime_solution)        
+        away_score, away_stolen_bases, away_homers, away_hits, home_pitcher_ks = calc_team_score(mods, weather, "away", away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, away_batter_order, adjustments, opp_score=None, innings=9, outs=3, runtime_solution=runtime_solution)
+        home_score, home_stolen_bases, home_homers, home_hits, away_pitcher_ks = calc_team_score(mods, weather, "home", home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, home_batter_order, adjustments, opp_score=away_score, innings=9, outs=3, runtime_solution=runtime_solution)        
     else:            
-        away_score = calc_team_score(mods, weather, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, away_batter_order, adjustments)
-        home_score = calc_team_score(mods, weather, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, home_batter_order, adjustments)   
+        away_score = calc_team_score(mods, weather, "away", away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], awayAttrs, homeAttrs, away_batter_order, adjustments)
+        home_score = calc_team_score(mods, weather, "home", home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], homeAttrs, awayAttrs, home_batter_order, adjustments)   
 
     numerator = away_score - home_score
     denominator = abs(away_score + home_score)
@@ -1030,10 +1059,9 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
         return away_odds, 1.0 - away_odds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
     return away_odds, 1.0 - away_odds
 
-def get_player_mods(mods, awayAttrs, homeAttrs, weather, away_home, player_stat_data):            
-    lowerAwayAttrs = [attr.lower() for attr in awayAttrs]
-    lowerHomeAttrs = [attr.lower() for attr in homeAttrs]            
-    playerAttrs = [attr.lower() for attr in player_stat_data["attrs"].split(";")]       
+def get_player_mods(mods, awayAttrs, homeAttrs, weather, away_home, player_stat_data):     
+    lowerAwayAttrs, lowerHomeAttrs = awayAttrs, homeAttrs    
+    playerAttrs = player_stat_data["attrs"]
     allAttrs_lol = [lowerAwayAttrs, lowerHomeAttrs, playerAttrs]
     allAttrs_set = set().union(*allAttrs_lol)
     modAttrs_set = set(mods.keys())
