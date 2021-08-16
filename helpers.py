@@ -444,6 +444,8 @@ def adjust_stlats(row, game, day, roster_size, raw_player_attrs, team_attrs=None
 def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_stat_data):        
     adjusted_stat_data = {}
     adjusted_stat_data["away"], adjusted_stat_data["home"] = {}, {}      
+    home_blood = "a" in homeAttrs or "aa" in homeAttrs or "aaa" in homeAttrs
+    away_blood = "a" in awayAttrs or "aa" in awayAttrs or "aaa" in awayAttrs
 
     for playerid in team_stat_data[awayTeam]:            
         adjusted_stat_data["away"][playerid] = {}        
@@ -451,8 +453,9 @@ def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_
         if not team_stat_data[awayTeam][playerid]["shelled"]:
             adjusted_batting_stlats = {"patheticism": team_stat_data[awayTeam][playerid]["patheticism"], "tragicness": team_stat_data[awayTeam][playerid]["tragicness"], "thwackability": team_stat_data[awayTeam][playerid]["thwackability"], "divinity": team_stat_data[awayTeam][playerid]["divinity"], "moxie": team_stat_data[awayTeam][playerid]["moxie"], "musclitude": team_stat_data[awayTeam][playerid]["musclitude"], "martyrdom": team_stat_data[awayTeam][playerid]["martyrdom"]}
             adjusted_running_stlats = {"laserlikeness": team_stat_data[awayTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[awayTeam][playerid]["baseThirst"], "continuation": team_stat_data[awayTeam][playerid]["continuation"], "groundFriction": team_stat_data[awayTeam][playerid]["groundFriction"], "indulgence": team_stat_data[awayTeam][playerid]["indulgence"]}
-        if "a" in awayAttrs or "aa" in awayAttrs or "aaa" in awayAttrs:
-            adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
+        if away_blood or ("high_pressure" in awayAttrs):
+            if away_blood:
+                adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
             if not team_stat_data[awayTeam][playerid]["shelled"]:
                 adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
                 adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)                  
@@ -471,8 +474,9 @@ def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_
         if not team_stat_data[homeTeam][playerid]["shelled"]:            
             adjusted_batting_stlats = {"patheticism": team_stat_data[homeTeam][playerid]["patheticism"], "tragicness": team_stat_data[homeTeam][playerid]["tragicness"], "thwackability": team_stat_data[homeTeam][playerid]["thwackability"], "divinity": team_stat_data[homeTeam][playerid]["divinity"], "moxie": team_stat_data[homeTeam][playerid]["moxie"], "musclitude": team_stat_data[homeTeam][playerid]["musclitude"], "martyrdom": team_stat_data[homeTeam][playerid]["martyrdom"]}
             adjusted_running_stlats = {"laserlikeness": team_stat_data[homeTeam][playerid]["laserlikeness"], "baseThirst": team_stat_data[homeTeam][playerid]["baseThirst"], "continuation": team_stat_data[homeTeam][playerid]["continuation"], "groundFriction": team_stat_data[homeTeam][playerid]["groundFriction"], "indulgence": team_stat_data[homeTeam][playerid]["indulgence"]}
-        if "a" in homeAttrs or "aa" in homeAttrs or "aaa" in homeAttrs:
-            adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
+        if home_blood or ("high_pressure" in homeAttrs):
+            if home_blood:
+                adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
             if not team_stat_data[homeTeam][playerid]["shelled"]:
                 adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
                 adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)        

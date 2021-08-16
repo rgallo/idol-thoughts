@@ -13,11 +13,8 @@ import os
 
 WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic", "Solar Eclipse",
             "Glitter", "Blooddrain", "Peanuts", "Birds", "Feedback", "Reverb"]
-BLOOD_LIST_DEFENSE = ["PSYCHIC"]
-BLOOD_LIST_PITCHING = ["LOVE", "PSYCHIC"]
-BLOOD_LIST_OFFENSE = ["LOVE", "PSYCHIC"]
 
-MODS_CALCED_DIFFERENTLY = {"aaa", "aa", "a", "fiery", "base_instincts", "o_no", "electric", "h20", "0", "acidic"}
+MODS_CALCED_DIFFERENTLY = {"aaa", "aa", "a", "fiery", "base_instincts", "o_no", "electric", "h20", "0", "acidic", "love", "high_pressure", "psychic"}
 
 def instantiate_adjustments(terms, halfterms): 
     adjustments = {}
@@ -41,19 +38,11 @@ def calc_team(terms, termset, mods, skip_mods=False):
 def calc_player(terms, stlatname, stlatvalue, mods, parkmods, bloodmods, skip_mods=False):    
     term = terms[stlatname]            
     multiplier, numerator, denominator = 1.0, 0.0, 0.0    
-    if not skip_mods:            
-        modterms = (mods or {}).get(stlatname, [])          
-        parkmodterms = (parkmods or {}).get(stlatname, []) 
-        bloodmodterms  = (bloodmods or {}).get(stlatname, [])          
-        if len(modterms) > 0:
-            numerator += len(modterms)
-            denominator += sum(modterms)            
+    if not skip_mods:                    
+        parkmodterms = (parkmods or {}).get(stlatname, [])              
         if len(parkmodterms) > 0:
             numerator += len(parkmodterms)
-            denominator += sum(parkmodterms)
-        if len(bloodmodterms) > 0:
-            numerator += len(bloodmodterms)
-            denominator += sum(bloodmodterms)    
+            denominator += sum(parkmodterms)        
         if denominator > 0.0:
             multiplier *= (numerator / denominator)
     total = term.calc(stlatvalue) * multiplier
@@ -214,12 +203,14 @@ def calc_defense(terms, player_mods, park_mods, player_stat_data, adjusted_stlat
         player_stat_data["chasiness"] += (adjusted_stlats["chasiness"] - player_stat_data["chasiness"]) * overperform_pct 
         player_stat_data["anticapitalism"] += (adjusted_stlats["anticapitalism"] - player_stat_data["anticapitalism"]) * overperform_pct 
         player_stat_data["tenaciousness"] += (adjusted_stlats["tenaciousness"] - player_stat_data["tenaciousness"]) * overperform_pct
-    player_omniscience = calc_player(terms, "omniscience", player_stat_data["omniscience"], player_mods, park_mods, bloodMods, False)
-    player_watchfulness = calc_player(terms, "watchfulness", player_stat_data["watchfulness"], player_mods, park_mods, bloodMods, False)
-    player_chasiness = calc_player(terms, "chasiness", player_stat_data["chasiness"], player_mods, park_mods, bloodMods, False)
-    player_anticapitalism = calc_player(terms, "anticapitalism", player_stat_data["anticapitalism"], player_mods, park_mods, bloodMods, False)
-    player_tenaciousness = calc_player(terms, "tenaciousness", player_stat_data["tenaciousness"], player_mods, park_mods, bloodMods, False)        
-    return player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness
+    player_omni_base_hit = calc_player(terms, "omni_base_hit", player_stat_data["omniscience"], player_mods, park_mods, bloodMods, False)
+    player_watch_attempt_steal = calc_player(terms, "watch_attempt_steal", player_stat_data["watchfulness"], player_mods, park_mods, bloodMods, False)
+    player_chasi_triple = calc_player(terms, "chasi_triple", player_stat_data["chasiness"], player_mods, park_mods, bloodMods, False)
+    player_chasi_double = calc_player(terms, "chasi_double", player_stat_data["chasiness"], player_mods, park_mods, bloodMods, False)
+    player_anticap_base = calc_player(terms, "anticap_caught_steal_base", player_stat_data["anticapitalism"], player_mods, park_mods, bloodMods, False)
+    player_anticap_home = calc_player(terms, "anticap_caught_steal_home", player_stat_data["anticapitalism"], player_mods, park_mods, bloodMods, False)
+    player_tenacious_ra = calc_player(terms, "tenacious_runner_advances", player_stat_data["tenaciousness"], player_mods, park_mods, bloodMods, False)        
+    return player_omni_base_hit, player_watch_attempt_steal, player_chasi_triple, player_chasi_double, player_anticap_base, player_anticap_home, player_tenacious_ra
 
 def calc_batting(terms, player_mods, park_mods, player_stat_data, adjusted_stlats, bloodMods=None, overperform_pct=0):  
     if overperform_pct > 0.01:                
@@ -230,14 +221,16 @@ def calc_batting(terms, player_mods, park_mods, player_stat_data, adjusted_stlat
         player_stat_data["moxie"] += (adjusted_stlats["moxie"] - player_stat_data["moxie"]) * overperform_pct 
         player_stat_data["musclitude"] += (adjusted_stlats["musclitude"] - player_stat_data["musclitude"]) * overperform_pct 
         player_stat_data["martyrdom"] += (adjusted_stlats["martyrdom"] - player_stat_data["martyrdom"]) * overperform_pct        
-    player_patheticism = calc_player(terms, "patheticism", player_stat_data["patheticism"], player_mods, park_mods, bloodMods, False)
-    player_tragicness = calc_player(terms, "tragicness", player_stat_data["tragicness"], player_mods, park_mods, bloodMods, False)
-    player_thwackability = calc_player(terms, "thwackability", player_stat_data["thwackability"], player_mods, park_mods, bloodMods, False)
-    player_divinity = calc_player(terms, "divinity", player_stat_data["divinity"], player_mods, park_mods, bloodMods, False)
-    player_moxie = calc_player(terms, "moxie", player_stat_data["moxie"], player_mods, park_mods, bloodMods, False)
-    player_musclitude = calc_player(terms, "musclitude", player_stat_data["musclitude"], player_mods, park_mods, bloodMods, False)
-    player_martyrdom = calc_player(terms, "martyrdom", player_stat_data["martyrdom"], player_mods, park_mods, bloodMods, False)    
-    return player_patheticism, player_tragicness, player_thwackability, player_divinity, player_moxie, player_musclitude, player_martyrdom
+    player_path_connect = calc_player(terms, "path_connect", player_stat_data["patheticism"], player_mods, park_mods, bloodMods, False)
+    player_trag_ra = calc_player(terms, "trag_runner_advances", player_stat_data["tragicness"], player_mods, park_mods, bloodMods, False)
+    player_thwack_base_hit = calc_player(terms, "thwack_base_hit", player_stat_data["thwackability"], player_mods, park_mods, bloodMods, False)
+    player_div_homer = calc_player(terms, "div_homer", player_stat_data["divinity"], player_mods, park_mods, bloodMods, False)
+    player_moxie_swing_correct = calc_player(terms, "moxie_swing_correct", player_stat_data["moxie"], player_mods, park_mods, bloodMods, False)
+    player_muscl_foul_ball = calc_player(terms, "muscl_foul_ball", player_stat_data["musclitude"], player_mods, park_mods, bloodMods, False)
+    player_muscl_triple = calc_player(terms, "muscl_triple", player_stat_data["musclitude"], player_mods, park_mods, bloodMods, False)
+    player_muscl_double = calc_player(terms, "muscl_double", player_stat_data["musclitude"], player_mods, park_mods, bloodMods, False)
+    player_martyr_sacrifice = calc_player(terms, "martyr_sacrifice", player_stat_data["martyrdom"], player_mods, park_mods, bloodMods, False)    
+    return player_path_connect, player_trag_ra, player_thwack_base_hit, player_div_homer, player_moxie_swing_correct, player_muscl_foul_ball, player_muscl_triple, player_muscl_double, player_martyr_sacrifice
 
 def calc_running(terms, player_mods, park_mods, player_stat_data, adjusted_stlats, bloodMods=None, overperform_pct=0):
     if overperform_pct > 0.01:                
@@ -246,32 +239,39 @@ def calc_running(terms, player_mods, park_mods, player_stat_data, adjusted_stlat
         player_stat_data["continuation"] += (adjusted_stlats["continuation"] - player_stat_data["continuation"]) * overperform_pct 
         player_stat_data["groundFriction"] += (adjusted_stlats["groundFriction"] - player_stat_data["groundFriction"]) * overperform_pct 
         player_stat_data["indulgence"] += (adjusted_stlats["indulgence"] - player_stat_data["indulgence"]) * overperform_pct
-    player_laserlikeness = calc_player(terms, "laserlikeness", player_stat_data["laserlikeness"], player_mods, park_mods, bloodMods, False)
-    player_basethirst = calc_player(terms, "basethirst", player_stat_data["baseThirst"], player_mods, park_mods, bloodMods, False)
-    player_continuation = calc_player(terms, "continuation", player_stat_data["continuation"], player_mods, park_mods, bloodMods, False)
-    player_groundfriction = calc_player(terms, "groundfriction", player_stat_data["groundFriction"], player_mods, park_mods, bloodMods, False)
-    player_indulgence = calc_player(terms, "indulgence", player_stat_data["indulgence"], player_mods, park_mods, bloodMods, False)     
-    return player_laserlikeness, player_basethirst, player_continuation, player_groundfriction, player_indulgence
+    player_laser_attempt_steal = calc_player(terms, "laser_attempt_steal", player_stat_data["laserlikeness"], player_mods, park_mods, bloodMods, False)
+    player_laser_caught_steal_base = calc_player(terms, "laser_caught_steal_base", player_stat_data["laserlikeness"], player_mods, park_mods, bloodMods, False)
+    player_laser_caught_steal_home = calc_player(terms, "laser_caught_steal_home", player_stat_data["laserlikeness"], player_mods, park_mods, bloodMods, False)
+    player_laser_runner_advances = calc_player(terms, "laser_runner_advances", player_stat_data["laserlikeness"], player_mods, park_mods, bloodMods, False)
+    player_baset_attempt_steal = calc_player(terms, "baset_attempt_steal", player_stat_data["baseThirst"], player_mods, park_mods, bloodMods, False)
+    player_baset_caught_steal_home = calc_player(terms, "baset_caught_steal_home", player_stat_data["baseThirst"], player_mods, park_mods, bloodMods, False)
+    player_cont_triple = calc_player(terms, "cont_triple", player_stat_data["continuation"], player_mods, park_mods, bloodMods, False)
+    player_cont_double = calc_player(terms, "cont_double", player_stat_data["continuation"], player_mods, park_mods, bloodMods, False)
+    player_ground_triple = calc_player(terms, "ground_triple", player_stat_data["groundFriction"], player_mods, park_mods, bloodMods, False)
+    player_indulg_runner_advances = calc_player(terms, "indulg_runner_advances", player_stat_data["indulgence"], player_mods, park_mods, bloodMods, False)     
+    return player_laser_attempt_steal, player_laser_caught_steal_base, player_laser_caught_steal_home, player_laser_runner_advances, player_baset_attempt_steal, player_baset_caught_steal_home, player_cont_triple, player_cont_double, player_ground_triple, player_indulg_runner_advances
 
 def calc_pitching(terms, pitcher_mods, park_mods, pitcher_stat_data, bloodMods=None):   
-    player_unthwackability = calc_player(terms, "unthwackability", pitcher_stat_data["unthwackability"], pitcher_mods, park_mods, bloodMods, False)
-    player_ruthlessness = calc_player(terms, "ruthlessness", pitcher_stat_data["ruthlessness"], pitcher_mods, park_mods, bloodMods, False)
-    player_overpowerment = calc_player(terms, "overpowerment", pitcher_stat_data["overpowerment"], pitcher_mods, park_mods, bloodMods, False)
-    player_shakespearianism = calc_player(terms, "shakespearianism", pitcher_stat_data["shakespearianism"], pitcher_mods, park_mods, bloodMods, False)
-    player_coldness = calc_player(terms, "coldness", pitcher_stat_data["coldness"], pitcher_mods, park_mods, bloodMods, False)
-    return player_unthwackability, player_ruthlessness, player_overpowerment, player_shakespearianism, player_coldness
+    player_unthwack_base_hit = calc_player(terms, "unthwack_base_hit", pitcher_stat_data["unthwackability"], pitcher_mods, park_mods, bloodMods, False)
+    player_ruth_strike = calc_player(terms, "ruth_strike", pitcher_stat_data["ruthlessness"], pitcher_mods, park_mods, bloodMods, False)
+    player_overp_homer = calc_player(terms, "overp_homer", pitcher_stat_data["overpowerment"], pitcher_mods, park_mods, bloodMods, False)
+    player_overp_triple = calc_player(terms, "overp_triple", pitcher_stat_data["overpowerment"], pitcher_mods, park_mods, bloodMods, False)
+    player_overp_double = calc_player(terms, "overp_double", pitcher_stat_data["overpowerment"], pitcher_mods, park_mods, bloodMods, False)
+    player_shakes_runner_advances = calc_player(terms, "shakes_runner_advances", pitcher_stat_data["shakespearianism"], pitcher_mods, park_mods, bloodMods, False)
+    player_cold_clutch_factor = calc_player(terms, "cold_clutch_factor", pitcher_stat_data["coldness"], pitcher_mods, park_mods, bloodMods, False)
+    return player_unthwack_base_hit, player_ruth_strike, player_overp_homer, player_overp_triple, player_overp_double, player_shakes_runner_advances, player_cold_clutch_factor
 
 def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, blood_calc=None, innings=9, outs=3):
     battingAttrs, opponentAttrs = teamAttrs, oppAttrs    
     pitcherAttrs = pitcher_data["attrs"]
     strike_out_chance, caught_out_chance, attempt_steal_chance, walk_chance, hit_modifier, sacrifice_chance, runner_advance_chance, homerun_multipliers, caught_steal_base_chance, caught_steal_home_chance = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
-    single_chance, double_chance, triple_chance, homerun_chance, score_multiplier, average_on_base_position, steal_mod, caught_steal_outs = {}, {}, {}, {}, {}, {}, {}, {}
+    single_chance, double_chance, triple_chance, homerun_chance, score_multiplier, average_on_base_position, steal_mod, caught_steal_outs, on_base_chance, high_pressure_mod = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
 
     blood_count = 12.0
     a_blood_multiplier = 1.0 / blood_count    
 
-    omniscience, watchfulness, chasiness, anticap, tenaciousness = opp_stat_data["omniscience"], opp_stat_data["watchfulness"], opp_stat_data["chasiness"], opp_stat_data["anticapitalism"], opp_stat_data["tenaciousness"]
-    unthwackability, ruthlessness, overpowerment, shakespearianism, coldness = pitcher_stat_data["unthwackability"], pitcher_stat_data["ruthlessness"], pitcher_stat_data["overpowerment"], pitcher_stat_data["shakespearianism"], pitcher_stat_data["coldness"]    
+    omni_base_hit, watch_attempt_steal, chasi_triple, chasi_double, anticap_caught_steal_base, anticap_caught_steal_home, tenacious_runner_advances = opp_stat_data["omni_base_hit"], opp_stat_data["watch_attempt_steal"], opp_stat_data["chasi_triple"], opp_stat_data["chasi_double"], opp_stat_data["anticap_caught_steal_base"], opp_stat_data["anticap_caught_steal_home"], opp_stat_data["tenacious_runner_advances"]
+    unthwack_base_hit, ruth_strike, overp_homer, overp_triple, overp_double, shakes_runner_advances, cold_clutch_factor = pitcher_stat_data["unthwack_base_hit"], pitcher_stat_data["ruth_strike"], pitcher_stat_data["overp_homer"], pitcher_stat_data["overp_triple"], pitcher_stat_data["overp_double"], pitcher_stat_data["shakes_runner_advances"], pitcher_stat_data["cold_clutch_factor"]    
         
     pitcher_homer_multiplier = -1.0 if "underhanded" in pitcherAttrs else 1.0  
     pitcher_hit_multiplier = 1.0
@@ -285,25 +285,37 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
     if "magnify_5x" in pitcherAttrs:
         score_mult_pitcher *= 5.0
     #positive strike mod means fewer average strikes per strikeout; negative means more
-    strike_mod, walk_mod, score_mod = 1.0, 0.0, 0.0
+    strike_mod, strike_to_walk, walk_mod, score_mod = 1.0, 0.0, 0.0, 0.0
     if "fiery" in opponentAttrs:                
         strike_mod += mods["fiery"]["same"]["multiplier"]
+    if "psychic" in opponentAttrs:
+        strike_mod += mods["psychic"]["same"]["striketrick"]
+    if "love" in opponentAttrs:
+        strike_mod += mods["love"]["opp"]["strikeout"]
     if "acidic" in opponentAttrs:                
         score_mod += mods["acidic"]["same"]["multiplier"]
     if "electric" in battingAttrs:
         strike_mod -= mods["electric"]["same"]["multiplier"]
+    if "psychic" in battingAttrs:
+        strike_to_walk += mods["psychic"]["same"]["walktrick"]
+    if "love" in battingAttrs:
+        strike_mod -= mods["love"]["opp"]["easypitch"]
     if "base_instincts" in battingAttrs:
         walk_mod += mods["base_instincts"]["same"]["multiplier"]
     if "a" in opponentAttrs:
         strike_mod += mods["fiery"]["same"]["multiplier"] * a_blood_multiplier
+        strike_mod += mods["psychic"]["same"]["striketrick"] * a_blood_multiplier
+        strike_mod += mods["love"]["opp"]["strikeout"] * a_blood_multiplier
         score_mod += mods["acidic"]["same"]["multiplier"] * a_blood_multiplier
     if "a" in battingAttrs:
         strike_mod -= mods["electric"]["same"]["multiplier"] * a_blood_multiplier
-        walk_mod += mods["base_instincts"]["same"]["multiplier"] * a_blood_multiplier            
+        strike_mod -= mods["love"]["opp"]["easypitch"] * a_blood_multiplier
+        walk_mod += mods["base_instincts"]["same"]["multiplier"] * a_blood_multiplier
+        strike_to_walk += mods["psychic"]["same"]["walktrick"] * a_blood_multiplier
 
-    strike_log = (ruthlessness - adjustments["ruth_strike"])
+    strike_log = (ruth_strike - adjustments["ruth_strike"])
     strike_chance = log_transform(strike_log, 100.0)
-    clutch_log = (coldness - adjustments["cold_clutch_factor"])
+    clutch_log = (cold_clutch_factor - adjustments["cold_clutch_factor"])
     clutch_factor = log_transform(clutch_log, 100.0)            
         
     for playerid in sorted_batters:                                                                    
@@ -316,7 +328,7 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
         strike_count = 4.0 if (("extra_strike" in battingAttrs) or ("extra_strike" in playerAttrs)) else 3.0
         strike_count -= 1.0 if "flinch" in playerAttrs else 0.0
         ball_count = 3.0 if (("walk_in_the_park" in battingAttrs) or ("walk_in_the_park" in playerAttrs)) else 4.0            
-        steal_mod[playerid] = 20.0 if ("blaserunning" in battingAttrs or "blaserunning" in playerAttrs) else 0.0
+        steal_mod[playerid] = 20.0 if ("blaserunning" in battingAttrs or "blaserunning" in playerAttrs) else 0.0        
         if "skipping" in playerAttrs:            
             average_strikes = (strike_count - 1.0) / 2.0
             average_balls = (ball_count - 1.0) / 2.0            
@@ -332,10 +344,10 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
             score_multiplier[playerid] *= 4.0
         if "magnify_5x" in playerAttrs:
             score_multiplier[playerid] *= 5.0
-        patheticism, tragicness, thwackability, divinity, moxie, musclitude, martyrdom = team_stat_data[playerid]["patheticism"], team_stat_data[playerid]["tragicness"], team_stat_data[playerid]["thwackability"], team_stat_data[playerid]["divinity"], team_stat_data[playerid]["moxie"], team_stat_data[playerid]["musclitude"], team_stat_data[playerid]["martyrdom"]
-        laserlikeness, basethirst, continuation, groundfriction, indulgence = team_stat_data[playerid]["laserlikeness"], team_stat_data[playerid]["basethirst"], team_stat_data[playerid]["continuation"], team_stat_data[playerid]["groundfriction"], team_stat_data[playerid]["indulgence"]
+        path_connect, trag_runner_advances, thwack_base_hit, div_homer, moxie_swing_correct, muscl_foul_ball, muscl_triple, muscl_double, martyr_sacrifice = team_stat_data[playerid]["path_connect"], team_stat_data[playerid]["trag_runner_advances"], team_stat_data[playerid]["thwack_base_hit"], team_stat_data[playerid]["div_homer"], team_stat_data[playerid]["moxie_swing_correct"], team_stat_data[playerid]["muscl_foul_ball"], team_stat_data[playerid]["muscl_triple"], team_stat_data[playerid]["muscl_double"], team_stat_data[playerid]["martyr_sacrifice"]
+        laser_attempt_steal, laser_caught_steal_base, laser_caught_steal_home, laser_runner_advances, baset_attempt_steal, baset_caught_steal_home, cont_triple, cont_double, ground_triple, indulg_runner_advances = team_stat_data[playerid]["laser_attempt_steal"], team_stat_data[playerid]["laser_caught_steal_base"], team_stat_data[playerid]["laser_caught_steal_home"], team_stat_data[playerid]["laser_runner_advances"], team_stat_data[playerid]["baset_attempt_steal"], team_stat_data[playerid]["baset_caught_steal_home"], team_stat_data[playerid]["cont_triple"], team_stat_data[playerid]["cont_double"], team_stat_data[playerid]["ground_triple"], team_stat_data[playerid]["indulg_runner_advances"]
         
-        moxie_log = (moxie - adjustments["moxie_swing_correct"])
+        moxie_log = (moxie_swing_correct - adjustments["moxie_swing_correct"])
         swing_correct_chance = log_transform(moxie_log, 100.0)        
         swing_strike_blood_factors = ((1.0 / outs) if ("h20" in battingAttrs or "h20" in playerAttrs) else 0.0) + ((strike_chance / (strike_count + ball_count)) if (("0" in battingAttrs or "0" in playerAttrs) and "skipping" not in playerAttrs) else 0.0)
         if "a" in battingAttrs and not blood_calc:
@@ -343,11 +355,11 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
         swing_strike_chance = (min(swing_correct_chance + swing_strike_blood_factors, 1.0)) * strike_chance        
         swing_ball_chance = min(max(((1.0 - swing_correct_chance) * (1.0 - strike_chance)) - (((1.0 - strike_chance) ** ball_count) if "flinch" in playerAttrs else 0.0), 0.0), 1.0)
 
-        connect_log = (adjustments["path_connect"] - patheticism)
+        connect_log = (adjustments["path_connect"] - path_connect)
         base_connect_chance = log_transform(connect_log, 100.0)
         connect_chance = base_connect_chance * swing_strike_chance
         
-        base_hit_log = ((thwackability - unthwackability - omniscience) - (adjustments["thwack_base_hit"] - adjustments["unthwack_base_hit"] - adjustments["omni_base_hit"]))
+        base_hit_log = ((thwack_base_hit - unthwack_base_hit - omni_base_hit) - (adjustments["thwack_base_hit"] - adjustments["unthwack_base_hit"] - adjustments["omni_base_hit"]))
         base_hit = log_transform(base_hit_log, 100.0)
         base_hit_chance = base_hit * connect_chance                     
 
@@ -355,7 +367,7 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
         strike_swinging_chance = min((1.0 - connect_chance) + swing_ball_chance, 1.0)      
         ball_chance = 1.0 - swing_ball_chance     
 
-        foul_ball_log = musclitude - adjustments["muscl_foul_ball"]
+        foul_ball_log = muscl_foul_ball - adjustments["muscl_foul_ball"]
         foul_ball_prob = log_transform(foul_ball_log, 100.0)
         foul_ball_chance = foul_ball_prob * (1.0 - base_hit) * connect_chance
         caught_out_chance[playerid] = max(connect_chance - foul_ball_chance - base_hit_chance, 0.0)
@@ -428,8 +440,9 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
 
         corrected_strike_chance *= strike_mod
         #everything else is per pitch... connect per pitch, base hit per pitch, caught out per pitch, so each ball pitched is 1 / ball count % of a walk
-        walk_chance[playerid] = walked
-        strike_out_chance[playerid] = corrected_strike_chance
+        #psychic mind tricks can convert strikes to walks... so some % of strikes, called strike to walk, are removed from strike events and become walk events
+        walk_chance[playerid] = walked + (corrected_strike_chance * strike_to_walk)
+        strike_out_chance[playerid] = corrected_strike_chance - (corrected_strike_chance * strike_to_walk)
 
         #the sum of these events (which would be one or the other or the other etc.) must be one, as they are everything that can happen on a plate appearance
         all_macro_events_prob = walk_chance[playerid] + base_hit_chance + strike_out_chance[playerid] + caught_out_chance[playerid]        
@@ -446,24 +459,24 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
             #if caught_out_chance[playerid] > 0.0000:
             #    print("Normalized to: strikeout {:.4f}, walked {:.4f}, base hit {:.4f}, caughtout {:.4f}".format(strike_out_chance[playerid], walk_chance[playerid], base_hit_chance, caught_out_chance[playerid]))
 
-        attempt_steal_log = ((basethirst + laserlikeness - watchfulness) - (adjustments["baset_attempt_steal"] + adjustments["laser_attempt_steal"] - adjustments["watch_attempt_steal"]))
+        attempt_steal_log = ((baset_attempt_steal + laser_attempt_steal - watch_attempt_steal) - (adjustments["baset_attempt_steal"] + adjustments["laser_attempt_steal"] - adjustments["watch_attempt_steal"]))
         attempt_steal_chance[playerid] = log_transform(attempt_steal_log, 100.0)
-        caught_steal_base_log = ((laserlikeness - anticap) - (adjustments["laser_caught_steal_base"] - adjustments["anticap_caught_steal_base"]))
-        caught_steal_home_log = ((basethirst + laserlikeness - anticap) - (adjustments["baset_caught_steal_home"] + adjustments["laser_caught_steal_home"] - adjustments["anticap_caught_steal_home"]))
+        caught_steal_base_log = ((laser_caught_steal_base - anticap_caught_steal_base) - (adjustments["laser_caught_steal_base"] - adjustments["anticap_caught_steal_base"]))
+        caught_steal_home_log = ((baset_caught_steal_home + laser_caught_steal_home - anticap_caught_steal_home) - (adjustments["baset_caught_steal_home"] + adjustments["laser_caught_steal_home"] - adjustments["anticap_caught_steal_home"]))
         caught_steal_base_chance[playerid] = log_transform(caught_steal_base_log, 100.0)        
         caught_steal_home_chance[playerid] = log_transform(caught_steal_home_log, 100.0)             
         
         #homeruns needs to care about how many other runners are on base for how valuable they are, with a floor of "1x"
-        homerun_log = ((divinity - overpowerment) - (adjustments["div_homer"] - adjustments["overp_homer"]))
+        homerun_log = ((div_homer - overp_homer) - (adjustments["div_homer"] - adjustments["overp_homer"]))
         homerun_prob = log_transform(homerun_log, 100.0)
         homerun_chance[playerid] = homerun_prob * base_hit_chance
         homerun_multipliers[playerid] = homer_multiplier        
 
-        triple_log = ((musclitude + groundfriction + continuation - overpowerment - chasiness) - (adjustments["muscl_triple"] + adjustments["ground_triple"] + adjustments["cont_triple"] - adjustments["overp_triple"] - adjustments["chasi_triple"]))
+        triple_log = ((muscl_triple + ground_triple + cont_triple - overp_triple - chasi_triple) - (adjustments["muscl_triple"] + adjustments["ground_triple"] + adjustments["cont_triple"] - adjustments["overp_triple"] - adjustments["chasi_triple"]))
         triple_prob = log_transform(triple_log, 100.0) * (1.0 - homerun_chance[playerid])
         triple_chance[playerid] = triple_prob * base_hit_chance        
 
-        double_log = ((musclitude + continuation - overpowerment - chasiness) - (adjustments["muscl_double"] + adjustments["cont_double"] - adjustments["overp_double"] - adjustments["chasi_double"]))
+        double_log = ((muscl_double + cont_double - overp_double - chasi_double) - (adjustments["muscl_double"] + adjustments["cont_double"] - adjustments["overp_double"] - adjustments["chasi_double"]))
         double_prob = log_transform(double_log, 100.0) * (1.0 - triple_prob) * (1.0 - homerun_prob)
         double_chance[playerid] = double_prob * base_hit_chance 
         
@@ -476,14 +489,16 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
             triple_chance[playerid] *= factor
             double_chance[playerid] *= factor
             homerun_chance[playerid] *= factor            
+
+        on_base_chance[playerid] = min(single_chance[playerid] + double_chance[playerid] + triple_chance[playerid] + walk_chance[playerid], 1.0)
         
         hit_modifier[playerid] = hit_multiplier          
 
         #runners advancing is tricky, since we have to do this based on runners being on base already, but use the batter's martyrdom for sacrifices
-        sacrifice_log = martyrdom - adjustments["martyr_sacrifice"]
+        sacrifice_log = martyr_sacrifice - adjustments["martyr_sacrifice"]
         sacrifice_chance[playerid] = log_transform(sacrifice_log, 100.0) * caught_out_chance[playerid]        
         
-        runner_advances_log = ((laserlikeness + indulgence - tragicness - shakespearianism - tenaciousness) - (adjustments["laser_runner_advances"] + adjustments["indulg_runner_advances"] - adjustments["trag_runner_advances"] - adjustments["shakes_runner_advances"] - adjustments["shakes_runner_advances"]))        
+        runner_advances_log = ((laser_runner_advances + indulg_runner_advances - trag_runner_advances - shakes_runner_advances - tenacious_runner_advances) - (adjustments["laser_runner_advances"] + adjustments["indulg_runner_advances"] - adjustments["trag_runner_advances"] - adjustments["shakes_runner_advances"] - adjustments["shakes_runner_advances"]))        
         runner_advance_chance[playerid] = log_transform(runner_advances_log, 100.0)
         average_on_base_position[playerid] = {}
         average_on_base_position[playerid]["first"] = min(single_chance[playerid] + (walk_chance[playerid] * (1.0 - walk_mod)), 1.0)
@@ -495,45 +510,56 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
         average_home_to_steal = average_on_base_position[playerid]["first"] + average_on_base_position[playerid]["second"] + average_on_base_position[playerid]["third"]
         caught_steal_outs[playerid] = min((caught_steal_base_chance[playerid] * attempt_steal_chance[playerid] * average_bases_to_steal) + (caught_steal_home_chance[playerid] * attempt_steal_chance[playerid] * average_home_to_steal), 1.0)      
 
-    if blood_calc:                        
-        outs_per_lineup = sum(strike_out_chance.values()) + sum(caught_steal_outs.values()) + sum(caught_out_chance.values())            
-        average_aaa_blood_impact, average_aa_blood_impact = {}, {}
-        max_x = outs * innings * 3.0      
-        lineup_factor = (outs - outs_per_lineup) if (outs_per_lineup < outs) else 1.0
-        if blood_calc == "aaa" or blood_calc == "a":            
-            for playerid in triple_chance:
-                x = 0
-                average_aaa_blood_impact[playerid] = 0.0     
-                if outs_per_lineup < 0.1:
-                    average_aaa_blood_impact[playerid] = 1.0
+    if blood_calc:      
+        if blood_calc == "high_pressure":
+            previous_batter_obp = None
+            for playerid in sorted_batters:
+                if previous_batter_obp:
+                    high_pressure_mod[playerid] = previous_batter_obp
                 else:
-                    while (x < max_x) and (average_aaa_blood_impact[playerid] < 1.0):                    
-                        previous_blood_impact = average_aaa_blood_impact[playerid]
-                        average_aaa_blood_impact[playerid] += ((triple_chance[playerid] * ((1.0 - triple_chance[playerid]) ** x)) * ((max_x - x) / max_x)) * lineup_factor                    
-                        if (average_aaa_blood_impact[playerid] - previous_blood_impact) < 0.001:
-                            break
-                        x += outs_per_lineup * lineup_factor
-                    average_aaa_blood_impact[playerid] = max(average_aaa_blood_impact[playerid], 1.0)
-        if blood_calc == "aa" or blood_calc == "a":            
-            for playerid in double_chance:
-                x = 0
-                average_aa_blood_impact[playerid] = 0.0
-                if outs_per_lineup < 0.1:
-                    average_aa_blood_impact[playerid] = 1.0
-                else:
-                    while (x < max_x) and (average_aa_blood_impact[playerid] < 1.0):                    
-                        previous_blood_impact = average_aa_blood_impact[playerid]
-                        average_aa_blood_impact[playerid] += ((double_chance[playerid] * ((1.0 - double_chance[playerid]) ** x)) * ((max_x - x) / max_x)) * lineup_factor                    
-                        if (average_aa_blood_impact[playerid] - previous_blood_impact) < 0.001:
-                            break
-                        x += outs_per_lineup * lineup_factor
-                    average_aa_blood_impact[playerid] = max(average_aa_blood_impact[playerid], 1.0)        
-        if blood_calc == "aaa":
-            return average_aaa_blood_impact
-        if blood_calc == "aa":
-            return average_aa_blood_impact
-        if blood_calc == "a":
-            return average_aa_blood_impact, average_aaa_blood_impact
+                    first_batter = playerid                    
+                previous_batter_obp = on_base_chance[playerid]                 
+            high_pressure_mod[first_batter] = previous_batter_obp            
+            return high_pressure_mod
+        else:
+            outs_per_lineup = sum(strike_out_chance.values()) + sum(caught_steal_outs.values()) + sum(caught_out_chance.values())            
+            average_aaa_blood_impact, average_aa_blood_impact = {}, {}
+            max_x = outs * innings * 3.0      
+            lineup_factor = (outs - outs_per_lineup) if (outs_per_lineup < outs) else 1.0
+            if blood_calc == "aaa" or blood_calc == "a":            
+                for playerid in triple_chance:
+                    x = 0
+                    average_aaa_blood_impact[playerid] = 0.0     
+                    if outs_per_lineup < 0.1:
+                        average_aaa_blood_impact[playerid] = 1.0
+                    else:
+                        while (x < max_x) and (average_aaa_blood_impact[playerid] < 1.0):                    
+                            previous_blood_impact = average_aaa_blood_impact[playerid]
+                            average_aaa_blood_impact[playerid] += ((triple_chance[playerid] * ((1.0 - triple_chance[playerid]) ** x)) * ((max_x - x) / max_x)) * lineup_factor                    
+                            if (average_aaa_blood_impact[playerid] - previous_blood_impact) < 0.001:
+                                break
+                            x += outs_per_lineup * lineup_factor
+                        average_aaa_blood_impact[playerid] = max(average_aaa_blood_impact[playerid], 1.0)
+            if blood_calc == "aa" or blood_calc == "a":            
+                for playerid in double_chance:
+                    x = 0
+                    average_aa_blood_impact[playerid] = 0.0
+                    if outs_per_lineup < 0.1:
+                        average_aa_blood_impact[playerid] = 1.0
+                    else:
+                        while (x < max_x) and (average_aa_blood_impact[playerid] < 1.0):                    
+                            previous_blood_impact = average_aa_blood_impact[playerid]
+                            average_aa_blood_impact[playerid] += ((double_chance[playerid] * ((1.0 - double_chance[playerid]) ** x)) * ((max_x - x) / max_x)) * lineup_factor                    
+                            if (average_aa_blood_impact[playerid] - previous_blood_impact) < 0.001:
+                                break
+                            x += outs_per_lineup * lineup_factor
+                        average_aa_blood_impact[playerid] = max(average_aa_blood_impact[playerid], 1.0)        
+            if blood_calc == "aaa":
+                return average_aaa_blood_impact
+            if blood_calc == "aa":
+                return average_aa_blood_impact
+            if blood_calc == "a":
+                return average_aa_blood_impact, average_aaa_blood_impact
 
     return runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, average_on_base_position, steal_mod, clutch_factor, walk_mod
 
@@ -873,135 +899,66 @@ def calc_runners_on(runners_on_base, runner_advance_base, runners_on_base_minus_
     
     return runners_on, runner_advance
 
-def get_blood_mod(mods, bloodMod, opp_same, player_stat_data, stlatset):                         
-    playerMods = collections.defaultdict(lambda: [])    
-    for name in stlatset:
-        if name in mods[bloodMod][opp_same]:
-            stlatterm = mods[bloodMod][opp_same][name]            
-            multiplier = calc_player_stlatmod(name, player_stat_data, stlatterm)
-            if multiplier is not None:
-                playerMods[name].append(multiplier)    
-    return playerMods
-
-def calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMods, parkMods, player_stat_data, stlatset, adjusted_stat_data=None, overperform_aa=0.0, overperform_aaa=0.0):
-    blood_count = 12.0
-    a_blood_factor = 1.0 / blood_count
-    overperform_pct = (overperform_aa * a_blood_factor) + (overperform_aaa * a_blood_factor)
-    
-    if stlatset == "defense":                
-        base_omniscience, base_watchfulness, base_chasiness, base_anticapitalism, base_tenaciousness = calc_defense(terms, playerMods, parkMods, player_stat_data, adjusted_stat_data, None, overperform_pct)
-        player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness = base_omniscience, base_watchfulness, base_chasiness, base_anticapitalism, base_tenaciousness
-        for blood in BLOOD_LIST_DEFENSE:            
-            if (((away_home == "away") and ("a" in awayAttrs)) or ((away_home == "home") and ("a" in homeAttrs))) and ("same" in mods[blood]):
-                opp_same = "same"                
-            elif (((away_home == "away") and ("a" in homeAttrs)) or ((away_home == "home") and ("a" in awayAttrs))) and ("opp" in mods[blood]):
-                opp_same = "opp"
-            else:
-                continue            
-            bloodMods = get_blood_mod(mods, blood, opp_same, player_stat_data, helpers.DEFENSE_STLATS)            
-            blood_omniscience, blood_watchfulness, blood_chasiness, blood_anticapitalism, blood_tenaciousness = calc_defense(terms, playerMods, parkMods, player_stat_data, adjusted_stat_data, bloodMods, overperform_pct)
-            player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness = (player_omniscience + ((blood_omniscience - base_omniscience) * a_blood_factor)),  (player_watchfulness + ((blood_watchfulness - base_watchfulness) * a_blood_factor)), (player_chasiness + ((blood_chasiness - base_chasiness) * a_blood_factor)), (player_anticapitalism + ((blood_anticapitalism - base_anticapitalism) * a_blood_factor)), (player_tenaciousness + ((blood_tenaciousness - base_tenaciousness) * a_blood_factor))
-            
-        return player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness
-
-    elif stlatset == "pitching":
-        base_unthwackability, base_ruthlessness, base_overpowerment, base_shakespearianism, base_coldness = calc_pitching(terms, playerMods, parkMods, player_stat_data, None)
-        player_unthwackability, player_ruthlessness, player_overpowerment, player_shakespearianism, player_coldness = base_unthwackability, base_ruthlessness, base_overpowerment, base_shakespearianism, base_coldness
-        for blood in BLOOD_LIST_PITCHING:            
-            if (((away_home == "away") and ("a" in awayAttrs)) or ((away_home == "home") and ("a" in homeAttrs))) and ("same" in mods[blood]):
-                opp_same = "same"                
-            elif (((away_home == "away") and ("a" in homeAttrs)) or ((away_home == "home") and ("a" in awayAttrs))) and ("opp" in mods[blood]):
-                opp_same = "opp"
-            else:
-                continue                
-            bloodMods = get_blood_mod(mods, blood, opp_same, player_stat_data, helpers.PITCHING_STLATS)            
-            blood_unthwackability, blood_ruthlessness, blood_overpowerment, blood_shakespearianism, blood_coldness = calc_pitching(terms, playerMods, parkMods, player_stat_data, bloodMods)
-            player_unthwackability, player_ruthlessness, player_overpowerment, player_shakespearianism, player_coldness = (player_unthwackability + ((blood_unthwackability - base_unthwackability) * a_blood_factor)),  (player_ruthlessness + ((blood_ruthlessness - base_ruthlessness) * a_blood_factor)), (player_overpowerment + ((blood_overpowerment - base_overpowerment) * a_blood_factor)), (player_shakespearianism + ((blood_shakespearianism - base_shakespearianism) * a_blood_factor)), (player_coldness + ((blood_coldness - base_coldness) * a_blood_factor))            
-        return player_unthwackability, player_ruthlessness, player_overpowerment, player_shakespearianism, player_coldness
-
-    else:        
-        base_patheticism, base_tragicness, base_thwackability, base_divinity, base_moxie, base_musclitude, base_martyrdom = calc_batting(terms, playerMods, parkMods, player_stat_data, adjusted_stat_data, None, overperform_pct)
-        base_laserlikeness, base_basethirst, base_continuation, base_groundfriction, base_indulgence = calc_running(terms, playerMods, parkMods, player_stat_data, adjusted_stat_data, None, overperform_pct)
-        player_patheticism, player_tragicness, player_thwackability, player_divinity, player_moxie, player_musclitude, player_martyrdom = base_patheticism, base_tragicness, base_thwackability, base_divinity, base_moxie, base_musclitude, base_martyrdom
-        player_laserlikeness, player_basethirst, player_continuation, player_groundfriction, player_indulgence = base_laserlikeness, base_basethirst, base_continuation, base_groundfriction, base_indulgence
-        for blood in BLOOD_LIST_OFFENSE:            
-            if (((away_home == "away") and ("a" in awayAttrs)) or ((away_home == "home") and ("a" in homeAttrs))) and ("same" in mods[blood]):
-                opp_same = "same"                
-            elif (((away_home == "away") and ("a" in homeAttrs)) or ((away_home == "home") and ("a" in awayAttrs))) and ("opp" in mods[blood]):
-                opp_same = "opp"
-            else:
-                continue                
-            bloodMods = get_blood_mod(mods, blood, opp_same, player_stat_data, helpers.OFFENSE_STLATS)
-            blood_patheticism, blood_tragicness, blood_thwackability, blood_divinity, blood_moxie, blood_musclitude, blood_martyrdom = calc_batting(terms, playerMods, parkMods, player_stat_data, adjusted_stat_data, bloodMods, overperform_pct)
-            blood_laserlikeness, blood_basethirst, blood_continuation, blood_groundfriction, blood_indulgence = calc_running(terms, playerMods, parkMods, player_stat_data, adjusted_stat_data, bloodMods, overperform_pct)
-            player_patheticism, player_tragicness, player_thwackability, player_divinity, player_moxie, player_musclitude, player_martyrdom = (player_patheticism + ((blood_patheticism - base_patheticism) * a_blood_factor)), (player_tragicness + ((blood_tragicness - base_tragicness) * a_blood_factor)), (player_thwackability + ((blood_thwackability - base_thwackability) * a_blood_factor)),  (player_divinity + ((blood_divinity - base_divinity) * a_blood_factor)), (player_moxie + ((blood_moxie - base_moxie) * a_blood_factor)), (player_musclitude + ((blood_musclitude - base_musclitude) * a_blood_factor)), (player_martyrdom + ((blood_martyrdom - base_martyrdom) * a_blood_factor))
-            player_laserlikeness, player_basethirst, player_continuation, player_groundfriction, player_indulgence = (player_laserlikeness + ((blood_laserlikeness - base_laserlikeness) * a_blood_factor)),  (player_basethirst + ((blood_basethirst - base_basethirst) * a_blood_factor)), (player_continuation + ((blood_continuation - base_continuation) * a_blood_factor)), (player_groundfriction + ((blood_groundfriction - base_groundfriction) * a_blood_factor)), (player_indulgence + ((blood_indulgence - base_indulgence) * a_blood_factor))            
-        return player_patheticism, player_tragicness, player_thwackability, player_divinity, player_moxie, player_musclitude, player_martyrdom, player_laserlikeness, player_basethirst, player_continuation, player_groundfriction, player_indulgence
-
 def calc_player_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, player_stat_data, adjusted_stat_data, overperform_pct=0):        
     playerMods = get_player_mods(mods, awayAttrs, homeAttrs, weather, away_home, player_stat_data)        
     calced_stlats = {}        
-    player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness = calc_defense(terms, playerMods, teamMods, player_stat_data, adjusted_stat_data, None, overperform_pct)
+    flood_weather = helpers.get_weather_idx("Flooding")
+    ovp_from_hp = (away_home == "away" and "high_presssure" in awayAttrs and weather == flood_weather) or (away_home == "home" and "high_presssure" in homeAttrs and weather == flood_weather)
+    if ovp_from_hp:
+        player_omni_base_hit, player_watch_attempt_steal, player_chasi_triple, player_chasi_double, player_anticap_caught_steal_base, player_anticap_caught_steal_home, player_tenacious_runner_advances = calc_defense(terms, playerMods, teamMods, player_stat_data, adjusted_stat_data, None, 0)
+    else:
+        player_omni_base_hit, player_watch_attempt_steal, player_chasi_triple, player_chasi_double, player_anticap_caught_steal_base, player_anticap_caught_steal_home, player_tenacious_runner_advances = calc_defense(terms, playerMods, teamMods, player_stat_data, adjusted_stat_data, None, overperform_pct)
     if not player_stat_data["shelled"]:        
-        calced_stlats["patheticism"], calced_stlats["tragicness"], calced_stlats["thwackability"], calced_stlats["divinity"], calced_stlats["moxie"], calced_stlats["musclitude"], calced_stlats["martyrdom"] = calc_batting(terms, playerMods, teamMods, player_stat_data, adjusted_stat_data, None, overperform_pct)
-        calced_stlats["laserlikeness"], calced_stlats["basethirst"], calced_stlats["continuation"], calced_stlats["groundfriction"], calced_stlats["indulgence"] = calc_running(terms, playerMods, teamMods, player_stat_data, adjusted_stat_data, None, overperform_pct)    
-        return calced_stlats, player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness
-    return player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness
-
-def calc_ablood_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, player_stat_data, adjusted_stat_data, average_aa_impact, average_aaa_impact):        
-    playerMods = get_player_mods(mods, awayAttrs, homeAttrs, weather, away_home, player_stat_data)
-    calced_stlats = {}
-    player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness = calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMods, teamMods, player_stat_data, "defense", adjusted_stat_data, average_aa_impact, average_aaa_impact)        
-    if not player_stat_data["shelled"]:        
-        calced_stlats["patheticism"], calced_stlats["tragicness"], calced_stlats["thwackability"], calced_stlats["divinity"], calced_stlats["moxie"], calced_stlats["musclitude"], calced_stlats["martyrdom"], calced_stlats["laserlikeness"], calced_stlats["basethirst"], calced_stlats["continuation"], calced_stlats["groundfriction"], calced_stlats["indulgence"] = calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMods, teamMods, player_stat_data, "offense", adjusted_stat_data, average_aa_impact, average_aaa_impact)                     
-        return calced_stlats, player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness
-    return player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness
+        calced_stlats["path_connect"], calced_stlats["trag_runner_advances"], calced_stlats["thwack_base_hit"], calced_stlats["div_homer"], calced_stlats["moxie_swing_correct"], calced_stlats["muscl_foul_ball"], calced_stlats["muscl_triple"], calced_stlats["muscl_double"], calced_stlats["martyr_sacrifice"] = calc_batting(terms, playerMods, teamMods, player_stat_data, adjusted_stat_data, None, overperform_pct)
+        calced_stlats["laser_attempt_steal"], calced_stlats["laser_caught_steal_base"], calced_stlats["laser_caught_steal_home"], calced_stlats["laser_runner_advances"], calced_stlats["baset_attempt_steal"], calced_stlats["baset_caught_steal_home"], calced_stlats["cont_triple"], calced_stlats["cont_double"], calced_stlats["ground_triple"], calced_stlats["indulg_runner_advances"] = calc_running(terms, playerMods, teamMods, player_stat_data, adjusted_stat_data, None, overperform_pct)    
+        return calced_stlats, player_omni_base_hit, player_watch_attempt_steal, player_chasi_triple, player_chasi_double, player_anticap_caught_steal_base, player_anticap_caught_steal_home, player_tenacious_runner_advances
+    return player_omni_base_hit, player_watch_attempt_steal, player_chasi_triple, player_chasi_double, player_anticap_caught_steal_base, player_anticap_caught_steal_home, player_tenacious_runner_advances
 
 def calc_pitcher_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, player_stat_data):       
     playerMods = get_player_mods(mods, awayAttrs, homeAttrs, weather, away_home, player_stat_data)    
     calced_stlats = {}    
-    if ("a" in awayAttrs) or ("a" in homeAttrs):
-        calced_stlats["unthwackability"], calced_stlats["ruthlessness"], calced_stlats["overpowerment"], calced_stlats["shakespearianism"], calced_stlats["coldness"] = calc_a_blood(terms, mods, awayAttrs, homeAttrs, weather, away_home, playerMods, teamMods, player_stat_data, "pitching")
-    else:
-        calced_stlats["unthwackability"], calced_stlats["ruthlessness"], calced_stlats["overpowerment"], calced_stlats["shakespearianism"], calced_stlats["coldness"] = calc_pitching(terms, playerMods, teamMods, player_stat_data)
+    calced_stlats["unthwack_base_hit"], calced_stlats["ruth_strike"], calced_stlats["overp_homer"], calced_stlats["overp_triple"], calced_stlats["overp_double"], calced_stlats["shakes_runner_advances"], calced_stlats["cold_clutch_factor"] = calc_pitching(terms, playerMods, teamMods, player_stat_data)
     return calced_stlats
 
 def calc_team_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, away_home, team_stat_data, pitcher_stat_data, adjusted_stat_data, blood_impact=None, second_blood_impact=None):
     team_stlats, team_defense, batter_order = {}, {}, {}
-    team_defense["omniscience"], team_defense["watchfulness"], team_defense["chasiness"], team_defense["anticapitalism"], team_defense["tenaciousness"] = 0.0, 0.0, 0.0, 0.0, 0.0
+    team_defense["omni_base_hit"], team_defense["watch_attempt_steal"], team_defense["chasi_triple"], team_defense["chasi_double"], team_defense["anticap_caught_steal_base"], team_defense["anticap_caught_steal_home"], team_defense["tenacious_runner_advances"] = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     lineup = 0
+    blood_count = 12.0
+    a_blood_factor = 1.0 / blood_count
     
     for playerid in team_stat_data:        
         if (blood_impact and not second_blood_impact) or not blood_impact:
             overperform_pct = 0
             if blood_impact and not second_blood_impact:
-                overperform_pct = blood_impact[playerid]        
-            if not team_stat_data[playerid]["shelled"]:
-                batter_order[playerid] = team_stat_data[playerid]["turnOrder"]
-                team_stlats[playerid] = {}                                    
-                team_stlats[playerid], player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness = calc_player_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, away_home, team_stat_data[playerid], adjusted_stat_data[away_home][playerid], overperform_pct)                  
-            else:
-                player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness = calc_player_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, away_home, team_stat_data[playerid], adjusted_stat_data[away_home][playerid], overperform_pct)        
+                if playerid in blood_impact:
+                    overperform_pct = blood_impact[playerid]        
+                else:
+                    overperform_pct = 0
+        elif blood_impact and second_blood_impact:
+            overperform_pct = (blood_impact[playerid] * a_blood_factor) + (second_blood_impact[playerid] * a_blood_factor)
+        if not team_stat_data[playerid]["shelled"]:
+            batter_order[playerid] = team_stat_data[playerid]["turnOrder"]
+            team_stlats[playerid] = {}                                    
+            team_stlats[playerid], player_omni_base_hit, player_watch_attempt_steal, player_chasi_triple, player_chasi_double, player_anticap_caught_steal_base, player_anticap_caught_steal_home, player_tenacious_runner_advances = calc_player_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, away_home, team_stat_data[playerid], adjusted_stat_data[away_home][playerid], overperform_pct)                  
         else:
-            average_aa_impact, average_aaa_impact = blood_impact[playerid], second_blood_impact[playerid]
-            if not team_stat_data[playerid]["shelled"]:
-                batter_order[playerid] = team_stat_data[playerid]["turnOrder"]
-                team_stlats[playerid] = {}
-                team_stlats[playerid], player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness = calc_ablood_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, away_home, team_stat_data[playerid], adjusted_stat_data[away_home][playerid], average_aa_impact, average_aaa_impact)                  
-            else:
-                player_omniscience, player_watchfulness, player_chasiness, player_anticapitalism, player_tenaciousness = calc_ablood_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, away_home, team_stat_data[playerid], adjusted_stat_data[away_home][playerid], average_aa_impact, average_aaa_impact)
+            player_omni_base_hit, player_watch_attempt_steal, player_chasi_triple, player_chasi_double, player_anticap_caught_steal_base, player_anticap_caught_steal_home, player_tenacious_runner_advances = calc_player_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, away_home, team_stat_data[playerid], adjusted_stat_data[away_home][playerid], overperform_pct)
         lineup += 1
-        team_defense["omniscience"] += player_omniscience
-        team_defense["watchfulness"] += player_watchfulness
-        team_defense["chasiness"] += player_chasiness
-        team_defense["anticapitalism"] += player_anticapitalism
-        team_defense["tenaciousness"] += player_tenaciousness
+        team_defense["omni_base_hit"] += player_omni_base_hit
+        team_defense["watch_attempt_steal"] += player_watch_attempt_steal
+        team_defense["chasi_triple"] += player_chasi_triple
+        team_defense["chasi_double"] += player_chasi_double
+        team_defense["anticap_caught_steal_base"] += player_anticap_caught_steal_base
+        team_defense["anticap_caught_steal_home"] += player_anticap_caught_steal_home
+        team_defense["tenacious_runner_advances"] += player_tenacious_runner_advances
     sorted_batters = dict(sorted(batter_order.items(), key=lambda item: item[1]))
-    team_defense["omniscience"] = team_defense["omniscience"] / lineup
-    team_defense["watchfulness"] = team_defense["watchfulness"] / lineup
-    team_defense["chasiness"] = team_defense["chasiness"] / lineup
-    team_defense["anticapitalism"] = team_defense["anticapitalism"] / lineup
-    team_defense["tenaciousness"] = team_defense["tenaciousness"] / lineup    
+    team_defense["omni_base_hit"] = team_defense["omni_base_hit"] / lineup
+    team_defense["watch_attempt_steal"] = team_defense["watch_attempt_steal"] / lineup
+    team_defense["chasi_triple"] = team_defense["chasi_triple"] / lineup
+    team_defense["chasi_double"] = team_defense["chasi_double"] / lineup
+    team_defense["anticap_caught_steal_base"] = team_defense["anticap_caught_steal_base"] / lineup
+    team_defense["anticap_caught_steal_home"] = team_defense["anticap_caught_steal_home"] / lineup
+    team_defense["tenacious_runner_advances"] = team_defense["tenacious_runner_advances"] / lineup    
     pitcherStlats = calc_pitcher_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, away_home, pitcher_stat_data)
 
     return team_stlats, team_defense, sorted_batters, pitcherStlats
@@ -1020,10 +977,13 @@ def blood_impact_calc(terms, mods, weather, away_home, teamMods, calc_team_data,
     if "a" in teamAttrs:
         average_aa_impact, average_aaa_impact = calc_probs_from_stats(mods, weather, calc_team_data, calc_opp_data, calc_pitcher_data, team_stat_data, opp_stat_data, opp_pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, "a", innings)
         team_stlats, team_defense, batter_order, pitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, team_stat_data, team_pitcher_data, adjusted_stat_data, average_aa_impact, average_aaa_impact)
+    if "high_pressure" in teamAttrs:
+        high_pressure_mod = calc_probs_from_stats(mods, weather, calc_team_data, calc_opp_data, calc_pitcher_data, team_stat_data, opp_stat_data, opp_pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, "high_pressure", innings)
+        team_stlats, team_defense, batter_order, pitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, teamMods, weather, away_home, team_stat_data, team_pitcher_data, adjusted_stat_data, high_pressure_mod)
     return team_stlats, team_defense, batter_order, pitcherStlats
     
 def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods, adjusted_stat_data, adjustments, skip_mods=False, runtime_solution=False):            
-    polarity_plus, polarity_minus = helpers.get_weather_idx("Polarity +"), helpers.get_weather_idx("Polarity -")    
+    polarity_plus, polarity_minus, flood_weather = helpers.get_weather_idx("Polarity +"), helpers.get_weather_idx("Polarity -"), helpers.get_weather_idx("Flooding")
     if weather == polarity_plus or weather == polarity_minus:
         if not runtime_solution:
             return .5, .5    
@@ -1031,9 +991,9 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
     away_team_stlats, away_team_defense, away_batter_order, awayPitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, awayMods, weather, "away", team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], adjusted_stat_data)
     home_team_stlats, home_team_defense, home_batter_order, homePitcherStlats = calc_team_stlats(terms, mods, awayAttrs, homeAttrs, homeMods, weather, "home", team_stat_data[homeTeam], pitcher_stat_data[homePitcher], adjusted_stat_data)
 
-    if "aaa" in awayAttrs or "aa" in awayAttrs or "a" in awayAttrs:
+    if "aaa" in awayAttrs or "aa" in awayAttrs or "a" in awayAttrs or ("high_pressure" in awayAttrs and weather == flood_weather):
         away_team_stlats, away_team_defense, away_batter_order, awayPitcherStlats = blood_impact_calc(terms, mods, weather, "away", awayMods, away_team_stlats, home_team_defense, homePitcherStlats, team_stat_data[awayTeam], team_stat_data[homeTeam], pitcher_stat_data[homePitcher], pitcher_stat_data[awayPitcher], awayAttrs, homeAttrs, away_batter_order, adjusted_stat_data, adjustments, innings=9)
-    if "aaa" in homeAttrs or "aa" in homeAttrs or "a" in homeAttrs:
+    if "aaa" in homeAttrs or "aa" in homeAttrs or "a" in homeAttrs or ("high_pressure" in homeAttrs and weather == flood_weather):
         home_team_stlats, home_team_defense, home_batter_order, homePitcherStlats = blood_impact_calc(terms, mods, weather, "home", homeMods, home_team_stlats, away_team_defense, awayPitcherStlats, team_stat_data[homeTeam], team_stat_data[awayTeam], pitcher_stat_data[awayPitcher], pitcher_stat_data[homePitcher], homeAttrs, awayAttrs, home_batter_order, adjusted_stat_data, adjustments, innings=9)
     
     if runtime_solution:

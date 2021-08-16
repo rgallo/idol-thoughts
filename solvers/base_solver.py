@@ -94,7 +94,7 @@ LAST_ITERATION_TIME = datetime.datetime.now()
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "A", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
 ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING", "SINKING_SHIP"}
-DIRECT_MOD_SOLVES = {"psychic", "a", "acidic", "base_instincts", "electric", "fiery", "love", "high_pressure"}
+DIRECT_MOD_SOLVES = {"psychic", "a", "acidic", "base_instincts", "electric", "fiery", "love"}
 CALC_MOD_SUCCESS = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electric", "fiery", "love", "high_pressure", "a", "0", "o_no", "h20"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
@@ -588,7 +588,7 @@ def minimize_func(parameters, *data):
     adjustments = {}
     for stlat in half_stlats:
         for event in half_stlats[stlat]:                        
-            adjustments[event] = terms[stlat].calc(half_stlats[stlat][event])    
+            adjustments[event] = terms[event].calc(half_stlats[stlat][event])    
 
     if ALL_GAMES > 0:       
         games_available = ALL_GAMES - len(LINE_JUMP_GAMES)
