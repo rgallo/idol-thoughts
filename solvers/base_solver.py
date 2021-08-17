@@ -1675,6 +1675,8 @@ def minimize_func(parameters, *data):
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1           
     now = datetime.datetime.now()    
+    if CURRENT_ITERATION % 25 == 0:
+        time.sleep(10)
     #if (((now - LAST_CHECKTIME).total_seconds()) > 1800) and (workers > 1):    
     if (((now - LAST_CHECKTIME).total_seconds()) > 225):    
     #if CURRENT_ITERATION % 100 == 0:    

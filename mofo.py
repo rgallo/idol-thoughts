@@ -285,11 +285,11 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
     if "magnify_5x" in pitcherAttrs:
         score_mult_pitcher *= 5.0
     #positive strike mod means fewer average strikes per strikeout; negative means more
-    strike_mod, strike_to_walk, walk_mod, score_mod = 1.0, 0.0, 0.0, 0.0
+    strike_mod, walk_buff, strike_to_walk, walk_to_strike, walk_mod, score_mod = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     if "fiery" in opponentAttrs:                
         strike_mod += mods["fiery"]["same"]["multiplier"]
     if "psychic" in opponentAttrs:
-        strike_mod += mods["psychic"]["same"]["striketrick"]
+        walk_to_strike += mods["psychic"]["same"]["striketrick"]
     if "love" in opponentAttrs:
         strike_mod += mods["love"]["opp"]["strikeout"]
     if "acidic" in opponentAttrs:                
@@ -299,17 +299,17 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
     if "psychic" in battingAttrs:
         strike_to_walk += mods["psychic"]["same"]["walktrick"]
     if "love" in battingAttrs:
-        strike_mod -= mods["love"]["opp"]["easypitch"]
+        walk_buff += mods["love"]["opp"]["easypitch"]
     if "base_instincts" in battingAttrs:
         walk_mod += mods["base_instincts"]["same"]["multiplier"]
     if "a" in opponentAttrs:
         strike_mod += mods["fiery"]["same"]["multiplier"] * a_blood_multiplier
-        strike_mod += mods["psychic"]["same"]["striketrick"] * a_blood_multiplier
         strike_mod += mods["love"]["opp"]["strikeout"] * a_blood_multiplier
+        walk_to_strike += mods["psychic"]["same"]["striketrick"] * a_blood_multiplier
         score_mod += mods["acidic"]["same"]["multiplier"] * a_blood_multiplier
     if "a" in battingAttrs:
         strike_mod -= mods["electric"]["same"]["multiplier"] * a_blood_multiplier
-        strike_mod -= mods["love"]["opp"]["easypitch"] * a_blood_multiplier
+        walk_buff += mods["love"]["opp"]["easypitch"] * a_blood_multiplier
         walk_mod += mods["base_instincts"]["same"]["multiplier"] * a_blood_multiplier
         strike_to_walk += mods["psychic"]["same"]["walktrick"] * a_blood_multiplier
 
@@ -438,11 +438,24 @@ def calc_probs_from_stats(mods, weather, team_stat_data, opp_stat_data, pitcher_
             #probability of a least one ball happening is 1 - probability of no balls happening
             corrected_strike_chance *= (1.0 - no_balls)
 
-        corrected_strike_chance *= strike_mod
+        corrected_strike_chance += strike_mod - walk_buff
+        walked += walk_buff - strike_mod        
         #everything else is per pitch... connect per pitch, base hit per pitch, caught out per pitch, so each ball pitched is 1 / ball count % of a walk
         #psychic mind tricks can convert strikes to walks... so some % of strikes, called strike to walk, are removed from strike events and become walk events
-        walk_chance[playerid] = walked + (corrected_strike_chance * strike_to_walk)
-        strike_out_chance[playerid] = corrected_strike_chance - (corrected_strike_chance * strike_to_walk)
+        walked += (corrected_strike_chance * strike_to_walk) - (corrected_strike_chance * walk_to_strike)
+        corrected_strike_chance += (corrected_strike_chance * walk_to_strike) - (corrected_strike_chance * strike_to_walk)
+        if corrected_strike_chance <= 0.0:
+            if corrected_strike_chance == 0.0:
+                corrected_strike_chance = 0.0005
+            walked += abs(corrected_strike_chance) * 2.0
+            corrected_strike_chance = abs(corrected_strike_chance) * 2.0
+        if walked <= 0.0:
+            if walked == 0.0:
+                walked = 0.0005
+            corrected_strike_chance += abs(walked) * 2.0
+            walked += abs(walked) * 2.0
+        walk_chance[playerid] = walked
+        strike_out_chance[playerid] = corrected_strike_chance
 
         #the sum of these events (which would be one or the other or the other etc.) must be one, as they are everything that can happen on a plate appearance
         all_macro_events_prob = walk_chance[playerid] + base_hit_chance + strike_out_chance[playerid] + caught_out_chance[playerid]        
