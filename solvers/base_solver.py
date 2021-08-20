@@ -80,6 +80,7 @@ POS_HITS = 0
 POS_HRS = 0
 LAST_DAY_RANGE = 1
 LAST_SEASON_RANGE = 1
+SMALL_NAPS = 0
 FIRST_SOLUTION = False
 EARLY_REJECT = False
 EXPECTED_MOD_RATES = {}
@@ -508,7 +509,8 @@ def minimize_func(parameters, *data):
     global BROAD_ERROR_THRESHOLD
     global ACTIVE_DAYS
     global IDLE_DAYS
-    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, final_solution, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, debug, debug2, debug3, outputdir = data    
+    global SMALL_NAPS
+    calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, final_solution, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, debug, debug2, debug3, outputdir, solution_regen = data    
     debug_print("func start: {}".format(starttime), debug3, run_id)
     if number_to_beat is not None:
         BEST_RESULT = number_to_beat if (number_to_beat < BEST_RESULT) else BEST_RESULT
@@ -804,10 +806,10 @@ def minimize_func(parameters, *data):
                 gamehomeTeam = get_team_name(game["home"]["team_id"], season, day)
                 gameawayTeam = get_team_name(game["away"]["team_id"], season, day)     
                 if not using_cached_batters:
-                    if float(game["home"]["opposing_team_rbi"]) == 0.0:
+                    if float(game["home"]["opposing_team_abs_rbi"]) == 0.0:
                         real_sho.append(game["home"]["pitcher_id"])
                         real_chipsburgers[game["home"]["pitcher_id"]] = int(game["home"]["strikeouts"])
-                    if float(game["away"]["opposing_team_rbi"]) == 0.0:
+                    if (float(game["away"]["opposing_team_abs_rbi"]) == 0.0) and ("home_field" not in homeAttrs):
                         real_sho.append(game["away"]["pitcher_id"])
                         real_chipsburgers[game["away"]["pitcher_id"]] = int(game["away"]["strikeouts"])
                     real_ks[game["home"]["pitcher_id"]] = int(game["home"]["strikeouts"])
@@ -1163,14 +1165,17 @@ def minimize_func(parameters, *data):
                 solved_chipsmeatballs_score = (real_ks[solved_chipsmeatballs_leader] * 0.2) + real_meatballs[solved_chipsmeatballs_leader]
                 chipsmeatballs_score_earned += solved_chipsmeatballs_score
                 chipsmeatballs_score_max += best_chipsmeatballs_score
-
-                solved_burgers_leader = next(iter(sorted_solved_era))
+                
                 if len(real_sho) > 0:
                     burgers_score_max += best_burgers_score
                     chipsburgers_score_max += best_chipsburgers_score
-                    if solved_burgers_leader in real_sho:
-                        burgers_score_earned += 12.5
-                        chipsburgers_score_earned += 12.5 + (real_ks[solved_burgers_leader] * 0.2)
+                    solved_burgers_leader = next(iter(sorted_solved_era))                    
+                    for solved_burgers_pitcher in sorted_solved_era:                        
+                        if solved_burgers_pitcher in real_sho:                             
+                            pitcher_burgers_score = 12.5 * ((sorted_solved_era[solved_burgers_leader] + 0.001) / (sorted_solved_era[solved_burgers_pitcher] + 0.001))                            
+                            burgers_score_earned += pitcher_burgers_score
+                            chipsburgers_score_earned += pitcher_burgers_score + (real_ks[solved_burgers_pitcher] * 0.2)
+                            break                        
                 
                 solved_hits.clear(), solved_homers.clear(), solved_seeddogs.clear(), solved_ks.clear(), solved_era.clear(), solved_meatballs.clear(), solved_chipsmeatballs.clear() 
                 sorted_solved_hits.clear(), sorted_solved_homers.clear(), sorted_solved_seeddogs.clear(), sorted_solved_ks.clear(), sorted_solved_era.clear()
@@ -1221,37 +1226,28 @@ def minimize_func(parameters, *data):
             pickles_score = pickles_score_earned / pickles_score_max
             seedpickles_score = seedpickles_score_earned / seedpickles_score_max
             dogpickles_score = dogpickles_score_earned / dogpickles_score_max
-            trifecta_score = trifecta_score_earned / trifecta_score_max
-            sum_max_earnings = max(seeds_score_max, dogs_score_max, seeddogs_score_max, pickles_score_max, seedpickles_score_max, dogpickles_score_max, trifecta_score_max, chips_score_max, meatballs_score_max, chipsmeatballs_score_max, burgers_score_max, chipsburgers_score_max)
+            trifecta_score = trifecta_score_earned / trifecta_score_max            
             single_bats_earnings = max(seeds_score_max, dogs_score_max, pickles_score_max)
-            pickles_penalty = (((1.0 - pickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (single_bats_earnings / sum_max_earnings)
-            seedpickles_penalty = (((1.0 - seedpickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (seedpickles_score_max / sum_max_earnings)
-            dogpickles_penalty = (((1.0 - dogpickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (dogpickles_score_max / sum_max_earnings)
-            trifecta_penalty = (((1.0 - trifecta_score) * 100.0) ** 6.0) * thieves * 100.0 * (trifecta_score_max / sum_max_earnings)
-        else:
-            sum_max_earnings = max(seeds_score_max, dogs_score_max, seeddogs_score_max, chips_score_max, meatballs_score_max, chipsmeatballs_score_max, burgers_score_max, chipsburgers_score_max)        
-            single_bats_earnings = max(seeds_score_max, dogs_score_max)
-        #print("Pitcher earnings (% of max possible) - Chips {:.2f}%, Burgers {:.2f}%, Meatballs {:.2f}%, Chips+Burgers {:.2f}%, Chips+Meatballs {:.2f}%".format(chips_score * 100.0, burgers_score * 100.0, meatballs_score * 100.0, chipsburgers_score * 100.0, chipsmeatballs_score * 100.0))
-        #each of these scores is how close to maximum value we achieved, so 4.0 - these is a multiplier that punishes our solution the farther it is from optimum earnings, minimum 1.0        
-        #batman_score = (((2.0 - seeds_score) ** 4.0) + ((2.0 - dogs_score) ** 4.0) + ((2.0 - seeddogs_score) ** 4.0)) / 3.0
-        #correction_adjustment = (((1.0 + seeds_score) ** 4.0) + ((1.0 + dogs_score) ** 4.0) + ((1.0 + seeddogs_score) ** 4.0)) / 48.0
+            pickles_penalty = (((1.0 - pickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (1.0 - pickles_score)
+            seedpickles_penalty = (((1.0 - seedpickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (1.0 - seedpickles_score)
+            dogpickles_penalty = (((1.0 - dogpickles_score) * 100.0) ** 6.0) * thieves * 100.0 * (1.0 - dogpickles_score)
+            trifecta_penalty = (((1.0 - trifecta_score) * 100.0) ** 6.0) * thieves * 100.0 * (1.0 - trifecta_score)                
         if CURRENT_ITERATION == 1:
             print("Max BATMAN earnings = seeds {:.0f}, dogs {:.0f}, seeds+dogs {:.0f}".format(seeds_score_max, dogs_score_max, seeddogs_score_max))
             if crimes_list is not None:
                 print("Max ENOCH earnings = pickles {:.0f}, seeds+pickes {:.0f}, dogs+pickles {:.0f}, trifecta {:.0f}".format(pickles_score_max, seedpickles_score_max, dogpickles_score_max, trifecta_score_max))
             print("Max pitching earnings = chips {:.0f}, burgers {:.0f}, meatballs {:.0f}, chips+burgers {:.0f}, chips+meatballs {:.0f}".format(chips_score_max, burgers_score_max, meatballs_score_max, chipsburgers_score_max, chipsmeatballs_score_max))
             print("{} Shutout pitchers, {} pitchers, {} batters".format(sho_pitchers, chips_pitchers, hitters))        
-        seeds_penalty = (((1.0 - seeds_score) * 100.0) ** 6.0) * hitters * 100.0 * (single_bats_earnings / sum_max_earnings)
-        dogs_penalty = (((1.0 - dogs_score) * 100.0) ** 6.0) * sluggers * 100.0 * (single_bats_earnings / sum_max_earnings)
-        seeddogs_penalty = (((1.0 - seeddogs_score) * 100.0) ** 6.0) * seeddogers * 100.0 * (seeddogs_score_max / sum_max_earnings)
-        #chips is the sole indicator of if we're hitting strikeouts leaders correctly, which should inform the correct solution... therefore, should be weighted as equally-important to the final solution as the highest-snack earner
-        chips_penalty = (((1.0 - chips_score) * 100.0) ** 6.0) * chips_pitchers * 100.0
+        seeds_penalty = (((1.0 - seeds_score) * 100.0) ** 6.0) * hitters * 100.0 * (1.0 - seeds_score)
+        dogs_penalty = (((1.0 - dogs_score) * 100.0) ** 6.0) * sluggers * 100.0 * (1.0 - dogs_score)
+        seeddogs_penalty = (((1.0 - seeddogs_score) * 100.0) ** 6.0) * seeddogers * 100.0 * (1.0 - seeddogs_score)        
+        chips_penalty = (((1.0 - chips_score) * 100.0) ** 6.0) * chips_pitchers * 100.0 * (1.0 - chips_score)
         #shutouts are more-diffuclt to predict, but earn a lot... we don't want to be forcing solutions to give us a bunch of shutouts first, so we need to penalize these less as they are just harder to predict period
-        burgers_penalty = (((1.0 - burgers_score) * 100.0) ** 4.0) * sho_pitchers * 100.0 * (burgers_score_max / sum_max_earnings)
-        chipsburgers_penalty = (((1.0 - chipsburgers_score) * 100.0) ** 4.0) * sho_pitchers * 100.0 * (chipsburgers_score_max / sum_max_earnings)
-        meatballs_penalty = (((1.0 - meatballs_score) * 100.0) ** 6.0) * chips_pitchers * 100.0 * (meatballs_score_max / sum_max_earnings)
-        chipsmeatballs_penalty = (((1.0 - chipsmeatballs_score) * 100.0) ** 6.0) * chips_pitchers * 100.0 * (chipsmeatballs_score_max / sum_max_earnings)
-        batman_error = seeds_penalty + dogs_penalty + seeddogs_penalty + chips_penalty + burgers_penalty + chipsburgers_penalty + meatballs_penalty + chipsmeatballs_penalty + pickles_penalty + seedpickles_penalty + dogpickles_penalty + trifecta_penalty
+        burgers_penalty = (((1.0 - burgers_score) * 100.0) ** 6.0) * sho_pitchers * (1.0 - burgers_score) * 100.0
+        chipsburgers_penalty = (((1.0 * chipsburgers_score) * 100.0) ** 6.0) * sho_pitchers * (1.0 * chipsburgers_score) * 100.0
+        meatballs_penalty = (((1.0 - meatballs_score) * 100.0) ** 6.0) * chips_pitchers * 100.0 * (1.0 - meatballs_score)
+        chipsmeatballs_penalty = (((1.0 - chipsmeatballs_score) * 100.0) ** 6.0) * chips_pitchers * 100.0 * (1.0 - chipsmeatballs_score)
+        batman_error = seeds_penalty + dogs_penalty + seeddogs_penalty + chips_penalty + meatballs_penalty + chipsmeatballs_penalty + pickles_penalty + seedpickles_penalty + dogpickles_penalty + trifecta_penalty + burgers_penalty + chipsburgers_penalty
         #print("Batman error = {:.0f}".format(batman_error))        
         linear_error += batman_error   
         
@@ -1482,7 +1478,7 @@ def minimize_func(parameters, *data):
         elif unmod_linear_error >= LAST_UNMOD:
             fail_adds = unmod_linear_error - LAST_UNMOD
         linear_fail = BEST_RESULT + fail_adds           
-    if (linear_fail < BEST_RESULT):
+    if (linear_fail < BEST_RESULT) or solution_regen:
         BEST_RESULT = linear_fail    
         BEST_SEASON = season_fail
         ALL_GAMES = game_counter            
@@ -1567,10 +1563,10 @@ def minimize_func(parameters, *data):
                     write_parameters(outputdir, run_id, "solution.json", parameters)
             debug_print("Best so far - fail rate {:.4f}%\n".format(fail_rate * 100.0) + terms_output + "\n" + mods_output + "\n" + ballpark_mods_output, debug2, run_id)
             detailtext = "{} games".format(game_counter)
-            detailtext += "\n{:.2f}% Unmodded,".format(unmod_rate) + (" " * (longest_modname - 8))
+            detailtext += "\n{}{:.2f}% Unmodded,".format(("" if unmod_rate >= 10 else " "), unmod_rate) + (" " * (longest_modname - 8))
             detailtext += " {}{:.2f}% expected, {} games, error {:.0f}".format(("" if EXPECTED_MOD_RATES["unmod"] >= 10 else " "), EXPECTED_MOD_RATES["unmod"], unmod_games, linear_by_mod["unmod"])
             for name in mod_rates:
-                detailtext += "\n{:.2f}% {},".format(mod_rates[name], name) + (" " * (longest_modname - len(name)))    
+                detailtext += "\n{}{:.2f}% {},".format(("" if mod_rates[name] >= 10 else " "), mod_rates[name], name) + (" " * (longest_modname - len(name)))    
                 detailtext += " {}{:.2f}% expected,  {} games, error {:.0f}".format(("" if EXPECTED_MOD_RATES[name] >= 10 else " "), EXPECTED_MOD_RATES[name], mod_games[name], linear_by_mod[name])   
             if multi_mod_games > 0:
                 if solve_for_ev:
@@ -1674,15 +1670,17 @@ def minimize_func(parameters, *data):
         else:
             debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
     CURRENT_ITERATION += 1           
-    now = datetime.datetime.now()    
-    if CURRENT_ITERATION % 25 == 0:
-        time.sleep(10)
+    now = datetime.datetime.now()
     #if (((now - LAST_CHECKTIME).total_seconds()) > 1800) and (workers > 1):    
-    if (((now - LAST_CHECKTIME).total_seconds()) > 225):    
-    #if CURRENT_ITERATION % 100 == 0:    
-        #print("{} Taking our state-mandated 3 minute long rest per half hour of work".format(datetime.datetime.now()))
-        sleeptime, sleepmins = 0.0, 0.0   
-        time.sleep(45)        
+    if (((now - LAST_CHECKTIME).total_seconds()) > 100):        
+        #print("{} Taking our state-mandated 3 minute long rest per half hour of work".format(datetime.datetime.now()))        
+        #doing it this way means we sleep 10 seconds every 100 seconds, and then an additional 30 seconds every 300 seconds for 10 -> 10 -> 40 of rest in a 6 minute total span        
+        if SMALL_NAPS == 3:
+            time.sleep(30)        
+            SMALL_NAPS = 0
+        else:
+            time.sleep(30)
+            SMALL_NAPS += 1
         LAST_CHECKTIME = datetime.datetime.now()        
         #print("{} BACK TO WORK".format(datetime.datetime.now()))       
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
