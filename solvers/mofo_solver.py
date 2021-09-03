@@ -280,7 +280,7 @@ def main():
         popsize = 25
         init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev, cmd_args.regen) 
     else:
-        popsize = 10
+        popsize = 200
         init = 'sobol'
     if cmd_args.regen:
         for new_result in init:

@@ -197,15 +197,12 @@ def log_transform(value, base):
         transformed_value = 1.0 if (value > 0) else 0.0
     return transformed_value
 
-def prob_adjust(prob, multipliers):
+def prob_adjust(prob, multiplier):
     new_prob = prob
-    for multiplier in multipliers:
-        if new_prob == 1 or new_prob == 0:
-            break            
-        else:
-            odds = new_prob / (1 - new_prob)
-            new_odds = odds * (1 + multiplier)
-            new_prob = new_odds / (1 + new_odds)
+    if new_prob != 1 and new_prob != 0:    
+        odds = new_prob / (1 - new_prob)
+        new_odds = odds * (1 + multiplier)
+        new_prob = new_odds / (1 + new_odds)
     return new_prob
 
 def calc_defense(terms, player_mods, park_mods, player_stat_data, adjusted_stlats, bloodMods=None, overperform_pct=0):
@@ -328,9 +325,8 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
         strike_to_walk += mods["psychic"]["same"]["walktrick"] * a_blood_multiplier        
 
     strike_log = ruth_strike - adjustments["ruth_strike"]
-    strike_prob = log_transform(strike_log, log_transform_base)
-    strike_modifiers = [parkMods["plus_strike"],]
-    strike_chance = prob_adjust(strike_prob, strike_modifiers)
+    strike_prob = log_transform(strike_log, log_transform_base)    
+    strike_chance = prob_adjust(strike_prob, parkMods["plus_strike"])
     #clutch_log = (cold_clutch_factor - adjustments["cold_clutch_factor"]) / (cold_clutch_factor + adjustments["cold_clutch_factor"])
     #clutch_factor = log_transform(clutch_log, log_transform_base)            
     clutch_factor = 0.0
@@ -373,9 +369,8 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
         swing_ball_chance = ((1.0 - swing_correct_chance) * (1.0 - strike_chance)) - (((1.0 - strike_chance) ** ball_count) if "flinch" in playerAttrs else 0.0)
 
         connect_log = adjustments["path_connect"] - path_connect
-        base_connect_prob = log_transform(connect_log, log_transform_base)
-        base_connect_modifiers = [parkMods["plus_contact_minus_hardhit"],]
-        base_connect_chance = prob_adjust(base_connect_prob, base_connect_modifiers)
+        base_connect_prob = log_transform(connect_log, log_transform_base)        
+        base_connect_chance = prob_adjust(base_connect_prob, parkMods["plus_contact_minus_hardhit"])
         connect_chance = base_connect_chance * swing_strike_chance
 
         base_hit_adjust = adjustments["thwack_base_hit"] - adjustments["unthwack_base_hit"] - adjustments["omni_base_hit"]
@@ -388,13 +383,11 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
         ball_chance = 1.0 - swing_ball_chance
 
         foul_ball_log = muscl_foul_ball - adjustments["muscl_foul_ball"]
-        foul_ball_prob = log_transform(foul_ball_log, log_transform_base)
-        foul_ball_modifiers = [-parkMods["plus_hit_minus_foul"],]
-        foul_ball_chance = prob_adjust(foul_ball_prob, foul_ball_modifiers)
+        foul_ball_prob = log_transform(foul_ball_log, log_transform_base)        
+        foul_ball_chance = prob_adjust(foul_ball_prob, -parkMods["plus_hit_minus_foul"])
         foul_ball_chance *= (1.0 - base_hit) * connect_chance
-        caught_out_prob = connect_chance - foul_ball_chance - base_hit_chance
-        caught_out_modifiers = [parkMods["plus_groundout_minus_hardhit"], -parkMods["minus_doubleplay"]]
-        caught_out_chance[playerid] = prob_adjust(caught_out_prob, caught_out_modifiers)
+        caught_out_prob = connect_chance - foul_ball_chance - base_hit_chance        
+        caught_out_chance[playerid] = (prob_adjust(caught_out_prob, parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(caught_out_prob, -parkMods["minus_doubleplay"])) / 2.0
 
         #for each of these, we need to make sure nothing is actually counting as 0 or less probability, but rather skew them relative to each other
         if base_hit_chance <= 0 or foul_ball_chance <= 0 or caught_out_chance[playerid] <= 0:
@@ -519,21 +512,18 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
 
         attempt_steal_adjust = adjustments["baset_attempt_steal"] + adjustments["laser_attempt_steal"] - adjustments["watch_attempt_steal"]
         attempt_steal_log = baset_attempt_steal + laser_attempt_steal - watch_attempt_steal - attempt_steal_adjust
-        attempt_steal_prob = log_transform(attempt_steal_log, log_transform_base) 
-        attempt_steal_modifiers = [-parkMods["minus_stealattempt"],]
-        attempt_steal_chance[playerid] = prob_adjust(attempt_steal_prob, attempt_steal_modifiers)        
+        attempt_steal_prob = log_transform(attempt_steal_log, log_transform_base)        
+        attempt_steal_chance[playerid] = prob_adjust(attempt_steal_prob, -parkMods["minus_stealattempt"])        
 
         caught_steal_base_adjust = adjustments["anticap_caught_steal_base"] - adjustments["laser_caught_steal_base"]
         caught_steal_base_log = anticap_caught_steal_base - laser_caught_steal_base - caught_steal_base_adjust
-        caught_steal_base_prob = log_transform(caught_steal_base_log, log_transform_base)
-        caught_steal_base_modifiers = [parkMods["minus_stealsuccess"],]
-        caught_steal_base_chance[playerid] = prob_adjust(caught_steal_base_prob, caught_steal_base_modifiers)
+        caught_steal_base_prob = log_transform(caught_steal_base_log, log_transform_base)        
+        caught_steal_base_chance[playerid] = prob_adjust(caught_steal_base_prob, parkMods["minus_stealsuccess"])
         
         caught_steal_home_adjust = adjustments["anticap_caught_steal_home"] - adjustments["baset_caught_steal_home"] - adjustments["laser_caught_steal_home"]
         caught_steal_home_log = anticap_caught_steal_home - baset_caught_steal_home - laser_caught_steal_home - caught_steal_home_adjust
-        caught_steal_home_prob = log_transform(caught_steal_home_log, log_transform_base)
-        caught_steal_home_modifiers = [parkMods["minus_stealsuccess"],]
-        caught_steal_home_chance[playerid] = prob_adjust(caught_steal_home_prob, caught_steal_home_modifiers)
+        caught_steal_home_prob = log_transform(caught_steal_home_log, log_transform_base)        
+        caught_steal_home_chance[playerid] = prob_adjust(caught_steal_home_prob, parkMods["minus_stealsuccess"])
         #if (1.0 + parkMods["minus_stealsuccess"]) < 0 or (1.0 - parkMods["minus_stealattempt"] < 0):
         #    print("Parkmod mulitplier coming back negative, steal success mult {:.4f}, steal attempt mult {:.4f}".format(1.0 + parkMods["minus_stealsuccess"], 1.0 - parkMods["minus_stealattempt"]))
         
@@ -541,28 +531,28 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
         homerun_adjust = adjustments["div_homer"] - adjustments["overp_homer"]
         homerun_log = div_homer - overp_homer - homerun_adjust
         homerun_prob = log_transform(homerun_log, log_transform_base)        
-        homerun_modifiers = [-parkMods["plus_hit_minus_homer"], -parkMods["plus_groundout_minus_hardhit"], -parkMods["plus_contact_minus_hardhit"], parkMods["plus_hardhit"], -parkMods["minus_homer"]]
-        homerun_chance[playerid] = prob_adjust(homerun_prob, homerun_modifiers) * base_hit_chance
+        homerun_adjusted = (prob_adjust(homerun_prob, -parkMods["plus_hit_minus_homer"]) + prob_adjust(homerun_prob, -parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(homerun_prob, -parkMods["plus_contact_minus_hardhit"]) + prob_adjust(homerun_prob, parkMods["plus_hardhit"]) + prob_adjust(homerun_prob, -parkMods["minus_homer"])) / 5.0
+        homerun_chance[playerid] = homerun_adjusted * base_hit_chance
         homerun_multipliers[playerid] = homer_multiplier        
 
         triple_adjust = adjustments["muscl_triple"] + adjustments["ground_triple"] + adjustments["cont_triple"] - adjustments["overp_triple"] - adjustments["chasi_triple"]
         triple_log = muscl_triple + ground_triple + cont_triple - overp_triple - chasi_triple - triple_adjust
         triple_prob = log_transform(triple_log, log_transform_base)
-        triple_modifiers = [parkMods["plus_hit_minus_homer"], parkMods["plus_hit_minus_foul"], -parkMods["plus_groundout_minus_hardhit"], -parkMods["plus_contact_minus_hardhit"], parkMods["plus_hardhit"], -parkMods["minus_hit"]]
-        triple_chance[playerid] = prob_adjust(triple_prob, triple_modifiers) * base_hit_chance
+        triple_adjusted = (prob_adjust(triple_prob, parkMods["plus_hit_minus_homer"]) + prob_adjust(triple_prob, parkMods["plus_hit_minus_foul"]) + prob_adjust(triple_prob, -parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(triple_prob, -parkMods["plus_contact_minus_hardhit"]) + prob_adjust(triple_prob, parkMods["plus_hardhit"]) + prob_adjust(triple_prob, -parkMods["minus_hit"])) / 6.0        
+        triple_chance[playerid] = triple_adjusted * base_hit_chance
 
         double_adjust = adjustments["muscl_double"] + adjustments["cont_double"] - adjustments["overp_double"] - adjustments["chasi_double"]
         double_log = muscl_double + cont_double - overp_double - chasi_double - double_adjust
         double_prob = log_transform(double_log, log_transform_base)
-        double_modifiers = [parkMods["plus_hit_minus_homer"], parkMods["plus_hit_minus_foul"], -parkMods["plus_groundout_minus_hardhit"], -parkMods["plus_contact_minus_hardhit"], parkMods["plus_hardhit"], -parkMods["minus_hit"]]
-        double_chance[playerid] = prob_adjust(double_prob, double_modifiers) * base_hit_chance
+        double_adjusted = (prob_adjust(double_prob, parkMods["plus_hit_minus_homer"]) + prob_adjust(double_prob, parkMods["plus_hit_minus_foul"]) + prob_adjust(double_prob, -parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(double_prob, -parkMods["plus_contact_minus_hardhit"]) + prob_adjust(double_prob, parkMods["plus_hardhit"]) + prob_adjust(double_prob, -parkMods["minus_hit"])) / 6.0
+        double_chance[playerid] = double_adjusted * base_hit_chance
 
         single_prob = base_hit_chance - triple_chance[playerid] - double_chance[playerid] - homerun_chance[playerid]
         if single_prob < 0:
-            single_modifiers = [-parkMods["plus_hit_minus_homer"], -parkMods["plus_hit_minus_foul"], parkMods["minus_hit"]]
+            single_adjusted = (prob_adjust(single_prob, -parkMods["plus_hit_minus_homer"]) + prob_adjust(single_prob, -parkMods["plus_hit_minus_foul"]) + prob_adjust(single_prob, parkMods["minus_hit"])) / 3.0             
         else:
-            single_modifiers = [parkMods["plus_hit_minus_homer"], parkMods["plus_hit_minus_foul"], -parkMods["minus_hit"]]
-        single_chance[playerid] = prob_adjust(single_prob, single_modifiers)
+            single_adjusted = (prob_adjust(single_prob, parkMods["plus_hit_minus_homer"]) + prob_adjust(single_prob, parkMods["plus_hit_minus_foul"]) + prob_adjust(single_prob, -parkMods["minus_hit"])) / 3.0
+        single_chance[playerid] = single_adjusted
 
         if single_chance[playerid] <= 0 or triple_chance[playerid] <= 0 or double_chance[playerid] <= 0 or homerun_chance[playerid] <= 0:
             single_chance[playerid] += abs(single_chance[playerid]) + abs(triple_chance[playerid]) + abs(double_chance[playerid]) + abs(homerun_chance[playerid])

@@ -376,8 +376,8 @@ def calc_penalty(best_score, solved_score, max_score):
     return penalty
 
 def calc_best_penalty(best_leader_score, solved_leader_score, solved_score, best_score, max_event):  
-    if solved_leader_score < 0 or best_leader_score < 0:
-        print("Possible overflow error, best leader score = {}, solved leader score = {}, solved score = {}, best score = {}, max event = {}".format(best_leader_score, solved_leader_score, solved_score, best_score, max_event))
+    #if solved_leader_score < 0 or best_leader_score < 0:
+    #    print("Possible overflow error, best leader score = {}, solved leader score = {}, solved score = {}, best score = {}, max event = {}".format(best_leader_score, solved_leader_score, solved_score, best_score, max_event))
     if solved_leader_score < 0.0001:
         solved_leader_score += 0.0001
         best_leader_score += 0.0001        
