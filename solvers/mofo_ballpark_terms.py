@@ -1,30 +1,22 @@
 from collections import namedtuple
 
 BallParkTerm = namedtuple("BallParkTerm", ["ballparkstat", "playerstat", "bounds"])
-DefaultBounds = [[-3, 3], [0, 2], [0, 2]]
-BuffOnlyBounds = [[0, 3], [0, 2], [0, 2]]
-DebuffOnlyBounds = [[-3, 0], [0, 2], [0, 2]]
+DefaultBounds = [[0.01, 3], [0.01, 3], [0.01, 3]]
+BuffOnlyBounds = [[0.01, 3], [0.01, 3], [0.01, 3]]
+DebuffOnlyBounds = [[-3, -0.01], [0.01, 3], [0.01, 3]]
 
 BALLPARK_TERMS = [                    
-    BallParkTerm("grandiosity", "thwack_base_hit", BuffOnlyBounds),
-    BallParkTerm("grandiosity", "div_homer", DebuffOnlyBounds),
-    BallParkTerm("obtuseness", "thwack_base_hit", BuffOnlyBounds),     
-    BallParkTerm("obtuseness", "muscl_foul_ball", DebuffOnlyBounds),        
-    BallParkTerm("ominousness", "omni_base_hit", BuffOnlyBounds),        
-    BallParkTerm("ominousness", "muscl_triple", DebuffOnlyBounds),    
-    BallParkTerm("ominousness", "muscl_double", DebuffOnlyBounds),        
-    BallParkTerm("viscosity", "path_connect", DebuffOnlyBounds),    
-    BallParkTerm("viscosity", "muscl_triple", DebuffOnlyBounds),    
-    BallParkTerm("viscosity", "muscl_double", DebuffOnlyBounds),        
-    BallParkTerm("forwardness", "ruth_strike", BuffOnlyBounds),    
-    BallParkTerm("forwardness", "muscl_triple", BuffOnlyBounds),
-    BallParkTerm("forwardness", "muscl_double", BuffOnlyBounds),    
-    BallParkTerm("elongation", "anticap_caught_steal_base", DebuffOnlyBounds),        
-    BallParkTerm("elongation", "anticap_caught_steal_home", DebuffOnlyBounds),    
-    BallParkTerm("inconvenience", "thwack_base_hit", DebuffOnlyBounds),    
-    BallParkTerm("inconvenience", "baset_attempt_steal", DebuffOnlyBounds),    
-    BallParkTerm("inconvenience", "laser_attempt_steal", DebuffOnlyBounds),    
-    BallParkTerm("fortification", "div_homer", DebuffOnlyBounds),    
+    BallParkTerm("grandiosity", "plus_hit_minus_homer", DefaultBounds),    
+    BallParkTerm("obtuseness", "plus_hit_minus_foul", DefaultBounds),         
+    BallParkTerm("ominousness", "plus_groundout_minus_hardhit", DefaultBounds),                
+    BallParkTerm("viscosity", "plus_contact_minus_hardhit", DefaultBounds),            
+    BallParkTerm("forwardness", "plus_strike", DefaultBounds),    
+    BallParkTerm("forwardness", "plus_hardhit", DefaultBounds),    
+    BallParkTerm("elongation", "minus_stealsuccess", DefaultBounds),        
+    BallParkTerm("elongation", "minus_doubleplay", DefaultBounds),    
+    BallParkTerm("inconvenience", "minus_stealattempt", DefaultBounds),    
+    BallParkTerm("inconvenience", "minus_hit", DefaultBounds),        
+    BallParkTerm("fortification", "minus_homer", DefaultBounds),    
     BallParkTerm("hype", "trag_runner_advances", DebuffOnlyBounds),
     BallParkTerm("hype", "path_connect", DebuffOnlyBounds),
     BallParkTerm("hype", "thwack_base_hit", BuffOnlyBounds),

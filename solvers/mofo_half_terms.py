@@ -1,7 +1,7 @@
 from collections import namedtuple
 
 MOFOHalfTerm = namedtuple("MOFOHalfTerm", ["stat", "event", "bounds"])
-DefaultBounds = [[0, 2]]
+DefaultBounds = [[0, 5]]
 
 MOFO_HALF_TERMS = [        
     MOFOHalfTerm("tragicness", "trag_runner_advances", DefaultBounds),

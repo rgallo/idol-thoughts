@@ -39,7 +39,9 @@ def get_mofo_results(game, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_da
     #if special_game_attrs:        
     #    return 0, 0, 0, 0        
     away_game, home_game = game["away"], game["home"]    
-    home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])           
+    home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])              
+    if int(away_game["weather"]) == int(helpers.get_weather_idx("Sun 2")) or int(away_game["weather"]) == int(helpers.get_weather_idx("Black Hole")):
+        home_rbi, away_rbi = home_rbi % 10.0, away_rbi % 10.0
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])        
     awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)     
@@ -97,7 +99,7 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
         pattern = re.compile(r'^Net EV = ([-\.\d]*), web EV = ([-\.\d]*), season EV = ([-\.\d]*), mismatches = ([-\.\d]*), dadbets = ([-\.\d]*)$', re.MULTILINE)
         is_worst = True
     else:
-        pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*), worst mod = ([^,]*), ([-\.\d]*), fail rate ([-\.\d]*)\%$', re.MULTILINE)
+        pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*), worst mod = ([^,]*), ([-\.\d]*), fail rate ([-\.\d]*)\%, expected ([-\.\d]*)\%$', re.MULTILINE)
     results = []
     mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
@@ -271,11 +273,15 @@ def main():
 
     print("Number to beat = {}".format(number_to_beat))    
     #solver time
-    workers = int(cmd_args.workers)        
-    popsize = 25     
+    workers = int(cmd_args.workers)            
     #init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'latinhypercube'
     #experimenting with sobol instead of latinhypercube
-    init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev, cmd_args.regen) if cmd_args.init else 'sobol'    
+    if cmd_args.init:
+        popsize = 25
+        init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev, cmd_args.regen) 
+    else:
+        popsize = 10
+        init = 'sobol'
     if cmd_args.regen:
         for new_result in init:
             new_result_params = new_result[1]            

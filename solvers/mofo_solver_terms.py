@@ -1,18 +1,19 @@
 from collections import namedtuple
 
 MOFOTerm = namedtuple("MOFOTerm", ["stat", "bounds"])
-DefaultBounds = [[0, 3], [0, 3], [0, 3]]
+DefaultBounds = [[0.01, 2], [0.01, 2], [0.01, 2]]
+SoloBounds = [[0.01, 2], [0.01, 2], [0.01, 2]]
 
 MOFO_TERMS = [        
     MOFOTerm("trag_runner_advances", DefaultBounds),
-    MOFOTerm("path_connect", DefaultBounds),
+    MOFOTerm("path_connect", SoloBounds),
     MOFOTerm("thwack_base_hit", DefaultBounds),
     MOFOTerm("div_homer", DefaultBounds),
-    MOFOTerm("moxie_swing_correct", DefaultBounds),
-    MOFOTerm("muscl_foul_ball", DefaultBounds),    
+    MOFOTerm("moxie_swing_correct", SoloBounds),
+    MOFOTerm("muscl_foul_ball", SoloBounds),    
     MOFOTerm("muscl_triple", DefaultBounds),    
     MOFOTerm("muscl_double", DefaultBounds),    
-    MOFOTerm("martyr_sacrifice", DefaultBounds),
+    MOFOTerm("martyr_sacrifice", SoloBounds),
     MOFOTerm("laser_attempt_steal", DefaultBounds), 
     MOFOTerm("laser_caught_steal_base", DefaultBounds), 
     MOFOTerm("laser_caught_steal_home", DefaultBounds), 
@@ -24,7 +25,7 @@ MOFO_TERMS = [
     MOFOTerm("ground_triple", DefaultBounds),    
     MOFOTerm("indulg_runner_advances", DefaultBounds),        
     MOFOTerm("unthwack_base_hit", DefaultBounds),
-    MOFOTerm("ruth_strike", DefaultBounds),
+    MOFOTerm("ruth_strike", SoloBounds),
     MOFOTerm("overp_homer", DefaultBounds),    
     MOFOTerm("overp_triple", DefaultBounds),    
     MOFOTerm("overp_double", DefaultBounds),    
