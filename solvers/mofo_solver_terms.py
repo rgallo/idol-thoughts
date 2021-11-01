@@ -30,7 +30,7 @@ MOFO_TERMS = [
     MOFOTerm("overp_triple", DefaultBounds),    
     MOFOTerm("overp_double", DefaultBounds),    
     MOFOTerm("shakes_runner_advances", DefaultBounds),    
-    MOFOTerm("cold_clutch_factor", [[0, 0.1], [0, 0.1], [0, 0.1]]),
+    #MOFOTerm("cold_clutch_factor", [[0, 0.1], [0, 0.1], [0, 0.1]]),
     MOFOTerm("omni_base_hit", DefaultBounds),           
     MOFOTerm("tenacious_runner_advances", DefaultBounds),    
     MOFOTerm("watch_attempt_steal", DefaultBounds),    

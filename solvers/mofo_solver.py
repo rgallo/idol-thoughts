@@ -33,8 +33,7 @@ import helpers
 #                   "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
 
 
-def get_mofo_results(game, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, runtime_solution):    
-    awayMods, homeMods = [], []    
+def get_mofo_results(game, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, runtime_solution, awayMods=[], homeMods=[]):        
     #special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
     #if special_game_attrs:        
     #    return 0, 0, 0, 0        
@@ -44,15 +43,17 @@ def get_mofo_results(game, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_da
         home_rbi, away_rbi = home_rbi % 10.0, away_rbi % 10.0
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])        
-    awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)     
+    if len(homeMods) == 0:
+        #print("Recalculating parkmods")
+        awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)     
     if runtime_solution:
         awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, int(away_game["weather"]), team_stat_data, pitcher_stat_data, terms, awayMods, homeMods, adjusted_stat_data, adjustments, skip_mods=False, runtime_solution=True)        
         if awayodds == .5:
-            return 1, 0, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
+            return 1, 0, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayMods, homeMods
         if away_rbi == home_rbi and abs(awayodds - homeodds) <= 0.04:        
-            return 1, 0, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
+            return 1, 0, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayMods, homeMods
         fail = 0 if ((awayodds > .5 and away_rbi > home_rbi) or (awayodds < .5 and away_rbi < home_rbi)) else 1
-        return 1, fail, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
+        return 1, fail, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayMods, homeMods
     else:        
         awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, int(away_game["weather"]), team_stat_data, pitcher_stat_data, terms,
                                awayMods, homeMods, adjusted_stat_data, adjustments)        
@@ -62,7 +63,7 @@ def get_mofo_results(game, awayAttrs, homeAttrs, team_stat_data, pitcher_stat_da
             return 1, 0, awayodds, homeodds 
         fail = 0 if ((awayodds > .5 and away_rbi > home_rbi) or (awayodds < .5 and away_rbi < home_rbi)) else 1
         return 1, fail, awayodds, homeodds
-    return 1, fail, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
+    return 1, fail, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayMods, homeMods
 
 def get_season_team_attrs(team_attrs, season):
     attrs = []
@@ -76,7 +77,7 @@ def handle_args():
     parser.add_argument('--ballparks', help="path to ballparks folder")
     parser.add_argument('--gamefile', help="path to game file")    
     parser.add_argument('--batters', help="path to batter performance file")
-    parser.add_argument('--crimes', help="path to stolen bases performance file")
+    parser.add_argument('--crimes', help="path to stolen bases performance file")    
     parser.add_argument('--debug', help="print output", action='store_true')
     parser.add_argument('--debug2', help="print output", action='store_true')
     parser.add_argument('--debug3', help="print output", action='store_true')
@@ -84,7 +85,9 @@ def handle_args():
     parser.add_argument('--workers', default="1", help="number of workers to use")
     parser.add_argument('--rec', default="0.7", help="recombination to use")
     parser.add_argument('--init', required=False, help="directory to use for init")
+    parser.add_argument('--popsize', default="25", help="population size to use")
     parser.add_argument('--ev', help="solve for best ev instead of fail rate", action="store_true")
+    parser.add_argument('--focus', default="all", help="provide focus on a specific snack or all")
     parser.add_argument('--random', help="use random files instead of top", action='store_true')
     parser.add_argument('--worst', help="use worst files instead of top", action='store_true')
     parser.add_argument('--newterms', help="solve only new terms instead of all terms", action='store_true')
@@ -99,7 +102,7 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
         pattern = re.compile(r'^Net EV = ([-\.\d]*), web EV = ([-\.\d]*), season EV = ([-\.\d]*), mismatches = ([-\.\d]*), dadbets = ([-\.\d]*)$', re.MULTILINE)
         is_worst = True
     else:
-        pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*), worst mod = ([^,]*), ([-\.\d]*), fail rate ([-\.\d]*)\%, expected ([-\.\d]*)\%$', re.MULTILINE)
+        pattern = re.compile(r'^Best so far - Linear fail ([-\.\d]*) \(([-\.\d]*)\% from best errors\), worst mod = ([^,]*), ([-\.\d]*), fail rate ([-\.\d]*)\%, expected ([-\.\d]*)\%$', re.MULTILINE)
     results = []
     mods = collections.defaultdict(lambda: {"opp": {}, "same": {}})
     job_ids = {filename.rsplit("-", 1)[0] for filename in os.listdir(init_dir) if filename.endswith("details.txt")}
@@ -114,7 +117,13 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
         with open(os.path.join(init_dir, "{}-halfterms.csv".format(job_id))) as halfterms_file:            
             halftermsplitdata = [d.split(",") for d in halfterms_file.readlines()[1:] if d]
         for row in halftermsplitdata:
-            params.extend([float(row[2])])        
+            #if regen:
+            #    params.extend([float(row[2]) * 100.0])        
+            #else:
+            if float(row[2]) < -1.0:
+                params.extend([-1.0])
+            else:
+                params.extend([float(row[2])])        
         with open(os.path.join(init_dir, "{}-mods.csv".format(job_id))) as mod_file:            
             modsplitdata = [d.split(",") for d in mod_file.readlines()[1:] if d]
         for row in modsplitdata:            
@@ -276,16 +285,13 @@ def main():
     workers = int(cmd_args.workers)            
     #init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev) if cmd_args.init else 'latinhypercube'
     #experimenting with sobol instead of latinhypercube
-    if cmd_args.init:
-        popsize = 25
-        init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev, cmd_args.regen) 
-    else:
-        popsize = 200
-        init = 'sobol'
+    popsize = int(cmd_args.popsize)    
+    #init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev, cmd_args.regen) if cmd_args.init else 'halton'    
+    init = get_init_values(cmd_args.init, popsize, cmd_args.random, cmd_args.worst, team_mod_terms, solve_for_ev, cmd_args.regen) if cmd_args.init else 'sobol'    
     if cmd_args.regen:
         for new_result in init:
             new_result_params = new_result[1]            
-            new_value = base_solver.minimize_func(new_result_params, get_mofo_results, mofo_base_terms, MOFO_HALF_TERMS, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list, team_attrs, None, solve_for_ev, False, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, cmd_args.debug, False, False, cmd_args.output, cmd_args.regen)
+            new_value = base_solver.minimize_func(new_result_params, get_mofo_results, mofo_base_terms, MOFO_HALF_TERMS, team_mod_terms, BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list, team_attrs, None, solve_for_ev, False, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, popsize, "all", cmd_args.debug, False, False, cmd_args.output, cmd_args.regen)
             print("Regenerated solution: old value {:.0f}, new value {:.0f}".format(new_result[0], new_value))
         print("All files regenerated using new parameters")
     else:
@@ -295,17 +301,17 @@ def main():
         #if (workers > 2 and solve_for_ev) or (type(init) != str and not solve_for_ev):
         #    recombination = 0.5
         args = (get_mofo_results, mofo_base_terms, mofo_base_half_terms, team_mod_terms, mofo_ballpark_terms, stat_file_map, ballpark_file_map,
-                game_list, team_attrs, number_to_beat, solve_for_ev, False, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output, cmd_args.regen)
-        np.seterr(over='raise')
+                game_list, team_attrs, number_to_beat, solve_for_ev, False, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, popsize, cmd_args.focus, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output, cmd_args.regen)
+        np.seterr(divide='raise', over='raise', invalid='raise')
         #with np.errstate(over='raise'):
         result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
-                                    mutation=(0.2, 1.8), recombination=recombination, workers=workers, maxiter=10000,
+                                    mutation=(0.25, 1.75), recombination=recombination, workers=workers, maxiter=10000,
                                     init=init)
         #print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms, zip(*[iter(result.x)] * 3))))
 
         result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, mofo_base_terms, MOFO_HALF_TERMS, team_mod_terms,
                                                     BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
-                                                    team_attrs, None, solve_for_ev, True, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, cmd_args.debug, False, False, cmd_args.output, cmd_args.regen)
+                                                    team_attrs, None, solve_for_ev, True, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, popsize, "all", cmd_args.debug, False, False, cmd_args.output, cmd_args.regen)
         #screw it, final file output stuff in here to try and make sure it actually happens
         park_mod_list_size = len(mofo_ballpark_terms) * 3
         team_mod_list_size = len(team_mod_terms)

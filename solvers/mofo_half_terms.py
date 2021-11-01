@@ -1,11 +1,12 @@
 from collections import namedtuple
 
 MOFOHalfTerm = namedtuple("MOFOHalfTerm", ["stat", "event", "bounds"])
-DefaultBounds = [[0, 5]]
+TragicBounds = [[-1, 3]]
+DefaultBounds = [[-1, 3]]
 
 MOFO_HALF_TERMS = [        
-    MOFOHalfTerm("tragicness", "trag_runner_advances", DefaultBounds),
-    MOFOHalfTerm("patheticism", "path_connect", DefaultBounds),
+    MOFOHalfTerm("tragicness", "trag_runner_advances", TragicBounds),
+    MOFOHalfTerm("patheticism", "path_connect", TragicBounds),
     MOFOHalfTerm("thwackability", "thwack_base_hit", DefaultBounds),
     MOFOHalfTerm("divinity", "div_homer", DefaultBounds),
     MOFOHalfTerm("moxie", "moxie_swing_correct", DefaultBounds),
@@ -29,7 +30,7 @@ MOFO_HALF_TERMS = [
     MOFOHalfTerm("overpowerment", "overp_triple", DefaultBounds),
     MOFOHalfTerm("overpowerment", "overp_double", DefaultBounds),
     MOFOHalfTerm("shakespearianism", "shakes_runner_advances", DefaultBounds),
-    MOFOHalfTerm("coldness", "cold_clutch_factor", [[0, 0.1]]),
+    #MOFOHalfTerm("coldness", "cold_clutch_factor", [[0, 0.1]]),
     MOFOHalfTerm("omniscience", "omni_base_hit", DefaultBounds),    
     MOFOHalfTerm("tenaciousness", "tenacious_runner_advances", DefaultBounds),
     MOFOHalfTerm("watchfulness", "watch_attempt_steal", DefaultBounds),

@@ -37,7 +37,14 @@ class StlatTerm:
     def calc(self, val):
         b_val = self.b * val
         c_val = 1.0 if (b_val < 0.0 or (b_val < 1.0 and self.c < 0.0)) else self.c        
-        return self.a * (b_val ** c_val)
+        calc_val = self.a * (b_val ** c_val)        
+        return calc_val
+
+    #def calc(self, val):
+    #    b_val = self.b 
+    #    c_val = self.c ** (val * b_val)
+    #    calc_val = self.a * c_val
+    #    return calc_val
 
 class ParkTerm(StlatTerm):
     def __init__(self, a, b, c):
@@ -48,6 +55,12 @@ class ParkTerm(StlatTerm):
         c_val = self.c       
         calc_val = self.a * (b_val ** c_val)        
         return calc_val
+
+    #def calc(self, val):
+    #    b_val = self.b 
+    #    c_val = self.c ** (val * b_val)
+    #    calc_val = self.a * c_val
+    #    return calc_val
 
 
 def geomean(numbers):

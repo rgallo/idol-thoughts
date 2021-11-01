@@ -17,10 +17,15 @@ WEATHERS = ["Void", "Sunny", "Overcast", "Rainy", "Sandstorm", "Snowy", "Acidic"
 MODS_CALCED_DIFFERENTLY = {"aaa", "aa", "a", "fiery", "base_instincts", "o_no", "electric", "h20", "0", "acidic", "love", "high_pressure", "psychic"}
 
 def instantiate_adjustments(terms, halfterms): 
-    adjustments = {}
-    for stlat in halfterms:
-        for event in halfterms[stlat]:        
-            adjustments[event] = terms[stlat].calc(halfterms[stlat][event])    
+    adjustments = {}    
+    for stlat in halfterms:        
+        for event in halfterms[stlat]:  
+            val = halfterms[stlat][event]
+            calced_val = terms[event].calc(abs(val))
+            try:
+                adjustments[event] = calced_val * (val / abs(val))
+            except ZeroDivisionError:
+                adjustments[event] = calced_val              
     return adjustments
 
 def calc_team(terms, termset, mods, skip_mods=False):
@@ -37,14 +42,11 @@ def calc_team(terms, termset, mods, skip_mods=False):
 
 def calc_player(terms, stlatname, stlatvalue, mods, parkmods, bloodmods, skip_mods=False):    
     term = terms[stlatname]            
-    multiplier, numerator, denominator = 1.0, 0.0, 0.0    
-    if not skip_mods:                    
-        parkmodterms = (parkmods or {}).get(stlatname, [])              
-        if len(parkmodterms) > 0:
-            numerator += len(parkmodterms)
-            denominator += sum(parkmodterms)        
-        if denominator > 0.0:
-            multiplier *= (numerator / denominator)
+    multiplier = 1.0    
+    if not skip_mods and stlatname in parkmods:  
+        #if parkmods[stlatname] > 1.0:
+        #    print("Parkmod {} = {}".format(stlatname, parkmods[stlatname]))        
+        multiplier *= parkmods[stlatname]
     total = term.calc(stlatvalue) * multiplier
     return total
 
@@ -197,12 +199,10 @@ def log_transform(value, base):
         transformed_value = 1.0 if (value > 0) else 0.0
     return transformed_value
 
-def prob_adjust(prob, multiplier):
-    new_prob = prob
-    if new_prob != 1 and new_prob != 0:    
-        odds = new_prob / (1 - new_prob)
-        new_odds = odds * (1 + multiplier)
-        new_prob = new_odds / (1 + new_odds)
+def prob_adjust(prob, multiplier):    
+    odds = prob / (1 - prob)
+    new_odds = odds * (1 + multiplier)
+    new_prob = new_odds / (1 + new_odds)
     return new_prob
 
 def calc_defense(terms, player_mods, park_mods, player_stat_data, adjusted_stlats, bloodMods=None, overperform_pct=0):
@@ -267,7 +267,8 @@ def calc_pitching(terms, pitcher_mods, park_mods, pitcher_stat_data, bloodMods=N
     player_overp_triple = calc_player(terms, "overp_triple", pitcher_stat_data["overpowerment"], pitcher_mods, park_mods, bloodMods, False)
     player_overp_double = calc_player(terms, "overp_double", pitcher_stat_data["overpowerment"], pitcher_mods, park_mods, bloodMods, False)
     player_shakes_runner_advances = calc_player(terms, "shakes_runner_advances", pitcher_stat_data["shakespearianism"], pitcher_mods, park_mods, bloodMods, False)
-    player_cold_clutch_factor = calc_player(terms, "cold_clutch_factor", pitcher_stat_data["coldness"], pitcher_mods, park_mods, bloodMods, False)
+    #player_cold_clutch_factor = calc_player(terms, "cold_clutch_factor", pitcher_stat_data["coldness"], pitcher_mods, park_mods, bloodMods, False)
+    player_cold_clutch_factor = 1.0
     return player_unthwack_base_hit, player_ruth_strike, player_overp_homer, player_overp_triple, player_overp_double, player_shakes_runner_advances, player_cold_clutch_factor
 
 def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, blood_calc=None, innings=9, outs=3):
@@ -326,7 +327,11 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
 
     strike_log = ruth_strike - adjustments["ruth_strike"]
     strike_prob = log_transform(strike_log, log_transform_base)    
-    strike_chance = prob_adjust(strike_prob, parkMods["plus_strike"])
+    try:
+        test = 1 / (strike_prob - 1)
+        strike_chance = prob_adjust(strike_prob, parkMods["plus_strike"])
+    except (FloatingPointError, ZeroDivisionError):        
+        strike_chance = strike_prob
     #clutch_log = (cold_clutch_factor - adjustments["cold_clutch_factor"]) / (cold_clutch_factor + adjustments["cold_clutch_factor"])
     #clutch_factor = log_transform(clutch_log, log_transform_base)            
     clutch_factor = 0.0
@@ -370,7 +375,11 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
 
         connect_log = adjustments["path_connect"] - path_connect
         base_connect_prob = log_transform(connect_log, log_transform_base)        
-        base_connect_chance = prob_adjust(base_connect_prob, parkMods["plus_contact_minus_hardhit"])
+        try:
+            test = 1 / (base_connect_prob - 1)
+            base_connect_chance = prob_adjust(base_connect_prob, parkMods["plus_contact_minus_hardhit"])
+        except (FloatingPointError, ZeroDivisionError):            
+            base_connect_chance = base_connect_prob
         connect_chance = base_connect_chance * swing_strike_chance
 
         base_hit_adjust = adjustments["thwack_base_hit"] - adjustments["unthwack_base_hit"] - adjustments["omni_base_hit"]
@@ -383,27 +392,36 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
         ball_chance = 1.0 - swing_ball_chance
 
         foul_ball_log = muscl_foul_ball - adjustments["muscl_foul_ball"]
-        foul_ball_prob = log_transform(foul_ball_log, log_transform_base)        
-        foul_ball_chance = prob_adjust(foul_ball_prob, -parkMods["plus_hit_minus_foul"])
+        foul_ball_prob = log_transform(foul_ball_log, log_transform_base) 
+        try:
+            test = 1 / (foul_ball_prob - 1)
+            foul_ball_chance = prob_adjust(foul_ball_prob, -parkMods["plus_hit_minus_foul"])
+        except (FloatingPointError, ZeroDivisionError):            
+            foul_ball_chance = foul_ball_prob
         foul_ball_chance *= (1.0 - base_hit) * connect_chance
-        caught_out_prob = connect_chance - foul_ball_chance - base_hit_chance        
-        caught_out_chance[playerid] = (prob_adjust(caught_out_prob, parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(caught_out_prob, -parkMods["minus_doubleplay"])) / 2.0
+        caught_out_prob = connect_chance - foul_ball_chance - base_hit_chance   
+        try:
+            test = 1 / (caught_out_prob - 1)
+            caught_out_chance[playerid] = (prob_adjust(caught_out_prob, parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(caught_out_prob, -parkMods["minus_doubleplay"])) / 2.0
+        except (FloatingPointError, ZeroDivisionError):            
+            caught_out_chance[playerid] = caught_out_prob
 
         #for each of these, we need to make sure nothing is actually counting as 0 or less probability, but rather skew them relative to each other
-        if base_hit_chance <= 0 or foul_ball_chance <= 0 or caught_out_chance[playerid] <= 0:
+        if base_hit_chance <= 0 or foul_ball_chance <= 0 or caught_out_chance[playerid] <= 0:            
             base_hit_chance += abs(base_hit_chance) + abs(foul_ball_chance) + abs(caught_out_chance[playerid])
             foul_ball_chance += abs(base_hit_chance) + abs(foul_ball_chance) + abs(caught_out_chance[playerid])
-            caught_out_chance[playerid] += abs(base_hit_chance) + abs(foul_ball_chance) + abs(caught_out_chance[playerid])
+            caught_out_chance[playerid] += abs(base_hit_chance) + abs(foul_ball_chance) + abs(caught_out_chance[playerid])                        
+        all_zeros = base_hit_chance == 0 and foul_ball_chance == 0 and caught_out_chance[playerid] == 0
+        caught_out_chance[playerid] += connect_chance if all_zeros else 0.0
         all_connect_events_prob = base_hit_chance + foul_ball_chance + caught_out_chance[playerid]        
-        if all_connect_events_prob != connect_chance:
-            if all_connect_events_prob > 0:
-                factor = connect_chance / all_connect_events_prob
-                base_hit_chance *= factor
-                foul_ball_chance *= factor
-                caught_out_chance[playerid] *= factor 
-            else:
-                factor = connect_chance / 3.0
-                base_hit_chance, foul_ball_chance, caught_out_chance[playerid] = factor, factor, factor                 
+        
+        try:
+            factor = connect_chance / all_connect_events_prob
+            base_hit_chance *= factor
+            foul_ball_chance *= factor
+            caught_out_chance[playerid] *= factor             
+        except (FloatingPointError, ZeroDivisionError):
+            factor = 1.0
 
         if strike_looking_chance <= 0 or strike_swinging_chance <= 0 or connect_chance <= 0 or ball_chance <= 0:
             strike_looking_chance += abs(strike_looking_chance) + abs(strike_swinging_chance) + abs(connect_chance) + abs(ball_chance)
@@ -411,15 +429,13 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
             connect_chance += abs(strike_looking_chance) + abs(strike_swinging_chance) + abs(connect_chance) + abs(ball_chance)
             ball_chance += abs(strike_looking_chance) + abs(strike_swinging_chance) + abs(connect_chance) + abs(ball_chance)
         all_pitch_events_prob = strike_looking_chance + strike_swinging_chance + connect_chance + ball_chance
-        if all_pitch_events_prob != 1.0:
-            if all_pitch_events_prob > 0:
-                factor = 1.0 / all_pitch_events_prob
-                strike_looking_chance *= factor
-                strike_swinging_chance *= factor
-                connect_chance *= factor
-                ball_chance *= factor
-            else:
-                strike_looking_chance, strike_swinging_chance, connect_chance, ball_chance = 0.25, 0.25, 0.25, 0.25
+        #just always do this rather than running an if?
+        factor = 1.0 / all_pitch_events_prob
+        strike_looking_chance *= factor
+        strike_swinging_chance *= factor
+        connect_chance *= factor
+        ball_chance *= factor
+            
                  
         #possibilites are any three of foul balls (only up to strikecount - 1), strike swinging, and strike looking
         #always need at least one strike to strike out
@@ -496,62 +512,87 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
             caught_out_chance[playerid] += abs(walk_chance[playerid]) + abs(base_hit_chance) + abs(strike_out_chance[playerid]) + abs(caught_out_chance[playerid])
         #the sum of these events (which would be one or the other or the other etc.) must be one, as they are everything that can happen on a plate appearance
         all_macro_events_prob = walk_chance[playerid] + base_hit_chance + strike_out_chance[playerid] + caught_out_chance[playerid]        
-        #if the sum is not one, correct all probabilities such that the sum will be equal to 1.0, which will preserve the relative probabilities for all events
-        if all_macro_events_prob != 1.0:
-            if all_macro_events_prob > 0:
-                factor = 1.0 / all_macro_events_prob
-                walk_chance[playerid] *= factor
-                strike_out_chance[playerid] *= factor
-                base_hit_chance *= factor
-                caught_out_chance[playerid] *= factor
-                all_macro_events_prob = walk_chance[playerid] + base_hit_chance + strike_out_chance[playerid] + caught_out_chance[playerid]                 
-            else:
-                walk_chance[playerid], base_hit_chance, strike_out_chance[playerid], caught_out_chance[playerid] = 0.25, 0.25, 0.25, 0.25
-            #if caught_out_chance[playerid] > 0.0000:
-            #    print("Normalized to: strikeout {:.4f}, walked {:.4f}, base hit {:.4f}, caughtout {:.4f}".format(strike_out_chance[playerid], walk_chance[playerid], base_hit_chance, caught_out_chance[playerid]))
+        #if the sum is not one, correct all probabilities such that the sum will be equal to 1.0, which will preserve the relative probabilities for all events        
+        #just always do this rather than running an if?
+        factor = 1.0 / all_macro_events_prob
+        walk_chance[playerid] *= factor
+        strike_out_chance[playerid] *= factor
+        base_hit_chance *= factor
+        caught_out_chance[playerid] *= factor
+        all_macro_events_prob = walk_chance[playerid] + base_hit_chance + strike_out_chance[playerid] + caught_out_chance[playerid]                             
+        #if caught_out_chance[playerid] > 0.0000:
+        #    print("Normalized to: strikeout {:.4f}, walked {:.4f}, base hit {:.4f}, caughtout {:.4f}".format(strike_out_chance[playerid], walk_chance[playerid], base_hit_chance, caught_out_chance[playerid]))
 
         attempt_steal_adjust = adjustments["baset_attempt_steal"] + adjustments["laser_attempt_steal"] - adjustments["watch_attempt_steal"]
         attempt_steal_log = baset_attempt_steal + laser_attempt_steal - watch_attempt_steal - attempt_steal_adjust
         attempt_steal_prob = log_transform(attempt_steal_log, log_transform_base)        
-        attempt_steal_chance[playerid] = prob_adjust(attempt_steal_prob, -parkMods["minus_stealattempt"])        
+        try:
+            test = 1 / (attempt_steal_prob - 1)
+            attempt_steal_chance[playerid] = prob_adjust(attempt_steal_prob, -parkMods["minus_stealattempt"])        
+        except (FloatingPointError, ZeroDivisionError):            
+            attempt_steal_chance[playerid] = attempt_steal_prob
 
         caught_steal_base_adjust = adjustments["anticap_caught_steal_base"] - adjustments["laser_caught_steal_base"]
         caught_steal_base_log = anticap_caught_steal_base - laser_caught_steal_base - caught_steal_base_adjust
         caught_steal_base_prob = log_transform(caught_steal_base_log, log_transform_base)        
-        caught_steal_base_chance[playerid] = prob_adjust(caught_steal_base_prob, parkMods["minus_stealsuccess"])
+        try:
+            test = 1 / (caught_steal_base_prob - 1)
+            caught_steal_base_chance[playerid] = prob_adjust(caught_steal_base_prob, parkMods["minus_stealsuccess"])
+        except (FloatingPointError, ZeroDivisionError):            
+            caught_steal_base_chance[playerid] = caught_steal_base_prob
         
-        caught_steal_home_adjust = adjustments["anticap_caught_steal_home"] - adjustments["baset_caught_steal_home"] - adjustments["laser_caught_steal_home"]
+        caught_steal_home_adjust = adjustments["anticap_caught_steal_home"] + adjustments["baset_caught_steal_home"] + adjustments["laser_caught_steal_home"]
         caught_steal_home_log = anticap_caught_steal_home - baset_caught_steal_home - laser_caught_steal_home - caught_steal_home_adjust
-        caught_steal_home_prob = log_transform(caught_steal_home_log, log_transform_base)        
-        caught_steal_home_chance[playerid] = prob_adjust(caught_steal_home_prob, parkMods["minus_stealsuccess"])
+        caught_steal_home_prob = log_transform(caught_steal_home_log, log_transform_base)    
+        try:
+            test = 1 / (caught_steal_home_prob - 1)
+            caught_steal_home_chance[playerid] = prob_adjust(caught_steal_home_prob, parkMods["minus_stealsuccess"])
+        except (FloatingPointError, ZeroDivisionError):            
+            caught_steal_home_chance[playerid] = caught_steal_home_prob
         #if (1.0 + parkMods["minus_stealsuccess"]) < 0 or (1.0 - parkMods["minus_stealattempt"] < 0):
         #    print("Parkmod mulitplier coming back negative, steal success mult {:.4f}, steal attempt mult {:.4f}".format(1.0 + parkMods["minus_stealsuccess"], 1.0 - parkMods["minus_stealattempt"]))
         
         #homeruns needs to care about how many other runners are on base for how valuable they are, with a floor of "1x"
         homerun_adjust = adjustments["div_homer"] - adjustments["overp_homer"]
         homerun_log = div_homer - overp_homer - homerun_adjust
-        homerun_prob = log_transform(homerun_log, log_transform_base)        
-        homerun_adjusted = (prob_adjust(homerun_prob, -parkMods["plus_hit_minus_homer"]) + prob_adjust(homerun_prob, -parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(homerun_prob, -parkMods["plus_contact_minus_hardhit"]) + prob_adjust(homerun_prob, parkMods["plus_hardhit"]) + prob_adjust(homerun_prob, -parkMods["minus_homer"])) / 5.0
+        homerun_prob = log_transform(homerun_log, log_transform_base)  
+        try:
+            test = 1 / (homerun_prob - 1)
+            homerun_adjusted = (prob_adjust(homerun_prob, -parkMods["plus_hit_minus_homer"]) + prob_adjust(homerun_prob, -parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(homerun_prob, -parkMods["plus_contact_minus_hardhit"]) + prob_adjust(homerun_prob, parkMods["plus_hardhit"]) + prob_adjust(homerun_prob, -parkMods["minus_homer"])) / 5.0
+        except (FloatingPointError, ZeroDivisionError):            
+            homerun_adjusted = homerun_prob
         homerun_chance[playerid] = homerun_adjusted * base_hit_chance
         homerun_multipliers[playerid] = homer_multiplier        
 
         triple_adjust = adjustments["muscl_triple"] + adjustments["ground_triple"] + adjustments["cont_triple"] - adjustments["overp_triple"] - adjustments["chasi_triple"]
         triple_log = muscl_triple + ground_triple + cont_triple - overp_triple - chasi_triple - triple_adjust
         triple_prob = log_transform(triple_log, log_transform_base)
-        triple_adjusted = (prob_adjust(triple_prob, parkMods["plus_hit_minus_homer"]) + prob_adjust(triple_prob, parkMods["plus_hit_minus_foul"]) + prob_adjust(triple_prob, -parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(triple_prob, -parkMods["plus_contact_minus_hardhit"]) + prob_adjust(triple_prob, parkMods["plus_hardhit"]) + prob_adjust(triple_prob, -parkMods["minus_hit"])) / 6.0        
+        try:
+            test = 1 / (triple_prob - 1)
+            triple_adjusted = (prob_adjust(triple_prob, parkMods["plus_hit_minus_homer"]) + prob_adjust(triple_prob, parkMods["plus_hit_minus_foul"]) + prob_adjust(triple_prob, -parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(triple_prob, -parkMods["plus_contact_minus_hardhit"]) + prob_adjust(triple_prob, parkMods["plus_hardhit"]) + prob_adjust(triple_prob, -parkMods["minus_hit"])) / 6.0        
+        except (FloatingPointError, ZeroDivisionError):            
+            triple_adjusted = triple_prob
         triple_chance[playerid] = triple_adjusted * base_hit_chance
 
         double_adjust = adjustments["muscl_double"] + adjustments["cont_double"] - adjustments["overp_double"] - adjustments["chasi_double"]
         double_log = muscl_double + cont_double - overp_double - chasi_double - double_adjust
         double_prob = log_transform(double_log, log_transform_base)
-        double_adjusted = (prob_adjust(double_prob, parkMods["plus_hit_minus_homer"]) + prob_adjust(double_prob, parkMods["plus_hit_minus_foul"]) + prob_adjust(double_prob, -parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(double_prob, -parkMods["plus_contact_minus_hardhit"]) + prob_adjust(double_prob, parkMods["plus_hardhit"]) + prob_adjust(double_prob, -parkMods["minus_hit"])) / 6.0
+        try:
+            test = 1 / (double_prob - 1)
+            double_adjusted = (prob_adjust(double_prob, parkMods["plus_hit_minus_homer"]) + prob_adjust(double_prob, parkMods["plus_hit_minus_foul"]) + prob_adjust(double_prob, -parkMods["plus_groundout_minus_hardhit"]) + prob_adjust(double_prob, -parkMods["plus_contact_minus_hardhit"]) + prob_adjust(double_prob, parkMods["plus_hardhit"]) + prob_adjust(double_prob, -parkMods["minus_hit"])) / 6.0
+        except (FloatingPointError, ZeroDivisionError):            
+            double_adjusted = double_prob
         double_chance[playerid] = double_adjusted * base_hit_chance
 
         single_prob = base_hit_chance - triple_chance[playerid] - double_chance[playerid] - homerun_chance[playerid]
-        if single_prob < 0:
-            single_adjusted = (prob_adjust(single_prob, -parkMods["plus_hit_minus_homer"]) + prob_adjust(single_prob, -parkMods["plus_hit_minus_foul"]) + prob_adjust(single_prob, parkMods["minus_hit"])) / 3.0             
-        else:
-            single_adjusted = (prob_adjust(single_prob, parkMods["plus_hit_minus_homer"]) + prob_adjust(single_prob, parkMods["plus_hit_minus_foul"]) + prob_adjust(single_prob, -parkMods["minus_hit"])) / 3.0
+        try:
+            test = 1 / (single_prob - 1)
+            if single_prob < 0:
+                single_adjusted = (prob_adjust(single_prob, -parkMods["plus_hit_minus_homer"]) + prob_adjust(single_prob, -parkMods["plus_hit_minus_foul"]) + prob_adjust(single_prob, parkMods["minus_hit"])) / 3.0             
+            else:
+                single_adjusted = (prob_adjust(single_prob, parkMods["plus_hit_minus_homer"]) + prob_adjust(single_prob, parkMods["plus_hit_minus_foul"]) + prob_adjust(single_prob, -parkMods["minus_hit"])) / 3.0
+        except (FloatingPointError, ZeroDivisionError):            
+            single_adjusted = single_prob
         single_chance[playerid] = single_adjusted
 
         if single_chance[playerid] <= 0 or triple_chance[playerid] <= 0 or double_chance[playerid] <= 0 or homerun_chance[playerid] <= 0:
@@ -560,17 +601,13 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
             double_chance[playerid] += abs(single_chance[playerid]) + abs(triple_chance[playerid]) + abs(double_chance[playerid]) + abs(homerun_chance[playerid])
             homerun_chance[playerid] += abs(single_chance[playerid]) + abs(triple_chance[playerid]) + abs(double_chance[playerid]) + abs(homerun_chance[playerid])
         #normalize these to sum to base hit chance
-        all_base_hit_events_prob = single_chance[playerid] + triple_chance[playerid] + double_chance[playerid] + homerun_chance[playerid]
-        if all_base_hit_events_prob != base_hit_chance:
-            if all_base_hit_events_prob > 0:
-                factor = base_hit_chance / all_base_hit_events_prob
-                single_chance[playerid] *= factor
-                triple_chance[playerid] *= factor
-                double_chance[playerid] *= factor
-                homerun_chance[playerid] *= factor            
-            else:
-                factor = base_hit_chance / 4.0
-                single_chance[playerid], triple_chance[playerid], double_chance[playerid], homerun_chance[playerid] = factor, factor, factor, factor
+        all_base_hit_events_prob = single_chance[playerid] + triple_chance[playerid] + double_chance[playerid] + homerun_chance[playerid]        
+        #just always do this rather than running an if?
+        factor = base_hit_chance / all_base_hit_events_prob
+        single_chance[playerid] *= factor
+        triple_chance[playerid] *= factor
+        double_chance[playerid] *= factor
+        homerun_chance[playerid] *= factor                        
 
         on_base_chance[playerid] = min(single_chance[playerid] + double_chance[playerid] + triple_chance[playerid] + walk_chance[playerid], 1.0)
         
@@ -607,7 +644,7 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
         else:
             outs_per_lineup = sum(strike_out_chance.values()) + sum(caught_steal_outs.values()) + sum(caught_out_chance.values())            
             average_aaa_blood_impact, average_aa_blood_impact = {}, {}
-            max_x = outs * innings * 3.0      
+            max_x = outs * innings   
             lineup_factor = (outs - outs_per_lineup) if (outs_per_lineup < outs) else 1.0
             if blood_calc == "aaa" or blood_calc == "a":            
                 for playerid in triple_chance:
@@ -652,8 +689,9 @@ def calc_team_score(mods, weather, parkMods, away_home, team_stat_data, opp_stat
     runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, average_on_base_position, steal_mod, clutch_factor, walk_mod = calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, None, innings)        
 
     #run three "games" to get a more-representative average
-    #total_innings = (innings * 10.0) if runtime_solution else (innings * 3.0)
-    total_innings = int(innings) * 3
+    #total_innings = (innings * 10.0) if runtime_solution else (innings * 3.0)    
+    replicates = 10
+    total_innings = int(innings) * replicates
     current_innings, atbats_in_inning = 0, 0  
     current_outs = 0.0
     team_score = 100.0 if ("home_field" in battingAttrs and away_home == "home") else 0.0
@@ -726,9 +764,9 @@ def calc_team_score(mods, weather, parkMods, away_home, team_stat_data, opp_stat
                 team_score += inning_score  
                 team_rbi += inning_rbi
                 if (away_home == "home") and (current_innings == 8):
-                    if team_score > (opp_score / 3.0):
+                    if team_score > (opp_score / replicates):
                         #home team will only need 8 innings to win
-                        total_innings = 8 * 3
+                        total_innings = replicates * 8
                 inning_score, inning_rbi = 0.0, 0.0
                 runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
                 runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
@@ -803,9 +841,9 @@ def calc_team_score(mods, weather, parkMods, away_home, team_stat_data, opp_stat
                     team_score += inning_score      
                     team_rbi += inning_rbi
                     if (away_home == "home") and (current_innings == 8):
-                        if team_score > (opp_score / 3.0):
+                        if team_score > (opp_score / replicates):
                             #home team will only need 8 innings to win
-                            total_innings = 8 * 3
+                            total_innings = replicates * 8
                     inning_score, inning_rbi = 0.0, 0.0
                     runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
                     runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
@@ -850,9 +888,9 @@ def calc_team_score(mods, weather, parkMods, away_home, team_stat_data, opp_stat
                         team_score += inning_score
                         team_rbi += inning_rbi
                         if (away_home == "home") and (current_innings == 8):
-                            if team_score > (opp_score / 3.0):
+                            if team_score > (opp_score / replicates):
                                 #home team will only need 8 innings to win
-                                total_innings = 8 * 3
+                                total_innings = replicates * 8
                         inning_score, inning_rbi = 0.0, 0.0
                         runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = 0.0, 0.0, 0.0, 0.0
                         runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = 0.0, 0.0, 0.0, 0.0
@@ -876,8 +914,8 @@ def calc_team_score(mods, weather, parkMods, away_home, team_stat_data, opp_stat
                 if away_home == "home":
                     presumptive_score = team_score + inning_score
                     eight_inning_score = presumptive_score * (8.0 / current_innings)
-                    if eight_inning_score > (opp_score / 3.0):
-                        total_innings = 8 * 3
+                    if eight_inning_score > (opp_score / replicates):
+                        total_innings = replicates * 8
                 current_innings -= 1
                 full_lineup_count = math.floor((total_innings - current_innings) / innings_in_loop)                
                 #print("Iterating through {} replicates of the loop of {} innings, current innings {}".format(full_lineup_count, innings_in_loop, current_innings))
@@ -907,11 +945,11 @@ def calc_team_score(mods, weather, parkMods, away_home, team_stat_data, opp_stat
                 if away_home == "home":
                     presumptive_score = team_score + (inning_score * lineup_runs_per_inning)                    
                     eight_inning_score = presumptive_score * (8.0 / (current_innings + 1))                    
-                    if eight_inning_score > (opp_score / 3.0):
-                        total_innings = 8 * 3
+                    if eight_inning_score > (opp_score / replicates):
+                        total_innings = replicates * 8                        
                 remaining_innings = total_innings - current_innings
                 #next, we need to determine how many passes through the lineup it will take at our current rate to complete the remaining innings
-                remaining_outs = ((remaining_innings * 3) - inning_outs)
+                remaining_outs = ((remaining_innings * outs) - inning_outs)
                 #we need to have a fail case for accumulating ZERO outs in a lineup pass; a truly absurd number                
                 lineup_passes = remaining_outs / outs_per_lineup_run
                 #then, we need to take the amount of score we have accumulated in our pass through the lineup and multiply it by our lineup passes, including the pass we just did in our total
@@ -926,6 +964,7 @@ def calc_team_score(mods, weather, parkMods, away_home, team_stat_data, opp_stat
                 team_rbi += lineup_rbi
                 #finish scoring for the team
                 current_innings = total_innings
+                #print("Shortcutting {} lineup passes".format(lineup_passes))
                 #only update the hits homers and steals if we are generating runtime output
                 if runtime_solution:                    
                     for playerid in sorted_batters:
@@ -937,32 +976,32 @@ def calc_team_score(mods, weather, parkMods, away_home, team_stat_data, opp_stat
                         homers[playerid] *= lineup_passes + 1
                         stolen_bases[playerid] *= lineup_passes + 1
                     strikeouts *= lineup_passes + 1
-            else:
-                if ((runners_on_first + runners_on_second + runners_on_third + runners_on_fourth) == 0.0) and ((runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth) == 0.0):
-                    #this means we're going to replicate this result a number of times as we completed the lineup before accumulating whatever remains                    
-                    last_pass = True
-                    if away_home == "home":
-                        presumptive_score = team_score
-                        eight_inning_score = presumptive_score * (8.0 / current_innings)
-                        if eight_inning_score > (opp_score / 3.0):
-                            total_innings = 8 * 3
-                    remaining_innings = total_innings - current_innings
-                    total_iterations = math.floor(remaining_innings / current_innings)
-                    print("Discovered a replicate point at inning {}, {} innings remain, {} replicates".format(current_innings, remaining_innings, total_iterations))
-                    team_score *= total_iterations
-                    team_rbi *= total_iterations
-                    current_innings += current_innings * total_iterations
-                    print("Re-entering the loop at inning {}".format(current_innings))
-                    if runtime_solution:
-                        for playerid in sorted_batters:
-                            if playerid not in hits:
-                                homers[playerid] = 0.0
-                                hits[playerid] = 0.0
-                                stolen_bases[playerid] = 0.0
-                            hits[playerid] *= total_iterations
-                            homers[playerid] *= total_iterations
-                            stolen_bases[playerid] *= total_iterations
-                        strikeouts *= total_iterations
+            #else:
+            #    if ((runners_on_first + runners_on_second + runners_on_third + runners_on_fourth) == 0.0) and ((runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth) == 0.0):
+            #        #this means we're going to replicate this result a number of times as we completed the lineup before accumulating whatever remains                    
+            #        last_pass = True
+            #        if away_home == "home":
+            #            presumptive_score = team_score
+            #            eight_inning_score = presumptive_score * (8.0 / current_innings)
+            #            if eight_inning_score > (opp_score / 3.0):
+            #                total_innings = 8 * 3
+            #        remaining_innings = total_innings - current_innings
+            #        total_iterations = math.floor(remaining_innings / current_innings)
+            #        print("Discovered a replicate point at inning {}, {} innings remain, {} replicates".format(current_innings, remaining_innings, total_iterations))
+            #        team_score *= total_iterations
+            #        team_rbi *= total_iterations
+            #        current_innings += current_innings * total_iterations
+            #        print("Re-entering the loop at inning {}".format(current_innings))
+            #        if runtime_solution:
+            #            for playerid in sorted_batters:
+            #                if playerid not in hits:
+            #                    homers[playerid] = 0.0
+            #                    hits[playerid] = 0.0
+            #                    stolen_bases[playerid] = 0.0
+            #                hits[playerid] *= total_iterations
+            #                homers[playerid] *= total_iterations
+            #                stolen_bases[playerid] *= total_iterations
+            #            strikeouts *= total_iterations
     
     #need to re-enable this in the case of wanting to do sun/black hole weather handling
     if ((weather == sun_weather) or (weather == bh_weather)) and runtime_solution:                
@@ -974,6 +1013,8 @@ def calc_team_score(mods, weather, parkMods, away_home, team_stat_data, opp_stat
                 homers[playerid] = 0.0
                 hits[playerid] = 0.0
                 stolen_bases[playerid] = 0.0
+            if homers[playerid] < 0 or hits[playerid] < 0 or stolen_bases[playerid] < 0:
+                print("Player {} has invalid return values: homers {}, hits {}, steals {}".format(homers[playerid], hits[playerid], stolen_bases[playerid]))
         return team_score, stolen_bases, homers, hits, strikeouts, team_rbi
 
     return team_score, team_rbi
@@ -1124,7 +1165,9 @@ def get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awa
         else:
             return .5, .5, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
     away_formula = numerator / denominator        
-    away_odds = log_transform(away_formula, 100.0)
+    #log_transform_base = math.e
+    log_transform_base = 10.0
+    away_odds = log_transform(away_formula, log_transform_base)
     if runtime_solution:        
         if weather == polarity_plus or weather == polarity_minus:
             return .5, .5, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
@@ -1185,7 +1228,7 @@ def get_park_mods(ballpark, ballpark_mods):
                             base_multiplier *= -1
                         multiplier = base_multiplier
                 else:                    
-                    normalized_value = stlatterm.calc(abs(adjusted_value))
+                    normalized_value = stlatterm.calc(value)
                     base_multiplier = log_transform(normalized_value, logbase) * 2.0
                 #forcing harmonic mean with quicker process time?  
                     if base_multiplier <= 0.00001:             
@@ -1193,10 +1236,8 @@ def get_park_mods(ballpark, ballpark_mods):
                     else:
                         multiplier = 1.0 / base_multiplier
                 if ballparkstlat != "hype":                                                    
-                    awayMods[playerstlat] = multiplier
-                    homeMods[playerstlat] = multiplier
-                else:                                        
-                    homeMods[playerstlat].append(multiplier)
+                    awayMods[playerstlat] = multiplier                                           
+                homeMods[playerstlat] = multiplier
     return awayMods, homeMods
 
 def setup_playerbased(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data):
