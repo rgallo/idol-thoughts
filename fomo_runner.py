@@ -28,12 +28,12 @@ def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players
         desc = f"<@&{notify_role}>\n"
         desc += "\n".join(f"[:rotating_light: :rotating_light: "
                           f"{pitchers[bonus_player]} has a {bonus_multiplier}x payout, go idol! "
-                          f":rotating_light: :rotating_light:](https://www.blaseball.com/player/{bonus_player})"
+                          f":rotating_light: :rotating_light:](https://api.blaseball.com/player/{bonus_player})"
                           f"" for bonus_player in bonus_players)
         webhook.add_embed(Embed(title="Bonus Payouts!", description=desc))
     for title, pitchers in (("Best", best), ("Worst", worst)):
         desc = "\n".join(f"{helpers.get_emoji(pitcher.defemoji)} **[{pitcher.pitchername}]"
-                         f"(https://www.blaseball.com/player/{pitcher.pitcherid}), {pitcher.pitcherteamnickname}** "
+                         f"(https://api.blaseball.com/player/{pitcher.pitcherid}), {pitcher.pitcherteamnickname}** "
                          f"(FOMO {((pitcher.fomoodds - fomo_error) * 100.0):.2f}% - {((pitcher.fomoodds + fomo_error) * 100.0):.2f}%, "
                          f"Webodds {(pitcher.websiteodds * 100.0):.2f}%)"
                          f"{' :fax:' if pitcher.faxable else ''}"
@@ -55,7 +55,7 @@ def output_fomo_to_discord(day, best, worst, fomo_error, pitchers, bonus_players
 
 def get_team_attributes(attributes={}):
     if not attributes:
-        attributes.update({team["fullName"]: (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"]) for team in requests.get("https://www.blaseball.com/database/allTeams").json()})
+        attributes.update({team["fullName"]: (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"]) for team in requests.get("https://api.blaseball.com/database/allTeams").json()})
     return attributes
 
 
@@ -209,7 +209,7 @@ def main():
         pair_results.append(FOMOPair(awayFOMO, homeFOMO))
     if pair_results:
         mismatches = [pair for pair in pair_results if (pair.awayFOMOData.fomoodds < .5 < pair.awayFOMOData.websiteodds) or (pair.awayFOMOData.fomoodds > .5 > pair.awayFOMOData.websiteodds) or (.495 <= pair.awayFOMOData.websiteodds < .505)]
-        player_data = requests.get("https://www.blaseball.com/database/players?ids={}".format(",".join(pitchers.keys()))).json()
+        player_data = requests.get("https://api.blaseball.com/database/players?ids={}".format(",".join(pitchers.keys()))).json()
         bonus_playerids, bonus_multiplier = get_bonus_players(player_data)
         unidolable = get_unidolable(player_data)
         fomo_error = float(list(helpers.load_data(os.getenv("FOMO_ERROR")).keys())[0]) / 100.0

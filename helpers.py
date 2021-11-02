@@ -151,7 +151,7 @@ def load_ballparks(ballparks_url):
 def get_team_id(teamName):
     if "team_id_lookup" not in WEB_CACHE:
         team_id_lookup = {
-            team["fullName"]: team["id"] for team in requests.get("https://www.blaseball.com/database/allTeams").json()
+            team["fullName"]: team["id"] for team in requests.get("https://api.blaseball.com/database/allTeams").json()
         }
         WEB_CACHE["team_id_lookup"] = team_id_lookup
     return WEB_CACHE["team_id_lookup"][teamName]
@@ -251,7 +251,7 @@ def load_test_data(testfile):
 
 def get_blaseball_snapshot():
     snapshot = None
-    response = requests.get("https://www.blaseball.com/events/streamData", stream=True)
+    response = requests.get("https://api.blaseball.com/events/streamData", stream=True)
     for line in response.iter_lines():
         snapshot = line
         break
@@ -360,7 +360,7 @@ def defense_stars(player):
 
 def get_team_attributes(attributes={}):
     if not attributes:
-        attributes.update({team["fullName"]: (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"]) for team in requests.get("https://www.blaseball.com/database/allTeams").json()})
+        attributes.update({team["fullName"]: (team["gameAttr"] + team["weekAttr"] + team["seasAttr"] + team["permAttr"]) for team in requests.get("https://api.blaseball.com/database/allTeams").json()})
     return attributes
 
 
