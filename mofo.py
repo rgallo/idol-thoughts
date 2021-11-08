@@ -271,6 +271,44 @@ def calc_pitching(terms, pitcher_mods, park_mods, pitcher_stat_data, bloodMods=N
     player_cold_clutch_factor = 1.0
     return player_unthwack_base_hit, player_ruth_strike, player_overp_homer, player_overp_triple, player_overp_double, player_shakes_runner_advances, player_cold_clutch_factor
 
+def calc_strikeout_walked(strike_looking, strike_swinging, ball_chance, foul_ball_chance, strike_count, ball_count, base_hit_chance, caught_out_chance):
+    foul_balls = 0    
+    strikeout, walked, base_hit, caught_out = 0.0, 0.0, 0.0, 0.0
+    foul_ball_count = strike_count - 1
+    base_ball_chance = ball_chance ** ball_count
+    #need to compute all possible configurations per up to N pitches
+    maximum_pitches = strike_count + foul_ball_count + ball_count
+    current_pitch = 1
+    while current_pitch < maximum_pitches:
+        base_hit += base_hit_chance * ((1.0 - base_hit_chance) ** (current_pitch - 1))
+        caught_out += caught_out_chance * ((1.0 - caught_out_chance) ** (current_pitch - 1))
+        if current_pitch >= strike_count:
+            while foul_balls <= foul_ball_count:
+                #need to account for any number of balls
+                balls = 0
+                while balls <= min(ball_count, current_pitch):
+                    strike_looking_count = 0
+                    while strike_looking_count <= strike_count:
+                        strike_swinging_count = strike_count - strike_looking_count
+                        if (balls == ball_count) and ((strike_looking_count + foul_balls) < strike_count):
+                            ball_strike_swinging_count = 0
+                            while ((ball_strike_swinging_count + strike_looking_count + foul_balls) < strike_count):
+                                walk_chance = base_ball_chance * (strike_looking ** strike_looking_count) * (strike_swinging ** ball_strike_swinging_count)                        
+                                walked += walk_chance * (foul_ball_chance ** foul_balls)
+                                ball_strike_swinging_count += 1
+                        elif balls < ball_count:
+                            foul_strike_looking = strike_looking_count if (strike_looking_count <= strike_swinging_count) else (strike_looking_count - min(foul_balls, foul_ball_count))
+                            foul_strike_swinging = strike_swinging_count if (strike_swinging_count < strike_looking_count) else (strike_swinging_count - min(foul_balls, foul_ball_count))
+                            base_strikeout = (strike_looking ** strike_looking_count) * (strike_swinging ** strike_swinging_count)
+                            foul_strikeout = (strike_looking ** foul_strike_looking) * (strike_swinging ** foul_strike_swinging) * (foul_ball_chance ** foul_balls)                
+                            strikeout += base_strikeout * (ball_chance ** balls)                
+                            strikeout += foul_strikeout * (ball_chance ** balls)                                                
+                        strike_looking_count += 1
+                    balls += 1
+                foul_balls += 1
+        current_pitch += 1
+    return strikeout, walked, base_hit, caught_out
+
 def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, blood_calc=None, innings=9, outs=3):
     battingAttrs, opponentAttrs = teamAttrs, oppAttrs    
     pitcherAttrs = pitcher_data["attrs"]
@@ -434,48 +472,9 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
         strike_looking_chance *= factor
         strike_swinging_chance *= factor
         connect_chance *= factor
-        ball_chance *= factor
-            
-                 
-        #possibilites are any three of foul balls (only up to strikecount - 1), strike swinging, and strike looking
-        #always need at least one strike to strike out
-        #walks are ball count balls plus any combination above that does not include the final strike
-        strikeout = (strike_looking_chance ** strike_count) + (strike_swinging_chance ** strike_count)
-        walked = (ball_chance ** ball_count)
-        if strike_count >= 2.0:
-            strikeout += (foul_ball_chance ** (strike_count - 1.0)) * strike_looking_chance
-            strikeout += (foul_ball_chance ** (strike_count - 1.0)) * strike_swinging_chance
-            strikeout += (strike_looking_chance ** (strike_count - 1.0)) * strike_swinging_chance
-            strikeout += (strike_swinging_chance ** (strike_count - 1.0)) * strike_looking_chance
-            strikeout += (strike_looking_chance ** (strike_count - 1.0)) * strike_looking_chance
-            strikeout += strike_looking_chance ** strike_count
-            strikeout += strike_swinging_chance ** strike_count
-            walked += (ball_chance ** ball_count) * strike_swinging_chance
-            walked += (ball_chance ** ball_count) * strike_looking_chance
-            walked += (ball_chance ** ball_count) * foul_ball_chance
-        if strike_count >= 3.0:
-            strikeout += (foul_ball_chance ** (strike_count - 2.0)) * strike_swinging_chance * strike_looking_chance
-            strikeout += (foul_ball_chance ** (strike_count - 2.0)) * (strike_swinging_chance ** 2.0)
-            strikeout += (foul_ball_chance ** (strike_count - 2.0)) * (strike_looking_chance ** 2.0)
-            walked += (ball_chance ** ball_count) * (strike_swinging_chance ** 2.0)
-            walked += (ball_chance ** ball_count) * (strike_looking_chance ** 2.0)
-            walked += (ball_chance ** ball_count) * strike_looking_chance * strike_swinging_chance
-            walked += (ball_chance ** ball_count) * foul_ball_chance * strike_swinging_chance
-            walked += (ball_chance ** ball_count) * foul_ball_chance * strike_looking_chance
-        if strike_count >= 4.0:
-            strikeout += (foul_ball_chance ** (strike_count - 3.0)) * (strike_swinging_chance ** 2.0) * strike_looking_chance
-            strikeout += (foul_ball_chance ** (strike_count - 3.0)) * strike_swinging_chance * (strike_looking_chance ** 2.0)
-            strikeout += (foul_ball_chance ** (strike_count - 3.0)) * (strike_swinging_chance ** 3.0)
-            strikeout += (foul_ball_chance ** (strike_count - 3.0)) * (strike_looking_chance ** 3.0)
-            walked += (ball_chance ** ball_count) * (strike_swinging_chance ** 3.0)
-            walked += (ball_chance ** ball_count) * (strike_looking_chance ** 3.0)
-            walked += (ball_chance ** ball_count) * (strike_swinging_chance ** 2.0) * strike_looking_chance
-            walked += (ball_chance ** ball_count) * strike_swinging_chance * (strike_looking_chance ** 2.0)
-            walked += (ball_chance ** ball_count) * foul_ball_chance * (strike_swinging_chance ** 2.0)
-            walked += (ball_chance ** ball_count) * foul_ball_chance * (strike_looking_chance ** 2.0)
-            walked += (ball_chance ** ball_count) * foul_ball_chance * strike_swinging_chance * strike_looking_chance
-            walked += (ball_chance ** ball_count) * (foul_ball_chance ** 2.0) * strike_swinging_chance
-            walked += (ball_chance ** ball_count) * (foul_ball_chance ** 2.0) * strike_looking_chance
+        ball_chance *= factor           
+        
+        strikeout, walked, base_hit_chance, caught_out_chance[playerid] = calc_strikeout_walked(strike_looking_chance, strike_swinging_chance, ball_chance, foul_ball_chance, strike_count, ball_count, base_hit_chance, caught_out_chance[playerid])  
         
         corrected_strike_chance = strikeout
         corrected_strike_chance += strike_mod
@@ -785,9 +784,9 @@ def calc_team_score(mods, weather, parkMods, away_home, team_stat_data, opp_stat
                 steal_base_success_rate = (1.0 - caught_steal_base_chance[playerid]) * attempt_steal_chance[playerid]
                 steal_home_success_rate = (1.0 - caught_steal_home_chance[playerid]) * attempt_steal_chance[playerid]                
                 #steal second
-                steal_second_opportunities = average_on_base_position[playerid]["first"] * (1.0 - steal_runners_on_second) 
+                steal_second_opportunities = average_on_base_position[playerid]["first"] * (1.0 - min(steal_runners_on_second - average_on_base_position[playerid]["second"], 0.0))
                 #steal third
-                steal_third_opportunities = (steal_second_opportunities * (1.0 - steal_runners_on_third)) + (average_on_base_position[playerid]["second"] * (1.0 - steal_runners_on_third))
+                steal_third_opportunities = (steal_second_opportunities * (1.0 - min(steal_runners_on_third - average_on_base_position[playerid]["third"], 0.0))) + (average_on_base_position[playerid]["second"] * (1.0 - min(steal_runners_on_third - average_on_base_position[playerid]["third"], 0.0)))
                 #adjust base position based on stealing bases
                 runners_on_first -= (steal_second_opportunities * attempt_steal_chance[playerid])
                 runner_advance_first -= (steal_second_opportunities * attempt_steal_chance[playerid]) * runner_advance_chance[playerid]

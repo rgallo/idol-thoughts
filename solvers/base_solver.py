@@ -770,11 +770,11 @@ def minimize_func(parameters, *data):
     if CURRENT_ITERATION == 1:
         focused_bests = {}
         focused_bests["all"] = BEST_RESULT
-        focused_bests["seeds"] = 61772070225536400.0
-        focused_bests["dogs"] = 242504594057240000.0
-        focused_bests["pickles"] = 118726020157013000.0
-        focused_bests["chips"] = 25580405743072600.0
-        focused_bests["meatballs"] = 77424717634912800.0
+        focused_bests["seeds"] = 51520441097821100.0
+        focused_bests["dogs"] = 225763327921229000.0
+        focused_bests["pickles"] = 122837920308964000.0
+        focused_bests["chips"] = 48046592406291400.0
+        focused_bests["meatballs"] = 89284728962139000.0
         BEST_RESULT = focused_bests[focus]
         FAILED_SOLUTIONS = [BEST_RESULT] * popsize
 
