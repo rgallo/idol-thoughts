@@ -99,10 +99,13 @@ FAILED_SOLUTIONS = []
 LAST_ITERATION_TIME = datetime.datetime.now()
 
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "A", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
+ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
 ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING", "SINKING_SHIP"}
 DIRECT_MOD_SOLVES = {"psychic", "a", "acidic", "base_instincts", "electric", "fiery", "love"}
 CALC_MOD_SUCCESS = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electric", "fiery", "love", "high_pressure", "a", "0", "o_no", "h20"}
+DIRECT_MOD_SOLVES = {"psychic", "acidic", "base_instincts", "electric", "fiery", "love"}
+CALC_MOD_SUCCESS = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electric", "fiery", "love", "high_pressure", "0", "o_no", "h20"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
 FLOOD_WEATHER = get_weather_idx("Flooding")
@@ -770,11 +773,11 @@ def minimize_func(parameters, *data):
     if CURRENT_ITERATION == 1:
         focused_bests = {}
         focused_bests["all"] = BEST_RESULT
-        focused_bests["seeds"] = 51520441097821100.0
-        focused_bests["dogs"] = 225763327921229000.0
-        focused_bests["pickles"] = 122837920308964000.0
-        focused_bests["chips"] = 48046592406291400.0
-        focused_bests["meatballs"] = 89284728962139000.0
+        focused_bests["seeds"] = 64684285691611800.0
+        focused_bests["dogs"] = 221445404272373000.0
+        focused_bests["pickles"] = 170352496740622000.0
+        focused_bests["chips"] = 30481507583861700.0
+        focused_bests["meatballs"] = 79721027799816000.0
         BEST_RESULT = focused_bests[focus]
         FAILED_SOLUTIONS = [BEST_RESULT] * popsize
 

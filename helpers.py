@@ -27,7 +27,6 @@ INVERSE_STLATS = ["tragicness", "patheticism"]  # These stlats are better for th
 LAST_SEASON_STAT_CUTOFF = 11
 DISCORD_SPLIT_LIMIT = 1900
 
-
 class StlatTerm:
     def __init__(self, a, b, c):
         self.a = a

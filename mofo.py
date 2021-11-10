@@ -8,6 +8,7 @@ import datetime
 import helpers
 import math
 import numpy as np
+from numba import njit
 from helpers import StlatTerm, ParkTerm, geomean
 import os
 
@@ -271,42 +272,31 @@ def calc_pitching(terms, pitcher_mods, park_mods, pitcher_stat_data, bloodMods=N
     player_cold_clutch_factor = 1.0
     return player_unthwack_base_hit, player_ruth_strike, player_overp_homer, player_overp_triple, player_overp_double, player_shakes_runner_advances, player_cold_clutch_factor
 
-def calc_strikeout_walked(strike_looking, strike_swinging, ball_chance, foul_ball_chance, strike_count, ball_count, base_hit_chance, caught_out_chance):
-    foul_balls = 0    
-    strikeout, walked, base_hit, caught_out = 0.0, 0.0, 0.0, 0.0
-    foul_ball_count = strike_count - 1
-    base_ball_chance = ball_chance ** ball_count
+def calc_strikeout_walked(strike_looking, strike_swinging, ball_chance, foul_ball_chance, strike_count, ball_count, base_hit_chance, caught_out_chance):        
+    #strikeout, walked, base_hit, caught_out = 0.0, 0.0, 0.0, 0.0            
+    strikes, max_balls = int(strike_count), int(ball_count)
+    foul_ball_count = max(strikes - 1, 0)
     #need to compute all possible configurations per up to N pitches
-    maximum_pitches = strike_count + foul_ball_count + ball_count
-    current_pitch = 1
-    while current_pitch < maximum_pitches:
-        base_hit += base_hit_chance * ((1.0 - base_hit_chance) ** (current_pitch - 1))
-        caught_out += caught_out_chance * ((1.0 - caught_out_chance) ** (current_pitch - 1))
-        if current_pitch >= strike_count:
-            while foul_balls <= foul_ball_count:
-                #need to account for any number of balls
-                balls = 0
-                while balls <= min(ball_count, current_pitch):
-                    strike_looking_count = 0
-                    while strike_looking_count <= strike_count:
-                        strike_swinging_count = strike_count - strike_looking_count
-                        if (balls == ball_count) and ((strike_looking_count + foul_balls) < strike_count):
-                            ball_strike_swinging_count = 0
-                            while ((ball_strike_swinging_count + strike_looking_count + foul_balls) < strike_count):
-                                walk_chance = base_ball_chance * (strike_looking ** strike_looking_count) * (strike_swinging ** ball_strike_swinging_count)                        
-                                walked += walk_chance * (foul_ball_chance ** foul_balls)
-                                ball_strike_swinging_count += 1
-                        elif balls < ball_count:
-                            foul_strike_looking = strike_looking_count if (strike_looking_count <= strike_swinging_count) else (strike_looking_count - min(foul_balls, foul_ball_count))
-                            foul_strike_swinging = strike_swinging_count if (strike_swinging_count < strike_looking_count) else (strike_swinging_count - min(foul_balls, foul_ball_count))
-                            base_strikeout = (strike_looking ** strike_looking_count) * (strike_swinging ** strike_swinging_count)
-                            foul_strikeout = (strike_looking ** foul_strike_looking) * (strike_swinging ** foul_strike_swinging) * (foul_ball_chance ** foul_balls)                
-                            strikeout += base_strikeout * (ball_chance ** balls)                
-                            strikeout += foul_strikeout * (ball_chance ** balls)                                                
-                        strike_looking_count += 1
-                    balls += 1
-                foul_balls += 1
-        current_pitch += 1
+    maximum_pitches = strikes + foul_ball_count + max_balls + 1    
+
+    strikeout, walked, base_hit, caught_out = strikeout_numba(strikes, max_balls, maximum_pitches, strike_looking, strike_swinging, foul_ball_chance, foul_ball_count, base_hit_chance, caught_out_chance, ball_chance)
+    #print("Probabilities: base hit = {:.2f}, caught_out = {:.2f}, strikeout = {:.2f}, walked = {:.2f}, sum = {:.2f}".format(base_hit, caught_out, strikeout, walked, base_hit + caught_out + strikeout + walked))
+    return strikeout, walked, base_hit, caught_out
+
+@njit
+def strikeout_numba(strikes, max_balls, maximum_pitches, strike_looking, strike_swinging, foul_ball_chance, foul_ball_count, base_hit_chance, caught_out_chance, ball_chance):
+    strikeout, walked, base_hit, caught_out = 0.0, 0.0, 0.0, 0.0
+    for foul_balls in range(0, maximum_pitches):
+        for balls in range(0, max_balls + 1):
+            for thrown_strikes in range(0, strikes + 1):
+                for strike_looking_count in range(0, thrown_strikes + 1):
+                    if foul_balls + thrown_strikes >= strikes and balls < max_balls:
+                        strikeout += (strike_looking ** strike_looking_count) * (strike_swinging ** (thrown_strikes - strike_looking_count)) * (foul_ball_chance ** foul_balls) * (ball_chance ** balls) * ((1.0 - base_hit_chance) ** (foul_balls + balls + thrown_strikes)) * ((1.0 - caught_out_chance) ** (foul_balls + balls + thrown_strikes))
+                    if balls == max_balls and thrown_strikes < strikes:
+                        walked += (ball_chance ** max_balls) * (strike_looking ** strike_looking_count) * (strike_swinging ** (thrown_strikes - strike_looking_count)) * (foul_ball_chance ** foul_balls) * ((1.0 - base_hit_chance) ** (foul_balls + balls + thrown_strikes)) * ((1.0 - caught_out_chance) ** (foul_balls + balls + thrown_strikes))
+                    if thrown_strikes < strikes and balls < max_balls:
+                        base_hit += base_hit_chance * ((1.0 - base_hit_chance) ** (foul_balls + balls + thrown_strikes)) * ((1.0 - caught_out_chance) ** (foul_balls + balls + thrown_strikes)) * (foul_ball_chance ** foul_balls) * (ball_chance ** balls) * (strike_looking ** strike_looking_count) * (strike_swinging ** (thrown_strikes - strike_looking_count))
+                        caught_out += caught_out_chance * ((1.0 - base_hit_chance) ** (foul_balls + balls + thrown_strikes)) * ((1.0 - caught_out_chance) ** (foul_balls + balls + thrown_strikes)) * (foul_ball_chance ** foul_balls) * (ball_chance ** balls) * (strike_looking ** strike_looking_count) * (strike_swinging ** (thrown_strikes - strike_looking_count))
     return strikeout, walked, base_hit, caught_out
 
 def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data, pitcher_stat_data, team_data, opp_data, pitcher_data, teamAttrs, oppAttrs, sorted_batters, adjustments, blood_calc=None, innings=9, outs=3):
@@ -387,10 +377,11 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
         steal_mod[playerid] = 20.0 if ("blaserunning" in battingAttrs or "blaserunning" in playerAttrs) else 0.0        
         if "skipping" in playerAttrs:            
             average_strikes = (strike_count - 1.0) / 2.0
-            average_balls = (ball_count - 1.0) / 2.0            
+            average_balls = (ball_count - 1.0) / 2.0
             strike_count -= average_strikes            
             strike_count = max(strike_count, 1.0)
             ball_count -= average_balls
+            ball_count = max(ball_count, 1.0)
         score_multiplier[playerid] = score_mult_pitcher
         if "magnify_2x" in playerAttrs:
             score_multiplier[playerid] *= 2.0
@@ -418,7 +409,7 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
             base_connect_chance = prob_adjust(base_connect_prob, parkMods["plus_contact_minus_hardhit"])
         except (FloatingPointError, ZeroDivisionError):            
             base_connect_chance = base_connect_prob
-        connect_chance = base_connect_chance * swing_strike_chance
+        connect_chance = max(base_connect_chance, 0.0) * max(swing_strike_chance, 0.0)
 
         base_hit_adjust = adjustments["thwack_base_hit"] - adjustments["unthwack_base_hit"] - adjustments["omni_base_hit"]
         base_hit_log = thwack_base_hit - unthwack_base_hit - omni_base_hit - base_hit_adjust
@@ -427,7 +418,7 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
 
         strike_looking_chance = (1.0 - swing_correct_chance) * strike_chance
         strike_swinging_chance = (1.0 - connect_chance) + swing_ball_chance
-        ball_chance = 1.0 - swing_ball_chance
+        ball_chance = 1.0 - max(swing_ball_chance, 0.0)
 
         foul_ball_log = muscl_foul_ball - adjustments["muscl_foul_ball"]
         foul_ball_prob = log_transform(foul_ball_log, log_transform_base) 
@@ -474,7 +465,7 @@ def calc_probs_from_stats(mods, weather, parkMods, team_stat_data, opp_stat_data
         connect_chance *= factor
         ball_chance *= factor           
         
-        strikeout, walked, base_hit_chance, caught_out_chance[playerid] = calc_strikeout_walked(strike_looking_chance, strike_swinging_chance, ball_chance, foul_ball_chance, strike_count, ball_count, base_hit_chance, caught_out_chance[playerid])  
+        strikeout, walked, base_hit_chance, caught_out_chance[playerid] = calc_strikeout_walked(float(strike_looking_chance), float(strike_swinging_chance), float(ball_chance), float(foul_ball_chance), float(strike_count), float(ball_count), float(base_hit_chance), float(caught_out_chance[playerid]))  
         
         corrected_strike_chance = strikeout
         corrected_strike_chance += strike_mod
