@@ -10,7 +10,10 @@ import re
 import uuid
 import math
 import copy
+import numpy as np
 from glob import glob
+from numba import njit
+from numba.typed import List
 
 from helpers import StlatTerm, ParkTerm, get_weather_idx
 from helpers import load_stat_data, load_stat_data_pid, adjust_by_pct, calculate_adjusted_stat_data
@@ -35,8 +38,12 @@ STEALS_CACHE = {}
 SEEDPICKLES_CACHE = {}
 DOGPICKLES_CACHE = {}
 TRIFECTA_CACHE = {}
-MAX_EVENTS = {'hits': 9, 'homers': 5, 'steals': 10, 'seeddogs': 26.0, 'seedpickles': 36.0, 'dogpickles': 30.0, 'trifecta': 36.0, 'chips': 20, 'meatballs': 9, 'burgers': 12.5, 'chipsburgers': 16.3, 'chipsmeatballs': 9.6}
-MASS_EVENTS = {'hits': 19, 'homers': 9, 'steals': 18, 'seeddogs': 54.5, 'seedpickles': 63.0, 'dogpickles': 65.0, 'trifecta': 83.0, 'chips': 47, 'meatballs': 20, 'chipsmeatballs': 21.8}
+MAX_EVENTS = {'hits': 8, 'homers': 4, 'steals': 10, 'seeddogs': 20.5, 'seedpickles': 36.0, 'dogpickles': 30.0, 'trifecta': 36.0, 'chips': 19, 'meatballs': 9, 'burgers': 12.5, 'chipsburgers': 16.3, 'chipsmeatballs': 9.6}
+MASS_EVENTS = {'hits': 11, 'homers': 6, 'steals': 11, 'seeddogs': 26.5, 'seedpickles': 39.0, 'dogpickles': 38.0, 'trifecta': 51.5, 'chips': 28, 'meatballs': 13, 'chipsmeatballs': 14.0}
+#WITHIN_DATA_MAX_EVENTS = {'hits': 0, 'homers': 0, 'steals': 0, 'seeddogs': 0.0, 'seedpickles': 0.0, 'dogpickles': 0.0, 'trifecta': 0.0, 'chips': 0, 'meatballs': 0, 'burgers': 12.5, 'chipsburgers': 16.3, 'chipsmeatballs': 0.0}
+#WITHIN_DATA_MASS_EVENTS = {'hits': 0, 'homers': 0, 'steals': 0, 'seeddogs': 0.0, 'seedpickles': 0.0, 'dogpickles': 0.0, 'trifecta': 0.0, 'chips': 0, 'meatballs': 0, 'chipsmeatballs': 0.0}
+#MAX_EVENTS = {}
+#MASS_EVENTS = {}
 ADJUSTED_STAT_CACHE = {}
 USE_CACHED_PARK_MODS = {}
 IGNORE_BP_STATS = ['birds', 'model', 'renoCost', 'mysticism', 'filthiness', 'luxuriousness']
@@ -345,15 +352,16 @@ def check_rejects(min_condition, max_condition, eventlist, stages, batman_unexva
 def calc_linear_unex_error(vals, wins_losses, modname=None):    
     max_error_game = ""
     error, max_error, min_error, max_error_val, min_error_val, current_val = 0.0, 0.0, 150.0, 0.0, 0.0, 0.0    
-    exponent = 4 if (modname in DIRECT_MOD_SOLVES or modname == "overall") else 6
+    exponent_check = modname == "psychic" or modname == "a" or modname == "acidic" or modname == "base_instincts" or modname == "electric" or modname == "fiery" or modname == "love" or modname == "overall"
+    exponent = 4 if exponent_check else 6
     window_size, half_window = 100, 50
     #window_size = 300 if (modname == "unmod" or modname == "overall") else 100
     #half_window = 150 if (modname == "unmod" or modname == "overall") else 50
-    wins = []
+    wins = [np.float64(x) for x in range(0)]
     win_threshold = False    
-    idx = (window_size - 1)
-    wins = wins_losses[:idx]    
-    while (idx < len(vals)):                 
+    starting_size = (window_size - 1)
+    wins = wins_losses[:starting_size]    
+    for idx in range(window_size - 1, len(vals)):                 
         wins.append(wins_losses[idx])                
         if len(wins) >= window_size:
             current_val = vals[idx - half_window] * 100.0
@@ -371,10 +379,9 @@ def calc_linear_unex_error(vals, wins_losses, modname=None):
                     max_error_val = current_val                                
                 if ((current_val - actual_val) < min_error):
                     min_error = (current_val - actual_val)
-                    min_error_val = current_val                                       
-        idx += 1    
+                    min_error_val = current_val                                               
     error += (max_error ** (exponent + 2)) + (abs(min_error ** (exponent + 2)))    
-    error *= 0.01
+    #error *= 0.01
     return error, max_error, min_error, max_error_val, min_error_val
 
 def calc_penalty(best_score, solved_score, max_score, exponent):
@@ -384,8 +391,8 @@ def calc_penalty(best_score, solved_score, max_score, exponent):
     return penalty
 
 def calc_bonus(best_score, max_score):
-    return calc_penalty(best_score, 0.0, max_score, 6.0)    
-    #return 0.0
+    #return calc_penalty(best_score, 0.0, max_score, 6.0)    
+    return 0.0
 
 def calc_best_penalty(best_leader_score, solved_leader_score, solved_score, best_score, max_event, exponent):  
     #if solved_leader_score < 0 or best_leader_score < 0:
@@ -399,46 +406,96 @@ def calc_best_penalty(best_leader_score, solved_leader_score, solved_score, best
         actual_leader_solved_score = (best_leader_score / solved_leader_score) * solved_score
     return calc_penalty(best_score, actual_leader_solved_score, max_event, exponent)    
 
-def calc_snack(real_values, sorted_solved_values, score_earned, score_max, event_max, event_mass, perfect_score, score_method, *args):
+#different idea for potential use later - gather and evaluate all solved scores within a particular value that are less than or equal to the average of the solved score of a previous value and evaluate thier linear penalty accordingly
+
+@njit
+def calc_batman_linear_penalty(real_scores, real_values, max_event, exponent):
+    penalty = 0.0
+    for idx in range(1, len(real_scores) - 1):        
+        if real_values[idx+1] < real_values[idx]:            
+            predicted_change_in_value = ((real_values[idx+1] - real_values[idx-1]) / (real_scores[idx+1] - real_scores[idx-1])) * (real_scores[idx] - real_scores[idx-1])
+            if predicted_change_in_value < 0:
+                predicted_change_in_value *= -1
+            predicted_value = real_values[idx-1] + predicted_change_in_value
+            penalty += (((real_values[idx] - predicted_value) / max_event) * 100.0) ** exponent    
+    penalty *= 100.0
+    return penalty
+
+def sort_batman_linear_penalty(event_values, max_event):
+    unsorted_real_values, unsorted_solved_values = list(event_values["real_values"]), list(event_values["solved_values"])    
+    unsorted_values = zip(unsorted_solved_values, unsorted_real_values)    
+    sorted_values = sorted(unsorted_values)    
+    real_scores = List([element for element, _ in sorted_values])
+    real_values = List([element for _, element in sorted_values])
+    #print("Real scores = {}".format(real_scores))    
+    return calc_batman_linear_penalty(real_scores, real_values, max_event, 6.0)
+
+def calc_snack(event, all_event_values, real_values, sorted_solved_values, score_earned, score_max, event_max, event_mass, perfect_score, score_method, *args):
+    #global WITHIN_DATA_MAX_EVENTS
+    #global WITHIN_DATA_MASS_EVENTS    
     best_keys, solved_keys = list(real_values.keys()), list(sorted_solved_values.keys())    
     best_leader, solved_leader = best_keys[0], solved_keys[0]
     best_score, solved_best_score = real_values[best_leader], real_values[solved_leader]
     score_earned += solved_best_score
-    score_max += best_score
-    best_mass_score = real_values[best_keys[0]] + real_values[best_keys[1]] + real_values[best_keys[2]]
-    solved_mass_score = real_values[solved_keys[0]] + real_values[solved_keys[1]] + real_values[solved_keys[2]]
-    best_mass_solved_score = sorted_solved_values[best_keys[0]] + sorted_solved_values[best_keys[1]] + sorted_solved_values[best_keys[2]]
-    solved_mass_solved_score = sorted_solved_values[solved_keys[0]] + sorted_solved_values[solved_keys[1]] + sorted_solved_values[solved_keys[2]]
-    scores = score_method(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, *args)    
+    score_max += best_score    
+    #best_mass_score = real_values[best_keys[0]] + real_values[best_keys[1]] + real_values[best_keys[2]]
+    #solved_mass_score = real_values[solved_keys[0]] + real_values[solved_keys[1]] + real_values[solved_keys[2]]
+    #best_mass_solved_score = sorted_solved_values[best_keys[0]] + sorted_solved_values[best_keys[1]] + sorted_solved_values[best_keys[2]]
+    #solved_mass_solved_score = sorted_solved_values[solved_keys[0]] + sorted_solved_values[solved_keys[1]] + sorted_solved_values[solved_keys[2]]
+    best_mass_score = real_values[best_keys[1]] + real_values[best_keys[2]]
+    solved_mass_score = real_values[solved_keys[1]] + real_values[solved_keys[2]]
+    best_mass_solved_score = sorted_solved_values[best_keys[1]] + sorted_solved_values[best_keys[2]]
+    solved_mass_solved_score = sorted_solved_values[solved_keys[1]] + sorted_solved_values[solved_keys[2]]    
+    #WITHIN_DATA_MAX_EVENTS[event] = best_score if (best_score > WITHIN_DATA_MAX_EVENTS[event]) else WITHIN_DATA_MAX_EVENTS[event]
+    #WITHIN_DATA_MASS_EVENTS[event] = best_mass_score if (best_mass_score > WITHIN_DATA_MASS_EVENTS[event]) else WITHIN_DATA_MASS_EVENTS[event]
+    #solved_values_by_real = {}
+    if event in all_event_values:
+        for key in best_keys:
+            all_event_values[event]["real_values"].append(real_values[key])
+            all_event_values[event]["solved_values"].append(sorted_solved_values[key])
+        #solved_values_by_real[key] = sorted_solved_values[key]    
+    #real_values, real_scores = List(real_values.values()), List(solved_values_by_real.values())
+    #print("Real values = {}, real scores = {}".format(real_values, real_scores))
+    linear_penalty = 0.0
+    #linear_penalty = calc_batman_linear_penalty(real_scores, real_values, event_max, 6.0)
+    #print("Linear penalty = {}, values {}, scores {}".format(linear_penalty, real_values, real_scores))
+    #linear_penalty = calc_batman_linear_penalty(real_values[best_keys[0]], real_values[best_keys[1]], sorted_solved_values[best_keys[0]], sorted_solved_values[best_keys[1]], event_max, 6.0)
+    #linear_penalty += calc_batman_linear_penalty(real_values[best_keys[1]], real_values[best_keys[2]], sorted_solved_values[best_keys[1]], sorted_solved_values[best_keys[2]], event_max, 6.0)
+    #linear_penalty += calc_batman_linear_penalty(real_values[best_keys[0]], real_values[best_keys[2]], sorted_solved_values[best_keys[0]], sorted_solved_values[best_keys[2]], event_max, 6.0)
+    scores = score_method(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, linear_penalty, *args)    
                     
-    return score_earned, score_max, *scores
+    return all_event_values, score_earned, score_max, *scores
 
-def single_calc(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, best_error):    
+def single_calc(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, linear_penalty, best_error):    
     if solved_best_score < best_score:
-        best_error += calc_best_penalty(sorted_solved_values[best_leader], sorted_solved_values[solved_leader], solved_best_score, best_score, event_max, 4.0)                
+        best_error += calc_best_penalty(sorted_solved_values[best_leader], sorted_solved_values[solved_leader], solved_best_score, best_score, event_max, 6.0) * 100.0
     else:
         perfect_score += best_score
         best_error -= calc_bonus(best_score, event_max)    
-    best_error += calc_best_penalty(best_mass_solved_score, solved_mass_solved_score, solved_mass_score, best_mass_score, event_mass, 8.0)
+    #if solved_mass_score < best_mass_score:
+    #    best_error += calc_best_penalty(best_mass_solved_score, solved_mass_solved_score, solved_mass_score, best_mass_score, event_mass, 6.0)
+    #best_error += linear_penalty    
     return perfect_score, best_error
 
-def double_calc(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, first_error, first_event, first_multiplier, second_error, second_event, second_multiplier):                         
+def double_calc(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, linear_penalty, first_error, first_event, first_multiplier, second_error, second_event, second_multiplier):                         
     if solved_best_score < best_score:
-        best_error = calc_best_penalty(sorted_solved_values[best_leader], sorted_solved_values[solved_leader], solved_best_score, best_score, event_max, 4.0)                
+        best_error = calc_best_penalty(sorted_solved_values[best_leader], sorted_solved_values[solved_leader], solved_best_score, best_score, event_max, 6.0) * 100.0 
     else:
         best_error = 0.0
         perfect_score += best_score
         bonus = calc_bonus(best_score, event_max)
         first_error -= bonus * ((first_event[best_leader] * first_multiplier) / best_score)
-        second_error -= bonus * ((second_event[best_leader] * second_multiplier) / best_score)                        
-    best_error += calc_best_penalty(best_mass_solved_score, solved_mass_solved_score, solved_mass_score, best_mass_score, event_mass, 8.0)
+        second_error -= bonus * ((second_event[best_leader] * second_multiplier) / best_score)             
+    #if solved_mass_score < best_mass_score:
+    #    best_error += calc_best_penalty(best_mass_solved_score, solved_mass_solved_score, solved_mass_score, best_mass_score, event_mass, 6.0)
+    #best_error += linear_penalty    
     first_error += best_error * ((first_event[best_leader] * first_multiplier) / best_score)
     second_error += best_error * ((second_event[best_leader] * second_multiplier) / best_score)                                                
     return perfect_score, first_error, second_error
 
-def triple_calc(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, first_error, first_event, first_multiplier, second_error, second_event, second_multiplier, third_error, third_event, third_multiplier):                         
+def triple_calc(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, linear_penalty, first_error, first_event, first_multiplier, second_error, second_event, second_multiplier, third_error, third_event, third_multiplier):                         
     if solved_best_score < best_score:
-        best_error = calc_best_penalty(sorted_solved_values[best_leader], sorted_solved_values[solved_leader], solved_best_score, best_score, event_max, 4.0)                
+        best_error = calc_best_penalty(sorted_solved_values[best_leader], sorted_solved_values[solved_leader], solved_best_score, best_score, event_max, 6.0) * 100.0
     else:
         best_error = 0.0
         perfect_score += best_score
@@ -446,7 +503,9 @@ def triple_calc(sorted_solved_values, solved_best_score, best_score, best_leader
         first_error -= bonus * ((first_event[best_leader] * first_multiplier) / best_score)
         second_error -= bonus * ((second_event[best_leader] * second_multiplier) / best_score)
         third_error -= bonus * ((third_event[best_leader] * third_multiplier) / best_score)
-    best_error += calc_best_penalty(best_mass_solved_score, solved_mass_solved_score, solved_mass_score, best_mass_score, event_mass, 8.0)
+    #if solved_mass_score < best_mass_score:
+    #    best_error += calc_best_penalty(best_mass_solved_score, solved_mass_solved_score, solved_mass_score, best_mass_score, event_mass, 6.0)
+    #best_error += linear_penalty    
     first_error += best_error * ((first_event[best_leader] * first_multiplier) / best_score)
     second_error += best_error * ((second_event[best_leader] * second_multiplier) / best_score)
     third_error += best_error * ((third_event[best_leader] * third_multiplier) / best_score)
@@ -483,15 +542,15 @@ def get_max_events(seasonrange, dayrange, stat_file_map, team_attrs, game_list, 
             if stat_filename:
                 last_stat_filename = stat_filename
                 pitchers = get_pitcher_id_lookup(stat_filename)
-                team_stat_data, pitcher_stat_data = load_stat_data_pid(stat_filename, schedule, day)
+                team_stat_data, pitcher_stat_data = load_stat_data_pid(stat_filename, schedule, day, team_attrs)
                 stats_regened = False
             elif should_regen(day_mods):
                 pitchers = get_pitcher_id_lookup(last_stat_filename)
-                team_stat_data, pitcher_stat_data = load_stat_data_pid(last_stat_filename, schedule, day)
+                team_stat_data, pitcher_stat_data = load_stat_data_pid(last_stat_filename, schedule, day, team_attrs)
                 stats_regened = True
             elif stats_regened:
                 pitchers = get_pitcher_id_lookup(last_stat_filename)
-                team_stat_data, pitcher_stat_data = load_stat_data_pid(last_stat_filename, schedule, day)
+                team_stat_data, pitcher_stat_data = load_stat_data_pid(last_stat_filename, schedule, day, team_attrs)
                 stats_regened = False
             batter_perf_data = [row for row in batter_list if row["season"] == str(season) and row["day"] == str(day)]
             if crimes_list is not None:                
@@ -551,12 +610,15 @@ def get_max_events(seasonrange, dayrange, stat_file_map, team_attrs, game_list, 
                 #print("{} Performance for day {}, unsorted: {}".format(event, day, daily_performance[day][event]))
                 daily_performance[day][event].sort(reverse=True)
                 #print("{} Performance for day {}, sorted: {}".format(event, day, daily_performance[day][event]))
-                if len(daily_performance[day][event]) >= 3:
-                    daily_mass_event = daily_performance[day][event][0] + daily_performance[day][event][1] + daily_performance[day][event][2]
-                elif len(daily_performance[day][event]) == 2:
-                    daily_mass_event = daily_performance[day][event][0] + daily_performance[day][event][1]
+                if len(daily_performance[day][event]) > 2:
+                    #daily_mass_event = daily_performance[day][event][0] + daily_performance[day][event][1] + daily_performance[day][event][2]
+                    daily_mass_event = daily_performance[day][event][1] + daily_performance[day][event][2]
+                elif len(daily_performance[day][event]) > 1:
+                    #daily_mass_event = daily_performance[day][event][0] + daily_performance[day][event][1]
+                    daily_mass_event = daily_performance[day][event][1]
                 else:
-                    daily_mass_event = daily_performance[day][event][0]
+                    #daily_mass_event = daily_performance[day][event][0]
+                    daily_mass_event = 0.0
                 mass_event[event] = daily_mass_event if (daily_mass_event > mass_event[event]) else mass_event[event]           
 
     return maximum_events, mass_event
@@ -773,11 +835,11 @@ def minimize_func(parameters, *data):
     if CURRENT_ITERATION == 1:
         focused_bests = {}
         focused_bests["all"] = BEST_RESULT
-        focused_bests["seeds"] = 64684285691611800.0
-        focused_bests["dogs"] = 221445404272373000.0
-        focused_bests["pickles"] = 170352496740622000.0
-        focused_bests["chips"] = 30481507583861700.0
-        focused_bests["meatballs"] = 79721027799816000.0
+        focused_bests["seeds"] = 5848819472301790.0
+        focused_bests["dogs"] = 10562020396949800.0
+        focused_bests["pickles"] = 2231643897106720.0
+        focused_bests["chips"] = 4470208505232340.0
+        focused_bests["meatballs"] = 5479830529699790.0
         BEST_RESULT = focused_bests[focus]
         FAILED_SOLUTIONS = [BEST_RESULT] * popsize
 
@@ -796,6 +858,8 @@ def minimize_func(parameters, *data):
         chipsmeatballs_score, chipsmeatballs_score_earned, chipsmeatballs_score_max = 0.0, 0.0, 0.0
         hitters, sluggers, seeddogers, chips_pitchers, sho_pitchers = 0, 0, 0, 0, 0  
         perfect_seeds, perfect_dogs, perfect_seeddogs, perfect_chips, perfect_meatballs, perfect_chipsmeatballs = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+        all_event_values = {}
+        all_event_values["hits"], all_event_values["homers"], all_event_values["chips"], all_event_values["meatballs"] = {}, {}, {}, {}
         burger_penalty = 0.0
         if crimes_list is not None:
             solved_steals, solved_seedpickles = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})
@@ -806,6 +870,9 @@ def minimize_func(parameters, *data):
             trifecta_score, trifecta_score_earned, trifecta_score_max = 0.0, 0.0, 0.0
             thieves = 0
             perfect_pickles, perfect_seedpickles, perfect_dogpickles, perfect_trifecta = 0.0, 0.0, 0.0, 0.0
+            all_event_values["steals"] = {}
+        for event in all_event_values:
+            all_event_values[event]["real_values"], all_event_values[event]["solved_values"] = [], []            
 
     adjustments = {}
     for stlat in half_stlats:
@@ -836,7 +903,7 @@ def minimize_func(parameters, *data):
 
     if solve_batman_too and CURRENT_ITERATION == 1:
         print("Maximum events = {}".format(MAX_EVENTS))
-        print("Mass events = {}".format(MASS_EVENTS))
+        print("Mass events = {}".format(MASS_EVENTS))    
 
     for season in seasonrange:        
         if reject_solution:            
@@ -1361,13 +1428,13 @@ def minimize_func(parameters, *data):
                     sorted_solved_trifecta = dict(sorted(solved_trifecta.items(), key=lambda k: k[1], reverse=True))                                              
 
                 if crimes_list is not None:
-                    pickles_score_earned, pickles_score_max, perfect_pickles, pickles_error = calc_snack(real_steals, sorted_solved_steals, pickles_score_earned, pickles_score_max, MAX_EVENTS["steals"], MASS_EVENTS["steals"], perfect_pickles, single_calc, pickles_error)
+                    all_event_values, pickles_score_earned, pickles_score_max, perfect_pickles, pickles_error = calc_snack("steals", all_event_values, real_steals, sorted_solved_steals, pickles_score_earned, pickles_score_max, MAX_EVENTS["steals"], MASS_EVENTS["steals"], perfect_pickles, single_calc, pickles_error)
 
-                    seedpickles_score_earned, seedpickles_score_max, perfect_seedpickles, pickles_error, seeds_error = calc_snack(real_seedpickles, sorted_solved_seedpickles, seedpickles_score_earned, seedpickles_score_max, MAX_EVENTS["seedpickles"], MASS_EVENTS["seedpickles"], perfect_seedpickles, double_calc, pickles_error, real_steals, 3.0, seeds_error, real_hits, 1.5)
+                    all_event_values, seedpickles_score_earned, seedpickles_score_max, perfect_seedpickles, pickles_error, seeds_error = calc_snack("seedpickles", all_event_values, real_seedpickles, sorted_solved_seedpickles, seedpickles_score_earned, seedpickles_score_max, MAX_EVENTS["seedpickles"], MASS_EVENTS["seedpickles"], perfect_seedpickles, double_calc, pickles_error, real_steals, 3.0, seeds_error, real_hits, 1.5)
 
-                    dogpickles_score_earned, dogpickles_score_max, perfect_dogpickles, pickles_error, dogs_error = calc_snack(real_dogpickles, sorted_solved_dogpickles, dogpickles_score_earned, dogpickles_score_max, MAX_EVENTS["dogpickles"], MASS_EVENTS["dogpickles"], perfect_dogpickles, double_calc, pickles_error, real_steals, 3.0, dogs_error, real_homers, 4.0)
+                    all_event_values, dogpickles_score_earned, dogpickles_score_max, perfect_dogpickles, pickles_error, dogs_error = calc_snack("dogpickles", all_event_values, real_dogpickles, sorted_solved_dogpickles, dogpickles_score_earned, dogpickles_score_max, MAX_EVENTS["dogpickles"], MASS_EVENTS["dogpickles"], perfect_dogpickles, double_calc, pickles_error, real_steals, 3.0, dogs_error, real_homers, 4.0)
 
-                    trifecta_score_earned, trifecta_score_max, perfect_trifecta, pickles_error, batman_best_error = calc_snack(real_trifecta, sorted_solved_trifecta, trifecta_score_earned, trifecta_score_max, MAX_EVENTS["trifecta"], MASS_EVENTS["trifecta"], perfect_trifecta, triple_calc, pickles_error, real_steals, 3.0, seeds_error, real_hits, 1.5, dogs_error, real_homers, 4.0) 
+                    all_event_values, trifecta_score_earned, trifecta_score_max, perfect_trifecta, pickles_error, batman_best_error = calc_snack("trifecta", all_event_values, real_trifecta, sorted_solved_trifecta, trifecta_score_earned, trifecta_score_max, MAX_EVENTS["trifecta"], MASS_EVENTS["trifecta"], perfect_trifecta, triple_calc, pickles_error, real_steals, 3.0, seeds_error, real_hits, 1.5, dogs_error, real_homers, 4.0) 
                     
                     thieves += 1                    
 
@@ -1382,19 +1449,19 @@ def minimize_func(parameters, *data):
                 #the solution is still potentially good, but we need to find the top hitter among those we solved for that actually got batstats to compare against the batstat leader
                 #for the solution to be good, we need the best hitters and sluggers to be consistently identified from the stlats data
                 #solved_hits_leader = next(iter(sorted_solved_hits))
-                seeds_score_earned, seeds_score_max, perfect_seeds, seeds_error = calc_snack(real_hits, sorted_solved_hits, seeds_score_earned, seeds_score_max, MAX_EVENTS["hits"], MASS_EVENTS["hits"], perfect_seeds, single_calc, seeds_error)
+                all_event_values, seeds_score_earned, seeds_score_max, perfect_seeds, seeds_error = calc_snack("hits", all_event_values, real_hits, sorted_solved_hits, seeds_score_earned, seeds_score_max, MAX_EVENTS["hits"], MASS_EVENTS["hits"], perfect_seeds, single_calc, seeds_error)
 
-                dogs_score_earned, dogs_score_max, perfect_dogs, dogs_error = calc_snack(real_homers, sorted_solved_homers, dogs_score_earned, dogs_score_max, MAX_EVENTS["homers"], MASS_EVENTS["homers"], perfect_dogs, single_calc, dogs_error)                                                                          
+                all_event_values, dogs_score_earned, dogs_score_max, perfect_dogs, dogs_error = calc_snack("homers", all_event_values, real_homers, sorted_solved_homers, dogs_score_earned, dogs_score_max, MAX_EVENTS["homers"], MASS_EVENTS["homers"], perfect_dogs, single_calc, dogs_error)                                                                          
 
-                seeddogs_score_earned, seeddogs_score_max, perfect_seeddogs, seeds_error, dogs_error = calc_snack(real_seeddogs, sorted_solved_seeddogs, seeddogs_score_earned, seeddogs_score_max, MAX_EVENTS["seeddogs"], MASS_EVENTS["seeddogs"], perfect_seeddogs, double_calc, seeds_error, real_hits, 1.5, dogs_error, real_homers, 4.0)
+                all_event_values, seeddogs_score_earned, seeddogs_score_max, perfect_seeddogs, seeds_error, dogs_error = calc_snack("seeddogs", all_event_values, real_seeddogs, sorted_solved_seeddogs, seeddogs_score_earned, seeddogs_score_max, MAX_EVENTS["seeddogs"], MASS_EVENTS["seeddogs"], perfect_seeddogs, double_calc, seeds_error, real_hits, 1.5, dogs_error, real_homers, 4.0)
 
                 hitters += 1
 
-                chips_score_earned, chips_score_max, perfect_chips, chips_error = calc_snack(real_ks, sorted_solved_ks, chips_score_earned, chips_score_max, MAX_EVENTS["chips"], MASS_EVENTS["chips"], perfect_chips, single_calc, chips_error)
+                all_event_values, chips_score_earned, chips_score_max, perfect_chips, chips_error = calc_snack("chips", all_event_values, real_ks, sorted_solved_ks, chips_score_earned, chips_score_max, MAX_EVENTS["chips"], MASS_EVENTS["chips"], perfect_chips, single_calc, chips_error)
 
-                meatballs_score_earned, meatballs_score_max, perfect_meatballs, meatballs_error = calc_snack(real_meatballs, sorted_solved_meatballs, meatballs_score_earned, meatballs_score_max, MAX_EVENTS["meatballs"], MASS_EVENTS["meatballs"], perfect_meatballs, single_calc, meatballs_error)
+                all_event_values, meatballs_score_earned, meatballs_score_max, perfect_meatballs, meatballs_error = calc_snack("meatballs", all_event_values, real_meatballs, sorted_solved_meatballs, meatballs_score_earned, meatballs_score_max, MAX_EVENTS["meatballs"], MASS_EVENTS["meatballs"], perfect_meatballs, single_calc, meatballs_error)
 
-                chipsmeatballs_score_earned, chipsmeatballs_score_max, perfect_chipsmeatballs, chips_error, meatballs_error = calc_snack(real_chipsmeatballs, sorted_solved_chipsmeatballs, chipsmeatballs_score_earned, chipsmeatballs_score_max, MAX_EVENTS["chipsmeatballs"], MASS_EVENTS["chipsmeatballs"], perfect_chipsmeatballs, double_calc, chips_error, real_ks, 0.2, meatballs_error, real_meatballs, 1.0)
+                all_event_values, chipsmeatballs_score_earned, chipsmeatballs_score_max, perfect_chipsmeatballs, chips_error, meatballs_error = calc_snack("chipsmeatballs", all_event_values, real_chipsmeatballs, sorted_solved_chipsmeatballs, chipsmeatballs_score_earned, chipsmeatballs_score_max, MAX_EVENTS["chipsmeatballs"], MASS_EVENTS["chipsmeatballs"], perfect_chipsmeatballs, double_calc, chips_error, real_ks, 0.2, meatballs_error, real_meatballs, 1.0)
 
                 chips_pitchers += 1
                 
@@ -1407,15 +1474,15 @@ def minimize_func(parameters, *data):
                         pitcher_chipsburgers_score = pitcher_burgers_score + (real_ks[solved_burgers_leader] * 0.2)
                         burgers_score_earned += pitcher_burgers_score
                         chipsburgers_score_earned += pitcher_chipsburgers_score  
-                        burger_penalty += calc_penalty(best_chipsburgers_score, pitcher_chipsburgers_score, MAX_EVENTS["chipsburgers"], 8.0)
+                        burger_penalty += calc_penalty(best_chipsburgers_score, pitcher_chipsburgers_score, MAX_EVENTS["chipsburgers"], 6.0)
                     else:
                         pitcher_burgers_score = 0.0
                         pitcher_chipsburgers_score = (pitcher_burgers_score + real_ks[solved_burgers_leader] * 0.2) / best_chipsburgers_score
                         burgers_fail_metric = len(real_sho) / daily_games
                         chipsburgers_score_earned += real_ks[solved_burgers_leader] * 0.2
                         max_chipsburgers_random = ((burgers_fail_metric * 12.5) + (best_chipsburgers_score - 12.5)) / best_chipsburgers_score
-                        burger_penalty += calc_penalty(burgers_fail_metric, pitcher_burgers_score, 1.0, 8.0) 
-                        burger_penalty += calc_penalty(max_chipsburgers_random, pitcher_chipsburgers_score, 1.0, 8.0)
+                        burger_penalty += calc_penalty(burgers_fail_metric, pitcher_burgers_score, 1.0, 6.0) 
+                        burger_penalty += calc_penalty(max_chipsburgers_random, pitcher_chipsburgers_score, 1.0, 6.0)
                 
                 solved_hits.clear(), solved_homers.clear(), solved_seeddogs.clear(), solved_ks.clear(), solved_era.clear(), solved_meatballs.clear(), solved_chipsmeatballs.clear() 
                 sorted_solved_hits.clear(), sorted_solved_homers.clear(), sorted_solved_seeddogs.clear(), sorted_solved_ks.clear(), sorted_solved_era.clear()
@@ -1434,7 +1501,21 @@ def minimize_func(parameters, *data):
     else:
         fail_rate = 1.0   
     if len(win_loss) == 0:
-        TOTAL_GAME_COUNTER = game_counter if (game_counter > TOTAL_GAME_COUNTER) else TOTAL_GAME_COUNTER         
+        TOTAL_GAME_COUNTER = game_counter if (game_counter > TOTAL_GAME_COUNTER) else TOTAL_GAME_COUNTER       
+        
+    #if CURRENT_ITERATION == 1:
+    #    print("Max events from data: {}".format(WITHIN_DATA_MAX_EVENTS))
+    #    print("Mas events from data: {}".format(WITHIN_DATA_MASS_EVENTS))
+    batman_linearity_error = {}
+
+    for event in all_event_values:
+        batman_linearity_error[event] = sort_batman_linear_penalty(all_event_values[event], MAX_EVENTS[event])
+
+    seeds_error += batman_linearity_error["hits"]
+    dogs_error += batman_linearity_error["homers"]
+    pickles_error += batman_linearity_error["steals"]
+    chips_error += batman_linearity_error["chips"]
+    meatballs_error += batman_linearity_error["meatballs"]
             
     fail_points, linear_points = 10000000000.0, 10000000000.0    
     max_fail_rate, expected_average = 0.0, 0.25
@@ -1479,12 +1560,15 @@ def minimize_func(parameters, *data):
         best_error = seeds_error + dogs_error + pickles_error + chips_error + meatballs_error + burger_penalty
         errors = {}
         errors["all"] = seeds_error + dogs_error + pickles_error + chips_error + meatballs_error + burger_penalty
+        #try:
         errors["seeds"] = seeds_error * 6.0
         errors["dogs"] = dogs_error * 6.0
         errors["pickles"] = pickles_error * 6.0
         errors["chips"] = chips_error * 6.0
         errors["meatballs"] = meatballs_error * 6.0
         weighted_best_error = errors[focus]                
+        #except (ValueError, FloatingPointError):
+            #weighted_best_error = errors["all"]        
         linear_error += weighted_best_error        
         
     if (game_counter < ALL_GAMES) and (CURRENT_ITERATION > 1) and not reject_solution:
@@ -1549,7 +1633,7 @@ def minimize_func(parameters, *data):
                     sorted_win_loss.append(x)
                 #sorted_win_loss = [x for _,x in sorted(zip(mod_vals, mod_win_loss))]                    
                 mod_vals.sort()                        
-                mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value = calc_linear_unex_error(mod_vals, sorted_win_loss, modname)                    
+                mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value = calc_linear_unex_error(mod_vals, sorted_win_loss, modname)
                 mod_pos_vals.clear()                    
                 for val in mod_vals:
                     if val >= 0.5:
@@ -1568,7 +1652,7 @@ def minimize_func(parameters, *data):
                 linear_error_reduction = (1.0 - (abs(mod_rate - mod_expected_average) / 100.0)) * (100.0 - mod_expected_average)    
                 #include batman modifier before subtraction, to make sure large batman errors don't inflate a large negative number                
                 mod_linear_error *= modcount if modname not in DIRECT_MOD_SOLVES else 1.0
-                mod_linear_error *= 0.1
+                #mod_linear_error *= 0.1
                 linear_by_mod[modname] = mod_linear_error
                 linear_error += mod_linear_error
                 if mod_linear_error > new_worstmod_linear_error:                        
@@ -1601,7 +1685,7 @@ def minimize_func(parameters, *data):
             #sorted_win_loss = [x for _,x in sorted(zip(overall_vals, overall_win_loss))]                
             overall_vals.sort()                    
             overall_linear_error, overall_max_linear_error, overall_min_linear_error, overall_max_error_value, overall_min_error_value = calc_linear_unex_error(overall_vals, sorted_win_loss, "overall")
-            overall_linear_error *= 0.1
+            #overall_linear_error *= 0.1
             linear_error += overall_linear_error
             linear_by_mod["overall"] = overall_linear_error
             if overall_linear_error > new_worstmod_linear_error:                    
