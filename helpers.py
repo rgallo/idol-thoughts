@@ -167,11 +167,11 @@ def load_data(data_url):
 WEATHERS = []
 
 
-def get_weather_idx(weather):
+def get_weather_idx(weather):        
     if not WEATHERS:
         weather_json = requests.get("https://raw.githubusercontent.com/xSke/blaseball-site-files/main/data/weather.json"
                                     "").json()
-        WEATHERS.extend([weather["name"] for weather in weather_json])
+        WEATHERS.extend([weather["name"] for weather in weather_json])    
     return WEATHERS.index(weather)
 
 def load_ballparks(ballparks_url):

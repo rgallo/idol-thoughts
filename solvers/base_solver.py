@@ -11,15 +11,14 @@ import re
 import uuid
 import math
 import copy
-import numpy as np
-from glob import glob
 from numba import njit
 from numba.typed import List
+import numpy as np
+from glob import glob
 
 from helpers import StlatTerm, ParkTerm, get_weather_idx
 from helpers import load_stat_data, load_stat_data_pid, adjust_by_pct, calculate_adjusted_stat_data
 from helpers import DEFENSE_STLATS, defense_stars, BATTING_STLATS, batting_stars, BASERUNNING_STLATS, baserunning_stars
-from batman import get_team_atbats, get_batman_mods
 from statistics import fmean, StatisticsError
 
 STAT_CACHE = {}
@@ -41,7 +40,7 @@ DOGPICKLES_CACHE = {}
 TRIFECTA_CACHE = {}
 MAX_EVENTS = {'hits': 8, 'homers': 4, 'steals': 10, 'seeddogs': 20.5, 'seedpickles': 36.0, 'dogpickles': 30.0, 'trifecta': 36.0, 'chips': 19, 'meatballs': 9, 'burgers': 12.5, 'chipsburgers': 16.3, 'chipsmeatballs': 9.6}
 MASS_EVENTS = {'hits': 11, 'homers': 6, 'steals': 11, 'seeddogs': 26.5, 'seedpickles': 39.0, 'dogpickles': 38.0, 'trifecta': 51.5, 'chips': 28, 'meatballs': 13, 'chipsmeatballs': 14.0}
-FACTORS = {'seeds': [(394278717041015, 8807950640627690), (405332183837890, 11258284257194600), (414166259765625, 10132802483832300), (415341949462890, 10250267061908800), (423493194580078, 9826954886226050)], 'dogs': [(1460107421875000, 8807950640627690), (1467968750000000, 11049478396080500), (1469580078125000, 10705014559322000), (1475488281250000, 10525698788277600), (1483837890625000, 9104727836005440)], 'pickles': [(96020200000000, 11345710944506100), (99367600000000, 9379164531975830), (113551200000000, 10485179067072400), (116007200000000, 9492756275579270), (123383400000000, 11547283659801100)], 'chips': [(1949105722046250, 10779623042538300), (2064180864504930, 9561830681240550), (2164119637446490, 10137140775716400), (2218293247504010, 9379164531975830), (2279503022486480, 9747279510303510)], 'meatballs': [(3172265996757240, 10877488825411700), (3258881233984710, 10500106211446300), (3663876083117740, 10064129935810000), (3688675041178690, 10355477383215400), (3740646969914950, 9104727836005440)]}
+FACTORS = {'seeds': [(5830574836565810, 23488585391653400), (5840320966648320, 23843951898871800), (5867365910819690, 23478352355856100), (5875726754954620, 23257271570441200), (5887275009041410, 23623303302473700)], 'dogs': [(3676658406399890, 24346883945710400), (3679564589051610, 23957067508515900), (3719542502011940, 24254606789529400), (3725687079835050, 23121107410407000), (3728071289480220, 23241345775947300)], 'pickles': [(2935744361536850, 23798626074887400), (2937526145995710, 24145042947052900), (2938505633530020, 23852633168439800), (2938562061811530, 24062378271153000), (2944638154520360, 24170105359468000)], 'chips': [(3023815555939160, 23970835703185200), (3038428975346370, 22816467135385200), (3091133586829120, 24110827736918400), (3125868888744890, 24116919421779900), (3137437032080280, 23304051862095900)], 'meatballs': [(5551512075903060, 23286463514636600), (5599158011397710, 23724254656204400), (5634246801510820, 24210462288927100), (5460021306196550, 23792359281037600), (5565918178440090, 24442269826434000)], 'all': [22531386580342100, 22557419780824400, 22638975484864400, 22641685789292600, 22677488968449100]}
 ADJUSTED_STAT_CACHE = {}
 SORTED_BATTERS_CACHE = {}
 CACHED_CALCED_STAT_DATA = {}
@@ -51,8 +50,9 @@ IGNORE_BP_STATS = ['birds', 'model', 'renoCost', 'mysticism', 'filthiness', 'lux
 MIN_SEASON = 22
 MAX_SEASON = 23
 
-BEST_RESULT = 10109255609005100.0    
+BEST_RESULT = 22687498004247900.0    
 BEST_FAIL_RATE = 1.0
+SOLUTIONS_TO_FILL = 0
 MIN_DAY = 1
 MAX_DAY = 99
 BEST_FAILCOUNT = 10000000000.0
@@ -61,7 +61,10 @@ LAST_CHECKTIME = datetime.datetime.now()
 BEST_UNMOD = 1000000000000.0
 WORST_MOD = ""
 PLUS_NAME = ""
+PREVIOUS_FOCUS = ""
 LAST_BEST = 1000000000.0
+CACHED_NONZERO_MEAN = {}
+CACHED_SORTED_REAL = {}
 EXPECTED_MOD_RATES = {}
 HAS_GAMES = {}
 FAILED_SOLUTIONS = []
@@ -242,121 +245,58 @@ def debug_print(s, debug, run_id):
 
 @njit(cache=True)
 def get_factor_and_best(focused_values):
-    best_result, best_focused, factor, max_value = 0.0, 0.0, 0.0, 0.0    
+    best_all, best_focused, factor, max_value, min_all = 0.0, 0.0, 0.0, 0.0, 0.0
     for idx in range(0, len(focused_values)):
         (focused_result_int, all_result_int) = focused_values[idx]
         focused_result, all_result = float(focused_result_int), float(all_result_int)
         factor = (all_result / focused_result) if (all_result / focused_result) > factor else factor
-        best_result = all_result if all_result > best_result else best_result
-        best_focused = focused_result if focused_result > best_focused else best_focused
+        if all_result > best_all:
+            best_all = float(all_result)
+            best_focused = float(focused_result)
         if focused_result > max_value:
-            max_value = focused_result
-            replacement_index = idx
-    return best_result, best_focused, factor, replacement_index
-
-def calc_unexvar(atbat_failby, hit_failby, hr_failby, hit_real_val, hr_real_val, batman_unexvar):    
-    batman_unexvar += (atbat_failby ** 2.0) + (hit_failby ** 2.0) + (hr_failby ** 2.0)
-    if (-1 * hit_real_val) == hit_failby:
-        batman_unexvar += 5000000.0
-    if (-1 * hr_real_val) == hr_failby:
-        batman_unexvar += 15000000.0
-    return batman_unexvar
-
-def calc_maxes(batman_max_err, batman_min_err, batman_max_val, batman_min_val, bat_atbat_failby, bat_hit_failby, bat_hr_failby, atbat_real_val, hit_real_val, hr_real_val):
-    if bat_atbat_failby > batman_max_err["abs"]:
-        batman_max_err["abs"] = bat_atbat_failby
-        batman_max_val["abs"] = atbat_real_val
-    if bat_hit_failby > batman_max_err["hits"]:
-        batman_max_err["hits"] = bat_hit_failby
-        batman_max_val["hits"] = hit_real_val
-    if bat_hr_failby > batman_max_err["hrs"]:
-        batman_max_err["hrs"] = bat_hr_failby
-        batman_max_val["hrs"] = hr_real_val
-
-    if bat_atbat_failby < batman_min_err["abs"]:
-        batman_min_err["abs"] = bat_atbat_failby
-        batman_min_val["abs"] = atbat_real_val
-    if bat_hit_failby < batman_min_err["hits"]:
-        batman_min_err["hits"] = bat_hit_failby
-        batman_min_val["hits"] = hit_real_val
-    if bat_hr_failby < batman_min_err["hrs"]:
-        batman_min_err["hrs"] = bat_hr_failby
-        batman_min_val["hrs"] = hr_real_val    
-
-    return batman_max_err, batman_min_err, batman_max_val, batman_min_val
-
-def track_errors(bat_atbat_failby, bat_hit_failby, bat_hr_failby, atbat_real_val, hit_real_val, hr_real_val, pos_error, zero_error, pos_counter, zero_counter):
-    pos_error["abs"] += abs(bat_atbat_failby)
-    pos_counter["abs"] += 1
-    if hit_real_val > 0:
-        pos_error["hits"] += abs(bat_hit_failby)
-        pos_counter["hits"] += 1
-    else:
-        zero_error["hits"] += abs(bat_hit_failby)
-        zero_counter["hits"] += 1
-    if hr_real_val > 0:
-        pos_error["hrs"] += abs(bat_hr_failby)
-        pos_counter["hrs"] += 1
-    else:
-        zero_error["hrs"] += abs(bat_hr_failby)
-        zero_counter["hrs"] += 1
-    return pos_error, zero_error, pos_counter, zero_counter
-                  
-def check_margins(eventlist, bat_atbat_failby, bat_hit_failby, bat_hr_failby, stages, pass_within_four, pass_within_three, pass_within_two, pass_within_one, pass_exact):
-    for event in eventlist:
-        if event == "abs":
-            check_fail = bat_atbat_failby             
-        elif event == "hits":
-            check_fail = bat_hit_failby
-        else:
-            check_fail = bat_hr_failby
-        #print("stages for {} = {}".format(event, stages[event]))
-        if abs(check_fail) < stages[event][0]:             
-            pass_within_four[event] += 1
-            #print("{} pass within {}, {:.4f}".format(event, stages[event][0], abs(check_fail)))
-            if abs(check_fail) < stages[event][1]:
-                pass_within_three[event] += 1
-                if abs(check_fail) < stages[event][2]:
-                    pass_within_two[event] += 1
-                    if abs(check_fail) < stages[event][3]:
-                        pass_within_one[event] += 1
-                        if abs(check_fail) <= stages[event][4]:
-                            pass_exact[event] += 1   
-    return pass_within_four, pass_within_three, pass_within_two, pass_within_one, pass_exact
+            max_value = float(focused_result)
+            replacement_index = int(idx)
+        if (min_all == 0.0) or (float(all_result) < min_all):
+            min_all = float(all_result)
+    return best_all, best_focused, max_value, replacement_index, min_all
 
 def calc_linear_unex_error(vals, wins_losses, modname=None):    
-    max_error_game = ""
-    error, max_error, min_error, max_error_val, min_error_val, current_val = 0.0, 0.0, 150.0, 0.0, 0.0, 0.0    
+    max_error_game = ""    
     exponent_check = modname == "psychic" or modname == "a" or modname == "acidic" or modname == "base_instincts" or modname == "electric" or modname == "fiery" or modname == "love" or modname == "overall"
-    exponent = 4 if exponent_check else 6
-    window_size, half_window = 100, 50
-    #window_size = 300 if (modname == "unmod" or modname == "overall") else 100
-    #half_window = 150 if (modname == "unmod" or modname == "overall") else 50
-    wins = [np.float64(x) for x in range(0)]
+    exponent = 4.0 if exponent_check else 6.0
+    window_size, half_window = 100, 50        
     win_threshold = False    
     starting_size = (window_size - 1)
     wins = wins_losses[:starting_size]    
+    numba_wins, numba_wins_losses, numba_vals = List(wins), List(wins_losses), List(vals)
+    error, max_error, min_error, max_error_val, min_error_val = linear_unex_loop(numba_wins, window_size, half_window, numba_vals, numba_wins_losses, exponent)    
+    del numba_wins, numba_wins_losses, numba_vals, wins
+    return error, max_error, min_error, max_error_val, min_error_val
+
+@njit(cache=True)
+def linear_unex_loop(wins, window_size, half_window, vals, wins_losses, exponent):
+    win_threshold = False
+    error, max_error, min_error, max_error_val, min_error_val, current_val = 0.0, 0.0, 150.0, 0.0, 0.0, 0.0    
     for idx in range(window_size - 1, len(vals)):                 
-        wins.append(wins_losses[idx])                
-        if len(wins) >= window_size:
-            current_val = vals[idx - half_window] * 100.0
-            total_wins = sum(wins[-window_size:])
-            if (total_wins > 1):
-                win_threshold = True            
-            if win_threshold:
-                actual_val = total_wins * (100.0 / window_size)
-                current_error = max(abs(current_val - actual_val), 1.0) - 1.0
-                if ((actual_val > 50.0) and (current_val < 50.0)) or ((actual_val < 50.0) and (current_val > 50.0)):
-                    current_error *= 2.0
-                error += current_error ** exponent                               
-                if ((current_val - actual_val) > max_error):
-                    max_error = (current_val - actual_val)
-                    max_error_val = current_val                                
-                if ((current_val - actual_val) < min_error):
-                    min_error = (current_val - actual_val)
-                    min_error_val = current_val                                               
+        wins.append(wins_losses[idx])                        
+        current_val = vals[idx - half_window] * 100.0
+        total_wins = sum(wins)
+        if (total_wins > 1):
+            win_threshold = True            
+        if win_threshold:
+            actual_val = total_wins * (100.0 / window_size)
+            current_error = max(abs(current_val - actual_val), 1.0) - 1.0
+            if ((actual_val > 50.0) and (current_val < 50.0)) or ((actual_val < 50.0) and (current_val > 50.0)):
+                current_error *= 2.0
+            error += current_error ** exponent                               
+            if ((current_val - actual_val) > max_error):
+                max_error = (current_val - actual_val)
+                max_error_val = current_val                                
+            if ((current_val - actual_val) < min_error):
+                min_error = (current_val - actual_val)
+                min_error_val = current_val                                               
+        del wins[0]
     error += (max_error ** (exponent + 2)) + (abs(min_error ** (exponent + 2)))    
-    #error *= 0.01
     return error, max_error, min_error, max_error_val, min_error_val
 
 def calc_penalty(best_score, solved_score, max_score, exponent):
@@ -384,80 +324,61 @@ def calc_best_penalty(best_leader_score, solved_leader_score, solved_score, best
 #different idea for potential use later - gather and evaluate all solved scores within a particular value that are less than or equal to the average of the solved score of a previous value and evaluate thier linear penalty accordingly
 
 @njit(cache=True)
-def calc_batman_linear_penalty(real_scores, real_values, sorted_real_values, max_event, exponent):
-    penalty = 0.0
-    #max_score = max(real_scores)    
-    max_real = float(max_event)
-    #max_previous_score = 0.0
-    #max_previous = 0.0
-    #if max_score > 0.0:
+def calc_batman_linear_penalty(real_scores, real_values, sorted_real_values, mean_event, exponent):
+    penalty = 0.0             
     for idx in range(0, len(real_scores)):                  
         scored_value, real_value = float(real_values[idx]), float(sorted_real_values[idx])
-        relative_error = (((real_value - scored_value) / max_real) * 100.0) ** exponent
-        penalty += (relative_error * 100.0)
-    #        if float(real_values[idx-1]) > max_previous:
-    #            max_previous = float(real_values[idx-1])
-    #            max_previous_score = real_scores[idx-1]
-    #        current_value = float(real_values[idx])
-    #        if (max_previous > current_value) and (max_score > real_scores[idx]):                    
-    #            slope = (max_real - max_previous) / (max_score - max_previous_score)
-    #            intercept = max_previous - (max_previous_score * slope)
-    #            predicted_value = (slope * real_scores[idx]) + intercept
-    #            relative_error = (((current_value - predicted_value) / max_real) * 100.0) ** exponent
-    #            penalty += relative_error
-    #        if max_score == real_scores[idx]:
-    #            leader_value = real_values[idx]
-    #            if leader_value < max_event:
-    #                relative_error = (((max_real - float(leader_value)) / max_real) * 100.0) ** exponent
-    #                penalty += relative_error
-    #else:
-    #    relative_error = (max_real * 100.0) ** exponent
+        if scored_value != real_value:
+            penalty_value = max(scored_value, real_value)
+            #relative_error = ((penalty_value / max_real) * 100.0) ** exponent
+            relative_error = (((real_value - scored_value) / penalty_value) * 100.0) ** exponent
+            penalty += relative_error * (penalty_value / mean_event)    
     return penalty
 
-def sort_batman_linear_penalty(event_values, max_event):
+def sort_batman_linear_penalty(event, event_values, max_event):
+    global CACHED_NONZERO_MEAN
+    global CACHED_SORTED_REAL
     unsorted_real_values, unsorted_solved_values = list(event_values["real_values"]), list(event_values["solved_values"])    
     unsorted_values = zip(unsorted_solved_values, unsorted_real_values)    
-    sorted_values = sorted(unsorted_values)    
-    unsorted_real_values.sort()
-    sorted_real_values = List([element for element in unsorted_real_values])    
+    sorted_values = sorted(unsorted_values)        
     real_scores = List([element for element, _ in sorted_values])
     real_values = List([element for _, element in sorted_values])
-    #print("Real scores = {}".format(real_scores))    
-    return calc_batman_linear_penalty(real_scores, real_values, sorted_real_values, max_event, 6.0)
+    
+    if event not in CACHED_SORTED_REAL:
+        unsorted_real_values.sort()    
+        nonzero_values = [val for val in unsorted_real_values if val > 0]
+        sorted_real_values = List([element for element in unsorted_real_values])    
+        nonzero_mean = min(float(sum(nonzero_values)) / float(len(nonzero_values)), 2.0)
+        CACHED_NONZERO_MEAN[event] = nonzero_mean
+        CACHED_SORTED_REAL[event] = sorted_real_values
+    else:
+        nonzero_mean, sorted_real_values = CACHED_NONZERO_MEAN[event], CACHED_SORTED_REAL[event]
+    penalty = calc_batman_linear_penalty(real_scores, real_values, sorted_real_values, nonzero_mean, 6.0)
+    del real_scores, real_values, unsorted_real_values, unsorted_solved_values, unsorted_values, sorted_values
+    return penalty
 
-def calc_snack(event, all_event_values, real_values, sorted_solved_values, score_earned, score_max, event_max, event_mass, perfect_score, score_method, *args):
-    #global WITHIN_DATA_MAX_EVENTS
-    #global WITHIN_DATA_MASS_EVENTS    
+def calc_snack(event, all_event_values, real_values, sorted_solved_values, score_earned, score_max, event_max, event_mass, perfect_score, score_method, *args):    
     best_keys, solved_keys = list(real_values.keys()), list(sorted_solved_values.keys())    
     best_leader, solved_leader = best_keys[0], solved_keys[0]
     best_score, solved_best_score = real_values[best_leader], real_values[solved_leader]
     score_earned += solved_best_score
     score_max += best_score    
-    #best_mass_score = real_values[best_keys[0]] + real_values[best_keys[1]] + real_values[best_keys[2]]
-    #solved_mass_score = real_values[solved_keys[0]] + real_values[solved_keys[1]] + real_values[solved_keys[2]]
-    #best_mass_solved_score = sorted_solved_values[best_keys[0]] + sorted_solved_values[best_keys[1]] + sorted_solved_values[best_keys[2]]
-    #solved_mass_solved_score = sorted_solved_values[solved_keys[0]] + sorted_solved_values[solved_keys[1]] + sorted_solved_values[solved_keys[2]]
+    
     best_mass_score = real_values[best_keys[1]] + real_values[best_keys[2]]
     solved_mass_score = real_values[solved_keys[1]] + real_values[solved_keys[2]]
     best_mass_solved_score = sorted_solved_values[best_keys[1]] + sorted_solved_values[best_keys[2]]
     solved_mass_solved_score = sorted_solved_values[solved_keys[1]] + sorted_solved_values[solved_keys[2]]    
-    #WITHIN_DATA_MAX_EVENTS[event] = best_score if (best_score > WITHIN_DATA_MAX_EVENTS[event]) else WITHIN_DATA_MAX_EVENTS[event]
-    #WITHIN_DATA_MASS_EVENTS[event] = best_mass_score if (best_mass_score > WITHIN_DATA_MASS_EVENTS[event]) else WITHIN_DATA_MASS_EVENTS[event]
-    #solved_values_by_real = {}
+    
     if event in all_event_values:
         for key in best_keys:
             all_event_values[event]["real_values"].append(real_values[key])
             all_event_values[event]["solved_values"].append(sorted_solved_values[key])
-        #solved_values_by_real[key] = sorted_solved_values[key]    
-    #real_values, real_scores = List(real_values.values()), List(solved_values_by_real.values())
-    #print("Real values = {}, real scores = {}".format(real_values, real_scores))
+    
     linear_penalty = 0.0
-    #linear_penalty = calc_batman_linear_penalty(real_scores, real_values, event_max, 6.0)
-    #print("Linear penalty = {}, values {}, scores {}".format(linear_penalty, real_values, real_scores))
-    #linear_penalty = calc_batman_linear_penalty(real_values[best_keys[0]], real_values[best_keys[1]], sorted_solved_values[best_keys[0]], sorted_solved_values[best_keys[1]], event_max, 6.0)
-    #linear_penalty += calc_batman_linear_penalty(real_values[best_keys[1]], real_values[best_keys[2]], sorted_solved_values[best_keys[1]], sorted_solved_values[best_keys[2]], event_max, 6.0)
-    #linear_penalty += calc_batman_linear_penalty(real_values[best_keys[0]], real_values[best_keys[2]], sorted_solved_values[best_keys[0]], sorted_solved_values[best_keys[2]], event_max, 6.0)
+    
     scores = score_method(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, linear_penalty, *args)    
+
+    del best_keys, solved_keys
                     
     return all_event_values, score_earned, score_max, *scores
 
@@ -466,10 +387,7 @@ def single_calc(sorted_solved_values, solved_best_score, best_score, best_leader
         best_error += calc_best_penalty(sorted_solved_values[best_leader], sorted_solved_values[solved_leader], solved_best_score, best_score, event_max, 6.0) * 100.0
     else:
         perfect_score += best_score
-        best_error -= calc_bonus(best_score, event_max)    
-    #if solved_mass_score < best_mass_score:
-    #    best_error += calc_best_penalty(best_mass_solved_score, solved_mass_solved_score, solved_mass_score, best_mass_score, event_mass, 6.0)
-    #best_error += linear_penalty    
+        best_error -= calc_bonus(best_score, event_max)         
     return perfect_score, best_error
 
 def double_calc(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, linear_penalty, first_error, first_event, first_multiplier, second_error, second_event, second_multiplier):                         
@@ -480,10 +398,7 @@ def double_calc(sorted_solved_values, solved_best_score, best_score, best_leader
         perfect_score += best_score
         bonus = calc_bonus(best_score, event_max)
         first_error -= bonus * ((first_event[best_leader] * first_multiplier) / best_score)
-        second_error -= bonus * ((second_event[best_leader] * second_multiplier) / best_score)             
-    #if solved_mass_score < best_mass_score:
-    #    best_error += calc_best_penalty(best_mass_solved_score, solved_mass_solved_score, solved_mass_score, best_mass_score, event_mass, 6.0)
-    #best_error += linear_penalty    
+        second_error -= bonus * ((second_event[best_leader] * second_multiplier) / best_score)                 
     first_error += best_error * ((first_event[best_leader] * first_multiplier) / best_score)
     second_error += best_error * ((second_event[best_leader] * second_multiplier) / best_score)                                                
     return perfect_score, first_error, second_error
@@ -497,10 +412,7 @@ def triple_calc(sorted_solved_values, solved_best_score, best_score, best_leader
         bonus = calc_bonus(best_score, event_max)
         first_error -= bonus * ((first_event[best_leader] * first_multiplier) / best_score)
         second_error -= bonus * ((second_event[best_leader] * second_multiplier) / best_score)
-        third_error -= bonus * ((third_event[best_leader] * third_multiplier) / best_score)
-    #if solved_mass_score < best_mass_score:
-    #    best_error += calc_best_penalty(best_mass_solved_score, solved_mass_solved_score, solved_mass_score, best_mass_score, event_mass, 6.0)
-    #best_error += linear_penalty    
+        third_error -= bonus * ((third_event[best_leader] * third_multiplier) / best_score)    
     first_error += best_error * ((first_event[best_leader] * first_multiplier) / best_score)
     second_error += best_error * ((second_event[best_leader] * second_multiplier) / best_score)
     third_error += best_error * ((third_event[best_leader] * third_multiplier) / best_score)
@@ -753,6 +665,8 @@ def minimize_func(parameters, *data):
     global MAX_EVENTS
     global MASS_EVENTS
     global FACTORS
+    global PREVIOUS_FOCUS
+    global SOLUTIONS_TO_FILL
     calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, final_solution, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, popsize, focus, debug, debug2, debug3, outputdir, factorsdir, solution_regen = data    
     debug_print("func start: {}".format(starttime), debug3, run_id)
     if number_to_beat is not None:
@@ -766,34 +680,13 @@ def minimize_func(parameters, *data):
     terms = solved_terms if solved_terms else collections.defaultdict(lambda: {})        
     if base_mofo_list_size > 0:        
         terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_mofo_list_size])] * 3))}
-        #for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_mofo_list_size])] * 3)):
-        #    use_a = 0.0 if (math.isnan(a)) else a            
-        #    use_b = 0.0 if (math.isnan(b)) else b            
-        #    use_c = 0.0 if (math.isnan(c)) else c
-        #    terms[stat] = StlatTerm(use_a, use_b, use_c)                                
+        
     mods = solved_mods if solved_mods else {mod.attr.lower(): {modteam.team.lower(): {modstat.stat.lower(): a for modstat, a in zip(mod_list, parameters[(base_mofo_list_size + special_cases_count):(total_parameters-park_mod_list_size)]) if modstat.team == modteam.team and modstat.attr == mod.attr} for modteam in mod_list} for mod in mod_list}
     ballpark_mods = solved_ballpark_mods if solved_ballpark_mods else {bp.ballparkstat.lower(): {parkterm.playerstat.lower(): ParkTerm(a, b, c) for parkterm, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)) if bp.ballparkstat == parkterm.ballparkstat} for bp in ballpark_list}
     half_stlats = solved_halfterms if solved_halfterms else {halfterm.stat.lower(): {halfevent.event.lower(): a for halfevent, a in zip(special_case_list, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]) if halfterm.stat == halfevent.stat} for halfterm in special_case_list}
-    #mods = solved_mods if solved_mods else collections.defaultdict(lambda: {"opp": {}, "same": {}})    
-    #ballpark_mods = solved_ballpark_mods if solved_ballpark_mods else collections.defaultdict(lambda: {"bpterm": {}})
-    #half_stlats = solved_halfterms if solved_halfterms else collections.defaultdict(lambda: {})
+    
     mod_mode = True
-    #if team_mod_list_size > 0:     
-    #    mods = 
-    #    #for mod, a in zip(mod_list, parameters[(base_mofo_list_size + special_cases_count):(total_parameters-park_mod_list_size)]):                 
-    #    #    use_a = 0.0 if (math.isnan(a)) else a                      
-    #    #    mods[mod.attr.lower()][mod.team.lower()][mod.stat.lower()] = use_a        
-    #if park_mod_list_size > 0:                                
-    #    for bp, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)):   
-    #        use_a = 0.0 if (math.isnan(a)) else a            
-    #        use_b = 0.0 if (math.isnan(b)) else b            
-    #        use_c = 0.0 if (math.isnan(c)) else c
-    #        ballpark_mods[bp.ballparkstat.lower()][bp.playerstat.lower()] = ParkTerm(use_a, use_b, use_c)                           
-    #if special_cases_count > 0:
-        #half_stlats = 
-        #for halfterm, a in zip(special_case_list, parameters[base_mofo_list_size:-(team_mod_list_size + park_mod_list_size)]):        
-        #    use_a = 0.0 if (math.isnan(a)) else a            
-        #    half_stlats[halfterm.stat.lower()][halfterm.event.lower()] = use_a                
+    
     game_counter, fail_counter, season_game_counter, half_fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 1000000000, 0, 0, 0, 0, 0
     quarter_fail = 100.0
     linear_fail = 100.0    
@@ -822,17 +715,10 @@ def minimize_func(parameters, *data):
     running_terms = List([terms["laser_attempt_steal"], terms["laser_caught_steal_base"], terms["laser_caught_steal_home"], terms["laser_runner_advances"], terms["baset_attempt_steal"], terms["baset_caught_steal_home"], terms["cont_triple"], terms["cont_double"], terms["ground_triple"], terms["indulg_runner_advances"]])    
     list_terms = List([pitching_terms, defense_terms, batting_terms, running_terms])  
 
-    #if CURRENT_ITERATION == 1:
-    #    factor_write_file = open(factorsdir, "wb")
-    #    pickle.dump(FACTORS, factor_write_file)
-    #    factor_write_file.close()
-        
-    regen_overrides = {}
-    regen_overrides["seeds"] = 607101315561316.0
-    regen_overrides["dogs"] = 1637845813803200.0
-    regen_overrides["pickles"] = 407361075799930.0
-    regen_overrides["chips"] = 406623626040916.0
-    regen_overrides["meatballs"] = 765567445269499.0
+    if CURRENT_ITERATION == 1:
+        factor_write_file = open(factorsdir, "wb")
+        pickle.dump(FACTORS, factor_write_file)
+        factor_write_file.close()
 
     if solve_batman_too:
         solved_hits, solved_homers = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})                   
@@ -848,8 +734,7 @@ def minimize_func(parameters, *data):
         hitters, sluggers, seeddogers, chips_pitchers, sho_pitchers = 0, 0, 0, 0, 0  
         perfect_seeds, perfect_dogs, perfect_seeddogs, perfect_chips, perfect_meatballs, perfect_chipsmeatballs = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
         qualified_events = ["hits", "homers", "chips", "meatballs"]
-        #all_event_values = {}
-        #all_event_values["hits"], all_event_values["homers"], all_event_values["chips"], all_event_values["meatballs"] = {}, {}, {}, {}
+        
         burger_penalty = 0.0
         if crimes_list is not None:
             solved_steals = collections.defaultdict(lambda: {})            
@@ -861,20 +746,9 @@ def minimize_func(parameters, *data):
             perfect_pickles, perfect_seedpickles, perfect_dogpickles, perfect_trifecta = 0.0, 0.0, 0.0, 0.0
             qualified_events.append("steals")
             #all_event_values["steals"] = {}
-        all_event_values = {event: {"real_values": [], "solved_values": []} for event in qualified_events}
-        #for event in all_event_values:
-        #    all_event_values[event]["real_values"], all_event_values[event]["solved_values"] = [], []                
+        all_event_values = {event: {"real_values": [], "solved_values": []} for event in qualified_events}        
 
-    adjustments = {event: calc_half_term(terms, half_stlats, stlat, event) for stlat in half_stlats for event in half_stlats[stlat]}
-    #adjustments = {}
-    #for stlat in half_stlats:
-    #    for event in half_stlats[stlat]:           
-    #        val = half_stlats[stlat][event]
-    #        calced_val = terms[event].calc(abs(val))
-    #        try:
-    #            adjustments[event] = calced_val * (val / abs(val))
-    #        except ZeroDivisionError:
-    #            adjustments[event] = calced_val        
+    adjustments = {event: calc_half_term(terms, half_stlats, stlat, event) for stlat in half_stlats for event in half_stlats[stlat]}    
 
     seasonrange = reversed(range(MIN_SEASON, MAX_SEASON + 1))    
     dayrange = range(MIN_DAY, MAX_DAY + 1)    
@@ -1137,12 +1011,8 @@ def minimize_func(parameters, *data):
                     #print("Not cached")
                     cachedAwayMods, cachedHomeMods = List(), List()
                 previous_ballparks[game["home"]["team_id"]] = ballpark
-                if solve_batman_too:                    
-                    #print("Calcing for game {}".format(game["away"]["game_id"]))
-                    #non_calcfunc_time_two, calcfunc_time_start = time.time(), time.time()
-                    game_game_counter, game_fail_counter, game_away_val, game_home_val, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayParkMods, homeParkMods = calc_func(game, awayAttrs, homeAttrs, team_stat_data, sorted_batters, pitcher_stat_data, pitchers, list_terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, True, cachedAwayMods, cachedHomeMods, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs)       
-                    #print("Done calcing for game")
-                    #non_calcfunc_time_three, calcfunc_time_end = time.time(), time.time()
+                if solve_batman_too:                                        
+                    game_game_counter, game_fail_counter, game_away_val, game_home_val, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayParkMods, homeParkMods = calc_func(game, awayAttrs, homeAttrs, team_stat_data, sorted_batters, pitcher_stat_data, pitchers, list_terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, True, cachedAwayMods, cachedHomeMods, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs)                           
                     cachedParkAwayMods[game["home"]["team_id"]], cachedParkHomeMods[game["home"]["team_id"]] = awayParkMods, homeParkMods
                     solved_hits, solved_homers = {**solved_hits, **away_hits, **home_hits}, {**solved_homers, **away_homers, **home_homers}
                     if crimes_list is not None:
@@ -1150,16 +1020,7 @@ def minimize_func(parameters, *data):
                     solved_ks[game["away"]["pitcher_id"]], solved_ks[game["home"]["pitcher_id"]] = away_pitcher_ks, home_pitcher_ks
                     solved_era[game["away"]["pitcher_id"]], solved_era[game["home"]["pitcher_id"]] = away_pitcher_era, home_pitcher_era
                     total_away_homers, total_home_homers = sum(away_homers.values()), sum(home_homers.values())
-                    solved_meatballs[game["away"]["pitcher_id"]], solved_meatballs[game["home"]["pitcher_id"]] = total_home_homers, total_away_homers
-                    #except ValueError:
-                    #    print("Missing values for some reason? Day {}, Game {}".format(day, game["away"]["game_id"]))
-                    #    batter_remove_data = [row for row in batter_list if row["season"] == str(season) and row["day"] == str(day) and row["game_id"] == game["away"]["game_id"]]
-                    #    for batter in batter_remove_data:
-                    #        if batter["batter_id"] in HITS_CACHE[(season, day)]:
-                    #            HITS_CACHE[(season, day)].pop(batter["batter_id"])
-                    #            HOMERS_CACHE[(season, day)].pop(batter["batter_id"])
-                    #            SEEDDOGS_CACHE[(season, day)].pop(batter["batter_id"])
-                    #    continue                    
+                    solved_meatballs[game["away"]["pitcher_id"]], solved_meatballs[game["home"]["pitcher_id"]] = total_home_homers, total_away_homers                                  
                 else:
                     game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, False)                
                 if not is_cached and game_game_counter:
@@ -1189,18 +1050,7 @@ def minimize_func(parameters, *data):
                     gameids.append(game["home"]["game_id"])
                     all_vals.append(game_home_val)                      
                     game_ev, game_mismatch, game_dadbets, game_web_ev, season_ev, season_web_ev = game_ev_calculate(ev_set, game["away"]["game_id"])    
-                    #if solve_for_ev:
-                    #    game_fail_counter = -game_ev   
-                    #    web_margin -= game_web_ev                                                
-                    #    ev_by_team = store_ev_by_team(ev_by_team, gamehomeTeam, gameawayTeam, game_web_ev, game_ev) 
-                    #    hometeam_ev = ev_by_team[gamehomeTeam]["mofo_ev"] - ev_by_team[gamehomeTeam]["web_ev"] 
-                    #    awayteam_ev = ev_by_team[gameawayTeam]["mofo_ev"] - ev_by_team[gameawayTeam]["web_ev"]
-                    #    max_team_ev, min_team_ev = -1000.0, 1000.0
-                    #    for team in ev_by_team:
-                    #        max_team_ev = ev_by_team[team]["net_ev"] if (ev_by_team[team]["net_ev"] > max_team_ev) else max_team_ev
-                    #        min_team_ev = ev_by_team[team]["net_ev"] if (ev_by_team[team]["net_ev"] < min_team_ev) else min_team_ev                        
-                    #    max_run_span = min_team_ev if (min_team_ev < max_run_span) else max_run_span
-                        #game_fail_counter = 1 if (game_ev < 0) else 0            
+                    
                     fail_counter += game_fail_counter                                                                
                                                    
                     if mod_mode:                          
@@ -1364,31 +1214,13 @@ def minimize_func(parameters, *data):
                     solved_seedpickles = {playerid: ((solved_hits[playerid] * 1.5) + (solved_steals[playerid] * 3.0)) for playerid in unified_solved_batters}
                     solved_dogpickles = {playerid: ((solved_homers[playerid] * 4.0) + (solved_steals[playerid] * 3.0)) for playerid in unified_solved_batters}
                     solved_trifecta = {playerid: ((solved_hits[playerid] * 1.5) + (solved_homers[playerid] * 4.0) + (solved_steals[playerid] * 3.0)) for playerid in unified_solved_batters}                
-                #for playerid in unified_solved_batters:                    
-                #    if (playerid in real_hits) or (playerid in real_steals):
-                #        solved_seeddogs[playerid] = (solved_hits[playerid] * 1.5) + (solved_homers[playerid] * 4.0)
-                #        if crimes_list is not None:
-                #            solved_seedpickles[playerid] = (solved_hits[playerid] * 1.5) + (solved_steals[playerid] * 3.0)
-                #            solved_dogpickles[playerid] = (solved_homers[playerid] * 4.0) + (solved_steals[playerid] * 3.0)
-                #            solved_trifecta[playerid] = (solved_hits[playerid] * 1.5) + (solved_homers[playerid] * 4.0) + (solved_steals[playerid] * 3.0)
-                #    else:                                               
-                #        if playerid in solved_hits:
-                #            solved_hits.pop(playerid), solved_homers.pop(playerid) 
-                #        if playerid in solved_steals:
-                #            solved_steals.pop(playerid)
+                
                 unified_solved_batters.clear()
 
                 new_solved_ks = {k: v for k, v in solved_ks.items() if k in real_ks}
                 new_solved_meatballs = {k: v for k, v in solved_meatballs.items() if k in real_ks}
                 solved_chipsmeatballs = {playerid: ((solved_ks[playerid] * 0.2) + solved_meatballs[playerid]) for playerid in new_solved_ks}
-                #for playerid in solved_ks:
-                #    #for chipsburgers, we would still be prioritizing lowest SHO chance, above all else, so it's a sort by solved era lowest to highest    
-                #    if playerid in real_ks:                
-                #        solved_chipsmeatballs[playerid] = (solved_ks[playerid] * 0.2) + solved_meatballs[playerid]
-                #    else:
-                #        solved_ks.pop(playerid), solved_meatballs.pop(playerid)
-
-                #need to sort real and solved events                
+                            
                 sorted_solved_hits, sorted_solved_homers = dict(sorted(new_solved_hits.items(), key=lambda k: k[1], reverse=True)), dict(sorted(new_solved_homers.items(), key=lambda k: k[1], reverse=True))
                 sorted_solved_seeddogs, sorted_solved_meatballs = dict(sorted(solved_seeddogs.items(), key=lambda k: k[1], reverse=True)), dict(sorted(new_solved_meatballs.items(), key=lambda k: k[1], reverse=True))
                 sorted_solved_ks, sorted_solved_era = dict(sorted(new_solved_ks.items(), key=lambda k: k[1], reverse=True)), dict(sorted(solved_era.items(), key=lambda k: k[1], reverse=False))
@@ -1417,10 +1249,7 @@ def minimize_func(parameters, *data):
                     sho_pitchers += 1
                 else:
                     best_burgers_score, best_chipsburgers_score = 0.0, 0.0
-                #in this case, we need to not penalize the solution just because a batter was queued up by the stlats data that didn't end up performing
-                #the solution is still potentially good, but we need to find the top hitter among those we solved for that actually got batstats to compare against the batstat leader
-                #for the solution to be good, we need the best hitters and sluggers to be consistently identified from the stlats data
-                #solved_hits_leader = next(iter(sorted_solved_hits))
+                
                 all_event_values, seeds_score_earned, seeds_score_max, perfect_seeds, seeds_error = calc_snack("hits", all_event_values, real_hits, sorted_solved_hits, seeds_score_earned, seeds_score_max, MAX_EVENTS["hits"], MASS_EVENTS["hits"], perfect_seeds, single_calc, seeds_error)
 
                 all_event_values, dogs_score_earned, dogs_score_max, perfect_dogs, dogs_error = calc_snack("homers", all_event_values, real_homers, sorted_solved_homers, dogs_score_earned, dogs_score_max, MAX_EVENTS["homers"], MASS_EVENTS["homers"], perfect_dogs, single_calc, dogs_error)                                                                          
@@ -1462,6 +1291,7 @@ def minimize_func(parameters, *data):
                 if crimes_list is not None:
                     solved_steals.clear(), solved_seedpickles.clear(), solved_dogpickles.clear(), solved_trifecta.clear(), sorted_solved_steals.clear() 
                     sorted_solved_seedpickles.clear(), sorted_solved_dogpickles.clear(), sorted_solved_trifecta.clear()
+                
             if not is_cached:
                 GAME_CACHE[(season, day)] = good_game_list
         if season not in HAS_GAMES:
@@ -1472,37 +1302,30 @@ def minimize_func(parameters, *data):
         fail_rate = fail_counter / game_counter       
     else:
         fail_rate = 1.0             
-        
-    #if CURRENT_ITERATION == 1:
-    #    print("Max events from data: {}".format(WITHIN_DATA_MAX_EVENTS))
-    #    print("Mas events from data: {}".format(WITHIN_DATA_MASS_EVENTS))
+            
     batman_linearity_error = {}
 
     for event in all_event_values:
-        batman_linearity_error[event] = sort_batman_linear_penalty(all_event_values[event], MAX_EVENTS[event])
+        #print("Checking {}".format(event))
+        batman_linearity_error[event] = sort_batman_linear_penalty(event, all_event_values[event], MAX_EVENTS[event])
+
+    del solved_hits, solved_homers, solved_seeddogs, solved_ks, solved_era, solved_meatballs, solved_chipsmeatballs, sorted_solved_hits, sorted_solved_homers, sorted_solved_seeddogs, sorted_solved_ks, sorted_solved_era, sorted_solved_meatballs, sorted_solved_chipsmeatballs
+    if crimes_list is not None:
+        del solved_steals, solved_seedpickles, solved_dogpickles, solved_trifecta, sorted_solved_steals, sorted_solved_seedpickles, sorted_solved_dogpickles, sorted_solved_trifecta
 
     #max_individual_event = max(MAX_EVENTS["hits"], MAX_EVENTS["homers"], MAX_EVENTS["steals"], MAX_EVENTS["chips"], MAX_EVENTS["meatballs"])
 
     #try just linearity instead
     linear_correction = len(all_event_values["hits"]["real_values"]) / len(all_event_values["chips"]["real_values"])
-    #print("Correcting for {} hitters vs {} pitchers".format(len(all_event_values["hits"]["real_values"]), len(all_event_values["chips"]["real_values"])))
+    #print("Correcting for {} hitters vs {} pitchers; {} thieves".format(len(all_event_values["hits"]["real_values"]), len(all_event_values["chips"]["real_values"]), len(all_event_values["steals"]["real_values"])))
     seeds_error = batman_linearity_error["hits"]
     dogs_error = batman_linearity_error["homers"]
     pickles_error = batman_linearity_error["steals"]
     chips_error = batman_linearity_error["chips"] * linear_correction
-    meatballs_error = batman_linearity_error["meatballs"] * linear_correction
+    meatballs_error = batman_linearity_error["meatballs"] * linear_correction    
 
-    #seeds_error = batman_linearity_error["hits"] * ((MAX_EVENTS["hits"] * 1.5) / max_individual_event)
-    #dogs_error = batman_linearity_error["homers"] * ((MAX_EVENTS["homers"] * 4.0) / max_individual_event)
-    #pickles_error = batman_linearity_error["steals"] * ((MAX_EVENTS["steals"] * 3.0) / max_individual_event)
-    #chips_error = batman_linearity_error["chips"] * ((MAX_EVENTS["chips"] * 0.2) / max_individual_event)
-    #meatballs_error = batman_linearity_error["meatballs"] * (MAX_EVENTS["meatballs"] / max_individual_event)
-
-    #seeds_error = (seeds_error + batman_linearity_error["hits"]) * (MAX_EVENTS["hits"] / max_individual_event)
-    #dogs_error = (dogs_error + batman_linearity_error["homers"]) * (MAX_EVENTS["homers"] / max_individual_event)
-    #pickles_error = (pickles_error + batman_linearity_error["steals"]) * (MAX_EVENTS["steals"] / max_individual_event)
-    #chips_error = (chips_error + batman_linearity_error["chips"]) * (MAX_EVENTS["chips"] / max_individual_event)
-    #meatballs_error = (meatballs_error + batman_linearity_error["meatballs"]) * (MAX_EVENTS["meatballs"] / max_individual_event)
+    all_event_values.clear()
+    del all_event_values    
             
     fail_points, linear_points = 10000000000.0, 10000000000.0    
     max_fail_rate, expected_average = 0.0, 0.25
@@ -1687,9 +1510,26 @@ def minimize_func(parameters, *data):
                             aggregate_fail_rate = rate
                         mod_error += abs(rate - 0.25)                    
                     fail_points = ((aggregate_fail_rate * 1000.0) ** 2.0)                    
-                    linear_fail = linear_points                           
-
-    if focus != "all":              
+                    linear_fail = linear_points     
+    
+    minimum_focused_error, min_factors_alls = 0.0, 0.0
+    if solution_regen:
+        publish_solution = True        
+        if CURRENT_ITERATION == 1:
+            factor_file = open(factorsdir, "rb")        
+            FACTORS = pickle.load(factor_file)        
+            factor_file.close()                
+        for possible_focus in FACTORS:
+            if possible_focus == "all":
+                max_all = max(FACTORS["all"])
+                max_all_idx = FACTORS["all"].index(max_all)
+                continue
+            focused_values = List(FACTORS[possible_focus])
+            possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)
+            focused_result = errors[possible_focus] * (possible_result / possible_focused)
+            if (focused_result < minimum_focused_error) or (minimum_focused_error == 0.0):
+                minimum_focused_error = focused_result           
+    else:        
         factor_file = open(factorsdir, "rb")        
         FACTORS = pickle.load(factor_file)        
         factor_file.close()
@@ -1697,48 +1537,85 @@ def minimize_func(parameters, *data):
         #print("Testing that this part works correctly: factors = {}".format(FACTORS))
         last_possible_result, max_focused_error = 0.0, 0.0
         for possible_focus in FACTORS:
+            if possible_focus == "all":
+                max_all = max(FACTORS["all"])
+                max_all_idx = FACTORS["all"].index(max_all)                
+                if linear_points < max_all:
+                    publish_solution = True
+                #print("Checking linear points {}, max_all {}, publish solution {}, logic check = {}".format(linear_points, max_all, publish_solution, linear_points < max_all))
+                continue
             #print("Possible focus = {}".format(possible_focus))
             focused_values = List(FACTORS[possible_focus])
-            possible_result, possible_focused, possible_factor, possible_replacement_index = get_factor_and_best(focused_values)                                    
+            possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                                    
+            focused_result = errors[possible_focus] * (possible_result / possible_focused)
+            if (focused_result < minimum_focused_error) or (minimum_focused_error == 0.0):
+                minimum_focused_error = focused_result
             if (errors[possible_focus] < possible_focused) and (linear_points < possible_result):
                 publish_solution = True                
             if possible_result >= last_possible_result:
-                BEST_RESULT, factor, replacement_index = possible_result, possible_factor, possible_replacement_index
-                last_possible_result = BEST_RESULT
-                focus = possible_focus                  
-        focused_error = errors[focus] * factor
-    else:
-        BEST_RESULT, factor, replacement_index = BEST_RESULT, 1.0, 0
-        publish_solution = True if (focus == "all") else (linear_fail < FAILED_SOLUTIONS[population_member])
+                focused_result = possible_focused
+                last_possible_result = possible_result
+                focus = possible_focus  
+            if (min_factors_alls == 0.0) or (min_factors_alls > possible_min_all):
+                min_factors_alls = possible_min_all
+        if max_all > min_factors_alls:
+            focus = "all"
+        if focus == "all":                        
+            BEST_RESULT = min(FACTORS["all"])
+            if linear_fail < BEST_RESULT:
+                BEST_RESULT = linear_fail                                                                   
+        else:
+            if CURRENT_ITERATION == 1:
+                BEST_RESULT = 24276626267281400.0
 
-    if CURRENT_ITERATION == 1:        
-        if focus != "all":
-            print("Factors '{}': {}".format(focus, FACTORS[focus]))
+    if CURRENT_ITERATION == 1: 
+        SOLUTIONS_TO_FILL = popsize
+        print("All Factors = {}".format(FACTORS))
         FAILED_SOLUTIONS = [BEST_RESULT] * popsize
-    
+    elif focus != PREVIOUS_FOCUS:  
+        SOLUTIONS_TO_FILL = popsize
+        print("Previous focus = {}, current focus = {}".format(PREVIOUS_FOCUS, focus))
+        for idx in range(0, len(FAILED_SOLUTIONS)):
+            FAILED_SOLUTIONS[idx] = BEST_RESULT
+
     population_member = CURRENT_ITERATION % popsize    
     #publish_solution = linear_fail < FAILED_SOLUTIONS[population_member]    
-    if ((linear_fail < BEST_RESULT) and publish_solution and focus == "all") or (publish_solution and focus != "all") or solution_regen:     
-        if focus == "all":
-            BEST_RESULT = linear_fail
-        else:     
+    #if ((linear_fail < BEST_RESULT) and publish_solution and focus == "all") or (publish_solution and focus != "all") or solution_regen:     
+    if publish_solution or solution_regen:
+        #if focus == "all":
+            #BEST_RESULT = linear_fail                
+        reported_focus = []        
+        if not solution_regen:
             factor_file = open(factorsdir, "rb")        
             FACTORS = pickle.load(factor_file)
-            factor_file.close()
+            factor_file.close()        
             factor_write_file = open(factorsdir, "wb")
             for pot_focus in FACTORS:
+                if pot_focus == "all":
+                    max_all = max(FACTORS["all"])
+                    max_all_idx = FACTORS["all"].index(max_all)
+                    if linear_points < max_all:
+                        FACTORS["all"][max_all_idx] = linear_points
+                        pickle.dump(FACTORS, factor_write_file)
+                        max_all = max(FACTORS["all"])
+                    continue
                 focused_values = List(FACTORS[pot_focus])
-                possible_result, possible_focused, possible_factor, possible_replacement_index = get_factor_and_best(focused_values)                
+                possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                
                 if (errors[pot_focus] < possible_focused) and (linear_points < possible_result):
-                    FACTORS[pot_focus][possible_replacement_index] = (int(errors[pot_focus]), int(linear_points))    
-                    factor_write_file = open(factorsdir, "wb")
+                    reported_focus.append(pot_focus)
+                    FACTORS[pot_focus][possible_replacement_index] = (int(errors[pot_focus]), int(linear_points))                        
                     pickle.dump(FACTORS, factor_write_file)
                     if pot_focus == focus:       
                         focused_values = List(FACTORS[focus])
-                        BEST_RESULT, new_focused, factor, new_replacement_index = get_factor_and_best(focused_values)                        
-            factor_write_file.close()
-            focused_error = errors[focus] * factor        
-            linear_fail = max(linear_fail, focused_error)
+                        new_result, new_focused, new_best_focus, new_replacement_index, possible_min_all = get_factor_and_best(focused_values)
+                focused_result = errors[pot_focus] * (possible_result / possible_focused)
+                if (focused_result < minimum_focused_error) or (minimum_focused_error == 0.0):
+                    minimum_focused_error = focused_result
+                focused_error = possible_factor * (possible_result / possible_focused)
+                max_focused_error = max(max_focused_error, focused_error, possible_result)
+            factor_write_file.close()         
+            if focus != "all":
+                BEST_RESULT = min(minimum_focused_error, BEST_RESULT)                
         PLUS_NAME = best_plusname
         WORST_MOD = new_worstmod                                          
         if len(win_loss) > 0:
@@ -1809,7 +1686,7 @@ def minimize_func(parameters, *data):
             #    override_failure += (chips_error / regen_overrides["chips"]) if (regen_overrides["chips"] <= chips_error) else 0
             #    override_failure += (meatballs_error / regen_overrides["meatballs"]) if (regen_overrides["meatballs"] <= meatballs_error) else 0
             #    linear_fail = override_failure * 10000.0
-            detailtext += "\nBest so far - Linear fail {:.0f} ({:.2f}% from best errors), worst mod = {}, {:.0f}, fail rate {:.2f}%, expected {:.2f}%".format(linear_points, (best_error / linear_points) * 100.0, WORST_MOD, LAST_BEST, fail_rate * 100.0, (1.0 - expected_average) * 100.0)
+            detailtext += "\nBest so far - Linear fail {:.0f} ({:.2f}% from best errors), worst mod = {}, {:.0f}, fail rate {:.2f}%, expected {:.2f}%".format(max(minimum_focused_error, linear_points), (best_error / linear_points) * 100.0, WORST_MOD, LAST_BEST, fail_rate * 100.0, (1.0 - expected_average) * 100.0)
             detailtext += "\nBest so far - modified    {:.0f}".format(linear_fail)
             #if solve_for_ev:
             #    detailtext += "\nNet EV = {:.4f}, web EV = {:.4f}, season EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(expected_val, web_ev, (-1 * BEST_SEASON), mismatches, dadbets)                        
@@ -1836,14 +1713,16 @@ def minimize_func(parameters, *data):
                 if crimes_list is not None:
                     detailtext += "\nENOCH earnings (% of max possible) - Pickles {:.2f}%{} ({:.2f}% Perfect), Seeds+Pickles {:.2f}%{} ({:.2f}% Perfect), Dogs+Pickles {:.2f}%{} ({:.2f}% Perfect), Trifecta {:.2f}%{} ({:.2f}% Perfect)".format(pickles_score * 100.0, ("!" if pickles_score > thresholds["pickles"] else ""), (perfect_pickles / pickles_score_max) * 100.0, seedpickles_score * 100.0, ("!" if seedpickles_score > thresholds["seedpickles"] else ""), (perfect_seedpickles / seedpickles_score_max) * 100.0, dogpickles_score * 100.0, ("!" if dogpickles_score > thresholds["dogpickles"] else ""), (perfect_dogpickles / dogpickles_score_max) * 100.0, trifecta_score * 100.0, ("!" if trifecta_score > thresholds["trifecta"] else ""), (perfect_trifecta / trifecta_score_max) * 100.0)
                 detailtext += "\nPitcher earnings (% of max possible) - Chips {:.2f}% ({:.2f}% Perfect), Burgers {:.2f}%, Meatballs {:.2f}% ({:.2f}% Perfect), Chips+Burgers {:.2f}%, Chips+Meatballs {:.2f}% ({:.2f}% Perfect)".format(chips_score * 100.0, (perfect_chips / chips_score_max) * 100.0, burgers_score * 100.0, meatballs_score * 100.0, (perfect_meatballs / meatballs_score_max) * 100.0, chipsburgers_score * 100.0, chipsmeatballs_score * 100.0, (perfect_chipsmeatballs / chipsmeatballs_score_max) * 100.0)    
-                if focus != "all":
-                    detailtext += "\n{}-factors '{}': {}".format(run_id, focus, FACTORS[focus])
+                if not solution_regen:
+                    if len(reported_focus) > 0:
+                        for report_focus in reported_focus:
+                            detailtext += "\n{}-factors '{}': {}".format(run_id, report_focus, FACTORS[report_focus])
                 detailtext += "\n{}-details,{},{},{},{},{},{}".format(run_id, int(seeds_error), int(dogs_error), int(pickles_error), int(chips_error), int(meatballs_error), int(linear_points))   
             debug_print(detailtext, debug, run_id)
             if outputdir:
                 write_file(outputdir, run_id, "details.txt", detailtext)
                 if solution_regen:
-                    solutiontext = "{}-details,{},{},{},{},{},{}\n".format(run_id, int(seeds_error), int(dogs_error), int(pickles_error), int(chips_error), int(meatballs_error), int(linear_fail))
+                    solutiontext = "{}-details,{},{},{},{},{},{}\n".format(run_id, int(seeds_error), int(dogs_error), int(pickles_error), int(chips_error), int(meatballs_error), int(linear_points))
                     write_to_file(outputdir, "solutions.txt", solutiontext)
             if sys.platform == "darwin":  # MacOS
                 os.system("""osascript -e 'display notification "Fail rate {:.4f}%" with title "New solution found!"'""".format(fail_rate * 100.0))                        
@@ -1869,10 +1748,22 @@ def minimize_func(parameters, *data):
         debug_print("-" * 20 + "\n", debug, run_id) 
         
     if focus != "all":
-        focused_fail = max(linear_fail, focused_error)
-        FAILED_SOLUTIONS[population_member] = min(focused_fail, FAILED_SOLUTIONS[population_member]) if (CURRENT_ITERATION > popsize) else focused_fail
+        focused_fail = max(minimum_focused_error, linear_points)
+        if SOLUTIONS_TO_FILL > 0:
+            FAILED_SOLUTIONS[population_member] = focused_fail
+            SOLUTIONS_TO_FILL -= 1
+        else:
+            FAILED_SOLUTIONS[population_member] = min(focused_fail, FAILED_SOLUTIONS[population_member])
     else:
-        FAILED_SOLUTIONS[population_member] = min(linear_fail, FAILED_SOLUTIONS[population_member]) if (CURRENT_ITERATION > popsize) else linear_fail
+        if SOLUTIONS_TO_FILL > 0:
+            FAILED_SOLUTIONS[population_member] = linear_fail
+            SOLUTIONS_TO_FILL -= 1
+        else:
+            FAILED_SOLUTIONS[population_member] = min(linear_fail, FAILED_SOLUTIONS[population_member])
+
+    #if CURRENT_ITERATION % 500 == 0:
+    #    gc.collect()
+    #    time.sleep(10)
 
     if (CURRENT_ITERATION % 10 == 0 and CURRENT_ITERATION <= 50) or (CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 1000) or (CURRENT_ITERATION % 500 == 0):
         if len(win_loss) > 0:                        
@@ -1882,10 +1773,10 @@ def minimize_func(parameters, *data):
                 if focus == "all":
                     if min(solutions_to_evaluate) == BEST_RESULT:
                         solutions_to_evaluate.remove(BEST_RESULT)
-                else:
-                    while min(solutions_to_evaluate) < BEST_RESULT:
-                        remove_value = min(solutions_to_evaluate)
-                        solutions_to_evaluate.remove(remove_value)
+                #else:
+                #    while min(solutions_to_evaluate) < BEST_RESULT:
+                #        remove_value = min(solutions_to_evaluate)
+                #        solutions_to_evaluate.remove(remove_value)
                 average_fail = (fmean(solutions_to_evaluate) / BEST_RESULT) * 100
                 max_fail = (max(solutions_to_evaluate) / BEST_RESULT) * 100.0
                 min_fail = (min(solutions_to_evaluate) / BEST_RESULT) * 100.0
@@ -1903,6 +1794,9 @@ def minimize_func(parameters, *data):
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
-    if focus != "all":
-        linear_fail = focused_fail
+    PREVIOUS_FOCUS = focus
+    return_value = focused_fail if (focus != "all") else linear_fail                 
+    #return return_value
+    #return BEST_RESULT
     return linear_fail
+    

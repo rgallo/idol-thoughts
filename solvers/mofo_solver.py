@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 sys.path.append("..")
 import requests
 import numpy as np
+from numba import njit
+from numba.typed import List
 from solvers import base_solver
 from helpers import parse_mods, adjust_by_pct, StlatTerm, ParkTerm
 from solvers.mofo_ballpark_terms import BALLPARK_TERMS
@@ -24,36 +26,19 @@ from solvers.mofo_solver_terms import MOFO_TERMS
 from solvers.mofo_half_terms import MOFO_HALF_TERMS
 import mofo
 import helpers
-from numba import njit
-from numba.typed import List
 
-#MOFO_STLAT_LIST = ("meantragicness", "meanpatheticism", "meanthwackability", "meandivinity", "meanmoxie",
-#                   "meanmusclitude", "meanmartyrdom", "maxthwackability", "maxdivinity", "maxmoxie", "maxmusclitude",
-#                   "maxmartyrdom", "meanlaserlikeness", "meanbasethirst", "meancontinuation", "meangroundfriction",
-#                   "meanindulgence", "maxlaserlikeness", "maxbasethirst", "maxcontinuation", "maxgroundfriction",
-#                   "maxindulgence", "unthwackability", "ruthlessness", "overpowerment", "shakespearianism", "coldness",
-#                   "meanomniscience", "meantenaciousness", "meanwatchfulness", "meananticapitalism", "meanchasiness",
-#                   "maxomniscience", "maxtenaciousness", "maxwatchfulness", "maxanticapitalism", "maxchasiness")
-
-
-def get_mofo_results(game, awayAttrs, homeAttrs, team_stat_data, sorted_batters, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, runtime_solution, awayMods, homeMods, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs):        
-    #special_game_attrs = (game_attrs["home"].union(game_attrs["away"])) - base_solver.ALLOWED_IN_BASE
-    #if special_game_attrs:        
-    #    return 0, 0, 0, 0        
-    #start = time.time()
+def get_mofo_results(game, awayAttrs, homeAttrs, team_stat_data, sorted_batters, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, runtime_solution, awayMods, homeMods, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs):
     away_game, home_game = game["away"], game["home"]    
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])              
     if int(away_game["weather"]) == int(helpers.get_weather_idx("Sun 2")) or int(away_game["weather"]) == int(helpers.get_weather_idx("Black Hole")):
         home_rbi, away_rbi = home_rbi % 10.0, away_rbi % 10.0
     awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
     homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])          
-    if len(homeMods) == 0:
-        #print("Recalculating parkmods")
+    if len(homeMods) == 0:        
         awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)         
     
     away_batters, home_batters = sorted_batters["away"], sorted_batters["home"]
-    #end = time.time()
-    #print("Get mofo results before mofo playerbased = {}".format(end - start))
+    
     if runtime_solution:
         awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, int(away_game["weather"]), team_stat_data, pitcher_stat_data, terms, away_batters, home_batters, awayMods, homeMods, adjusted_stat_data, adjustments, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs, skip_mods=False, runtime_solution=True)        
         if awayodds == .5:
@@ -171,18 +156,8 @@ def get_init_values(init_dir, popsize, is_random, is_worst, team_mod_terms, solv
 
 def main():
     print(datetime.datetime.now())
-    cmd_args = handle_args()     
-    if cmd_args.newterms:
-        #load_dotenv(dotenv_path="../.env")
-        #github_token = os.getenv("GITHUB_TOKEN")
-        #solved_terms_url = os.getenv("FOMO_TERMS")
-        #solved_terms, _ = helpers.load_terms(solved_terms_url)
-        #solved_halfterms_url = os.getenv("FOMO_HALF_TERMS")
-        #solved_halfterms = helpers.load_half_terms(solved_halfterms_url)
-        #solved_mods_url = os.getenv("FOMO_MODS")
-        #solved_mods = helpers.load_mods(solved_mods_url)        
-        #solved_ballpark_mods_url = os.getenv("FOMO_BALLPARK_TERMS")
-        #solved_ballpark_mods = helpers.load_bp_terms(solved_ballpark_mods_url)
+    cmd_args = handle_args()         
+    if cmd_args.newterms:        
         solved_terms, solved_halfterms = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})
         solved_ballpark_mods = collections.defaultdict(lambda: {"bpterm": {}})
         with open(os.path.join(cmd_args.terms, "test_terms_file.csv")) as terms_file:            
@@ -312,13 +287,16 @@ def main():
                 game_list, team_attrs, number_to_beat, solve_for_ev, False, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, popsize, cmd_args.focus, cmd_args.debug, cmd_args.debug2, cmd_args.debug3, cmd_args.output, cmd_args.factors, cmd_args.regen)
         np.seterr(divide='raise', over='raise', invalid='raise')
         #with np.errstate(over='raise'):
+        #result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.1,
+        #                            mutation=0.9, recombination=recombination, workers=workers, maxiter=2,
+        #                            init='latinhypercube')
         result = differential_evolution(base_solver.minimize_func, bounds, args=args, popsize=popsize, tol=0.0001,
-                                    mutation=(0.25, 1.75), recombination=recombination, workers=workers, maxiter=10000,
+                                    mutation=(0.1, 1.9), recombination=recombination, workers=workers, maxiter=10000,
                                     init=init)
         #print("\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(mofo_base_terms, zip(*[iter(result.x)] * 3))))
 
-        result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, mofo_base_terms, MOFO_HALF_TERMS, team_mod_terms,
-                                                    BALLPARK_TERMS, stat_file_map, ballpark_file_map, game_list,
+        result_fail_rate = base_solver.minimize_func(result.x, get_mofo_results, mofo_base_terms, mofo_base_half_terms, team_mod_terms,
+                                                    mofo_ballpark_terms, stat_file_map, ballpark_file_map, game_list,
                                                     team_attrs, None, solve_for_ev, True, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, popsize, "all", cmd_args.debug, False, False, cmd_args.output, cmd_args.factors, cmd_args.regen)
         #screw it, final file output stuff in here to try and make sure it actually happens
         park_mod_list_size = len(mofo_ballpark_terms) * 3
@@ -391,7 +369,7 @@ def main():
             base_solver.write_final(outputdir, "FOMOHalfTerms.csv", half_output)
             base_solver.write_final(outputdir, "FOMOTeamModsCorrection.csv", mods_output)
             base_solver.write_final(outputdir, "FOMOBallparkCoefficients.csv", ballpark_mods_output)
-        print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))
+        print("Result fail rate: {:.2f}%".format(result_fail_rate*100.0))        
         print("Solve complete")
         print(datetime.datetime.now())
 

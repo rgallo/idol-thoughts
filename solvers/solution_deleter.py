@@ -38,6 +38,7 @@ def delete_solutions(dir_path, threshold, patternchoice):
     if to_delete:
         for job_id, fail_rate, reason in to_delete:
             print("{}: Fail rate {}, {}".format(job_id, fail_rate, reason))
+        print("Found {} solutions to delete".format(len(to_delete)))
         confirm = input("Continue? (y/n) ")
         if confirm == 'y':
             for filename in os.listdir(dir_path):

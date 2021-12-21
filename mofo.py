@@ -907,14 +907,8 @@ def calc_team_score(mods, weather, parkMods, away_home, team_bat_data, team_run_
     reverberating = List([(("reverberating" in teamPlayerAttrs[playerid]) or ("repeating" in teamPlayerAttrs[playerid] and reverb_weather)) for playerid in range(0, len(walk_chance))])
     homers_hit, hits_hit, bases_stolen = List([0.0 for val in walk_chance]), List([0.0 for val in walk_chance]), List([0.0 for val in walk_chance])
     
-    #single_chances, double_chances, triple_chances, homerun_chances = [val for val in single_chance.values()], [val for val in double_chance.values()], [val for val in triple_chance.values()], [val for val in homerun_chance.values()]    
-    #runner_advance_chances, walk_chances, sacrifice_chances = [val for val in runner_advance_chance.values()], [val for val in walk_chance.values()], [val for val in sacrifice_chance.values()]
-    #strike_out_chances, caught_out_chances = [val for val in strike_out_chance.values()], [val for val in caught_out_chance.values()]
-    #caught_steal_base_chances, caught_steal_home_chances, attempt_steal_chances = [val for val in caught_steal_base_chance.values()], [val for val in caught_steal_home_chance.values()], [val for val in attempt_steal_chance.values()]
-    #homerun_multi, hit_mod, steal_modifier, score_multi = [val for val in homerun_multipliers.values()], [val for val in hit_modifier.values()], [val for val in steal_mod.values()], [val for val in score_multiplier.values()]    
-    
-    team_score, bases_stolen, homers_hit, hits_hit, strikeouts, team_rbi = simulate_game(team_score, team_rbi, opp_score, away_home, int(innings), outs, len(walk_chance), extra_base, homerun_chance, triple_chance, double_chance, single_chance, walk_chance, walk_mod, sacrifice_chance, runner_advance_chance, average_on_first, average_on_second, average_on_third, reverberating, score_mod, strike_out_chance, caught_out_chance, caught_steal_base_chance, caught_steal_home_chance, attempt_steal_chance, homerun_multipliers, hit_modifier, steal_mod, score_multiplier, homers_hit, hits_hit, bases_stolen)    
-    
+    team_score, bases_stolen, homers_hit, hits_hit, strikeouts, team_rbi = simulate_game(team_score, team_rbi, opp_score, away_home, int(innings), outs, len(walk_chance), extra_base, homerun_chance, triple_chance, double_chance, single_chance, walk_chance, walk_mod, sacrifice_chance, runner_advance_chance, average_on_first, average_on_second, average_on_third, reverberating, score_mod, strike_out_chance, caught_out_chance, caught_steal_base_chance, caught_steal_home_chance, attempt_steal_chance, homerun_multipliers, hit_modifier, steal_mod, score_multiplier, homers_hit, hits_hit, bases_stolen)       
+
     #need to re-enable this in the case of wanting to do sun/black hole weather handling
     if (sun_weather or bh_weather) and runtime_solution:                
         #print("Adjusting team score for {} weather: team score = {}, adjusted score = {}".format("Sun 2" if weather == sun_weather else "Black Hole", team_score, adjusted_score))
@@ -1047,8 +1041,7 @@ def get_lists_from_loop(batter_order, team_stat_data, team, adjusted_stat_data, 
     team_stat_data = List([defense_data, batting_data, running_data])    
     return shelled, active_batters, average_aa_impact, average_aaa_impact, high_pressure_mod, adjusted_stat_data[away_home], team_stat_data, playerAttrs
     
-def get_mofo_playerbased(dict_mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, away_batter_order, home_batter_order, awayMods, homeMods, adjusted_stat_data, dict_adjustments, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs, skip_mods=False, runtime_solution=False):            
-    #start_time = time.time()
+def get_mofo_playerbased(dict_mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, away_batter_order, home_batter_order, awayMods, homeMods, adjusted_stat_data, dict_adjustments, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs, skip_mods=False, runtime_solution=False):
     polarity_plus, polarity_minus, flood_weather = helpers.get_weather_idx("Polarity +"), helpers.get_weather_idx("Polarity -"), helpers.get_weather_idx("Flooding")
     if weather == polarity_plus or weather == polarity_minus:
         if not runtime_solution:
@@ -1061,45 +1054,13 @@ def get_mofo_playerbased(dict_mods, awayPitcher, homePitcher, awayTeam, homeTeam
 
     adjustments = (dict_adjustments["moxie_swing_correct"], dict_adjustments["path_connect"], dict_adjustments["thwack_base_hit"], dict_adjustments["unthwack_base_hit"], dict_adjustments["omni_base_hit"], dict_adjustments["muscl_foul_ball"], dict_adjustments["baset_attempt_steal"], dict_adjustments["laser_attempt_steal"], dict_adjustments["watch_attempt_steal"], dict_adjustments["anticap_caught_steal_base"], dict_adjustments["laser_caught_steal_base"], dict_adjustments["anticap_caught_steal_home"], dict_adjustments["baset_caught_steal_home"], dict_adjustments["laser_caught_steal_home"], dict_adjustments["div_homer"], dict_adjustments["overp_homer"], dict_adjustments["muscl_triple"], dict_adjustments["ground_triple"], dict_adjustments["cont_triple"], dict_adjustments["overp_triple"], dict_adjustments["chasi_triple"], dict_adjustments["muscl_double"], dict_adjustments["cont_double"], dict_adjustments["overp_double"], dict_adjustments["chasi_double"], dict_adjustments["martyr_sacrifice"], dict_adjustments["laser_runner_advances"], dict_adjustments["indulg_runner_advances"], dict_adjustments["trag_runner_advances"], dict_adjustments["shakes_runner_advances"], dict_adjustments["tenacious_runner_advances"])
 
-    ruth_strike_adjust = dict_adjustments["ruth_strike"]    
-
-    #away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs = get_lists_from_loop(away_batter_order, team_stat_data, awayTeam, adjusted_stat_data, "away")
-    #home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs = get_lists_from_loop(home_batter_order, team_stat_data, homeTeam, adjusted_stat_data, "home")    
-
-    #away_shelled, home_shelled = List([team_stat_data[awayTeam][playerid]["shelled"] for playerid in away_batter_order]), List([team_stat_data[homeTeam][playerid]["shelled"] for playerid in home_batter_order])
-
-    #away_active_batters, home_active_batters = List([playerid for playerid in away_batter_order if not team_stat_data[awayTeam][playerid]["shelled"]]), List([playerid for playerid in home_batter_order if not team_stat_data[homeTeam][playerid]["shelled"]])
-
-    #away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod = List([0.0 for playerid in away_active_batters]), List([0.0 for playerid in away_active_batters]), List([0.0 for playerid in away_active_batters])
-    #home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod = List([0.0 for playerid in home_active_batters]), List([0.0 for playerid in home_active_batters]), List([0.0 for playerid in home_active_batters])
-    
-    #adjusted_away_defense_data, adjusted_home_defense_data = List([List([adjusted_stat_data["away"][playerid]["omniscience"], adjusted_stat_data["away"][playerid]["watchfulness"], adjusted_stat_data["away"][playerid]["chasiness"], adjusted_stat_data["away"][playerid]["anticapitalism"], adjusted_stat_data["away"][playerid]["tenaciousness"]]) for playerid in away_batter_order]), List([List([adjusted_stat_data["home"][playerid]["omniscience"], adjusted_stat_data["home"][playerid]["watchfulness"], adjusted_stat_data["home"][playerid]["chasiness"], adjusted_stat_data["home"][playerid]["anticapitalism"], adjusted_stat_data["home"][playerid]["tenaciousness"]]) for playerid in home_batter_order])
-
-    #adjusted_away_batting_data, adjusted_home_batting_data = List([List([adjusted_stat_data["away"][playerid]["patheticism"], adjusted_stat_data["away"][playerid]["tragicness"], adjusted_stat_data["away"][playerid]["thwackability"], adjusted_stat_data["away"][playerid]["divinity"], adjusted_stat_data["away"][playerid]["moxie"], adjusted_stat_data["away"][playerid]["musclitude"], adjusted_stat_data["away"][playerid]["martyrdom"]]) for playerid in away_batter_order if not team_stat_data[awayTeam][playerid]["shelled"]]), List([List([adjusted_stat_data["home"][playerid]["patheticism"], adjusted_stat_data["home"][playerid]["tragicness"], adjusted_stat_data["home"][playerid]["thwackability"], adjusted_stat_data["home"][playerid]["divinity"], adjusted_stat_data["home"][playerid]["moxie"], adjusted_stat_data["home"][playerid]["musclitude"], adjusted_stat_data["home"][playerid]["martyrdom"]]) for playerid in home_batter_order if not team_stat_data[homeTeam][playerid]["shelled"]])
-
-    #adjusted_away_running_data, adjusted_home_running_data = List([List([adjusted_stat_data["away"][playerid]["laserlikeness"], adjusted_stat_data["away"][playerid]["baseThirst"], adjusted_stat_data["away"][playerid]["continuation"], adjusted_stat_data["away"][playerid]["groundFriction"], adjusted_stat_data["away"][playerid]["indulgence"]]) for playerid in away_batter_order if not team_stat_data[awayTeam][playerid]["shelled"]]), List([List([adjusted_stat_data["home"][playerid]["laserlikeness"], adjusted_stat_data["home"][playerid]["baseThirst"], adjusted_stat_data["home"][playerid]["continuation"], adjusted_stat_data["home"][playerid]["groundFriction"], adjusted_stat_data["home"][playerid]["indulgence"]]) for playerid in home_batter_order if not team_stat_data[homeTeam][playerid]["shelled"]])
-
-    #adjusted_stat_data_away, adjusted_stat_data_home = List([adjusted_away_defense_data, adjusted_away_batting_data, adjusted_away_running_data]), List([adjusted_home_defense_data, adjusted_home_batting_data, adjusted_home_running_data])
-
-    #away_defense_data, home_defense_data = List([List([team_stat_data[awayTeam][playerid]["omniscience"], team_stat_data[awayTeam][playerid]["watchfulness"], team_stat_data[awayTeam][playerid]["chasiness"], team_stat_data[awayTeam][playerid]["anticapitalism"], team_stat_data[awayTeam][playerid]["tenaciousness"]]) for playerid in away_batter_order]), List([List([team_stat_data[homeTeam][playerid]["omniscience"], team_stat_data[homeTeam][playerid]["watchfulness"], team_stat_data[homeTeam][playerid]["chasiness"], team_stat_data[homeTeam][playerid]["anticapitalism"], team_stat_data[homeTeam][playerid]["tenaciousness"]]) for playerid in home_batter_order])
-
-    #away_batting_data, home_batting_data = List([List([team_stat_data[awayTeam][playerid]["patheticism"], team_stat_data[awayTeam][playerid]["tragicness"], team_stat_data[awayTeam][playerid]["thwackability"], team_stat_data[awayTeam][playerid]["divinity"], team_stat_data[awayTeam][playerid]["moxie"], team_stat_data[awayTeam][playerid]["musclitude"], team_stat_data[awayTeam][playerid]["martyrdom"]]) for playerid in away_batter_order if not team_stat_data[awayTeam][playerid]["shelled"]]), List([List([team_stat_data[homeTeam][playerid]["patheticism"], team_stat_data[homeTeam][playerid]["tragicness"], team_stat_data[homeTeam][playerid]["thwackability"], team_stat_data[homeTeam][playerid]["divinity"], team_stat_data[homeTeam][playerid]["moxie"], team_stat_data[homeTeam][playerid]["musclitude"], team_stat_data[homeTeam][playerid]["martyrdom"]]) for playerid in home_batter_order if not team_stat_data[homeTeam][playerid]["shelled"]])
-
-    #away_running_data, home_running_data = List([List([team_stat_data[awayTeam][playerid]["laserlikeness"], team_stat_data[awayTeam][playerid]["baseThirst"], team_stat_data[awayTeam][playerid]["continuation"], team_stat_data[awayTeam][playerid]["groundFriction"], team_stat_data[awayTeam][playerid]["indulgence"]]) for playerid in away_batter_order if not team_stat_data[awayTeam][playerid]["shelled"]]), List([List([team_stat_data[homeTeam][playerid]["laserlikeness"], team_stat_data[homeTeam][playerid]["baseThirst"], team_stat_data[homeTeam][playerid]["continuation"], team_stat_data[homeTeam][playerid]["groundFriction"], team_stat_data[homeTeam][playerid]["indulgence"]]) for playerid in home_batter_order if not team_stat_data[homeTeam][playerid]["shelled"]])
-
-    #away_team_stat_data, home_team_stat_data = List([away_defense_data, away_batting_data, away_running_data]), List([home_defense_data, home_batting_data, home_running_data])
-
-    #awayPlayerAttrs, homePlayerAttrs = List([(List(team_stat_data[awayTeam][playerid]["attrs"]) if len(team_stat_data[awayTeam][playerid]["attrs"]) > 0 else List(["none", "none"])) for playerid in away_batter_order if not team_stat_data[awayTeam][playerid]["shelled"]]), List([(List(team_stat_data[homeTeam][playerid]["attrs"]) if len(team_stat_data[homeTeam][playerid]["attrs"]) > 0 else List(["none", "none"])) for playerid in home_batter_order if not team_stat_data[homeTeam][playerid]["shelled"]])
+    ruth_strike_adjust = dict_adjustments["ruth_strike"]        
 
     away_pitcher_stat_data, home_pitcher_stat_data = (pitcher_stat_data[awayPitcher]["unthwackability"], pitcher_stat_data[awayPitcher]["ruthlessness"], pitcher_stat_data[awayPitcher]["overpowerment"], pitcher_stat_data[awayPitcher]["shakespearianism"], pitcher_stat_data[awayPitcher]["coldness"]), (pitcher_stat_data[homePitcher]["unthwackability"], pitcher_stat_data[homePitcher]["ruthlessness"], pitcher_stat_data[homePitcher]["overpowerment"], pitcher_stat_data[homePitcher]["shakespearianism"], pitcher_stat_data[homePitcher]["coldness"])
 
     awaypitcherAttrs = List(pitcher_stat_data[awayPitcher]["attrs"]) if (len(pitcher_stat_data[awayPitcher]["attrs"]) > 0) else List(["none", "none"]) 
     homepitcherAttrs = List(pitcher_stat_data[homePitcher]["attrs"]) if (len(pitcher_stat_data[homePitcher]["attrs"]) > 0) else List(["none", "none"])    
-
-    #end_time = time.time()
-    #print("Time in get mofo playerbased before njit methods = {}".format(end_time - start_time))
-
-    #start = time.time()    
+    
     away_team_batting, away_team_running, away_team_defense, awayPitcherStlats = calc_team_stlats(terms, away_batter_order, mods, awayAttrs, homeAttrs, awayMods, flooding, "away", away_team_stat_data, away_pitcher_stat_data, adjusted_stat_data_away, away_shelled, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod)
     home_team_batting, home_team_running, home_team_defense, homePitcherStlats = calc_team_stlats(terms, home_batter_order, mods, awayAttrs, homeAttrs, homeMods, flooding, "home", home_team_stat_data, home_pitcher_stat_data, adjusted_stat_data_home, home_shelled, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod)        
 
@@ -1109,17 +1070,16 @@ def get_mofo_playerbased(dict_mods, awayPitcher, homePitcher, awayTeam, homeTeam
         home_team_batting, home_team_running, home_team_defense, homePitcherStlats = blood_impact_calc(terms, home_batter_order, mods, flooding, "home", homeMods, home_team_batting, home_team_running, away_team_defense, awayPitcherStlats, home_team_stat_data, away_team_stat_data, away_pitcher_stat_data, awaypitcherAttrs, home_pitcher_stat_data, homepitcherAttrs, homePlayerAttrs, homeAttrs, awayAttrs, home_batter_order, adjusted_stat_data_home, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjustments, home_shelled, ruth_strike_adjust, innings=9) 
     away_score, away_bases_stolen, away_homers_hit, away_hits_hit, home_pitcher_ks, away_rbi = calc_team_score(mods, check_weather, awayMods, "away", away_team_batting, away_team_running, home_team_defense, homePitcherStlats, away_team_stat_data, home_team_stat_data, home_pitcher_stat_data, homepitcherAttrs, awayPlayerAttrs, awayAttrs, homeAttrs, away_batter_order, adjustments, ruth_strike_adjust, opp_score=0.0, innings=9, outs=3.0, runtime_solution=runtime_solution)    
     home_score, home_bases_stolen, home_homers_hit, home_hits_hit, away_pitcher_ks, home_rbi = calc_team_score(mods, check_weather, homeMods, "home", home_team_batting, home_team_running, away_team_defense, awayPitcherStlats, home_team_stat_data, away_team_stat_data, away_pitcher_stat_data, awaypitcherAttrs, homePlayerAttrs, homeAttrs, awayAttrs, home_batter_order, adjustments, ruth_strike_adjust, opp_score=away_score, innings=9, outs=3.0, runtime_solution=runtime_solution)    
-    #end = time.time()
-    #print("Elapsed time for njit methods = {}".format(end - start))
-    #start = time.time()    
+    
     away_stolen_bases = dict(zip(away_active_batters, away_bases_stolen))
     away_homers = dict(zip(away_active_batters, away_homers_hit))
     away_hits = dict(zip(away_active_batters, away_hits_hit))  
     home_stolen_bases = dict(zip(home_active_batters, home_bases_stolen))
     home_homers = dict(zip(home_active_batters, home_homers_hit))
-    home_hits = dict(zip(home_active_batters, home_hits_hit))          
-    #end = time.time()
-    #print("Elapsed time to zip data = {}".format(end - start))
+    home_hits = dict(zip(home_active_batters, home_hits_hit))                  
+
+    del mods, adjustments, away_pitcher_stat_data, home_pitcher_stat_data, awaypitcherAttrs, homepitcherAttrs, away_team_batting, away_team_running, away_team_defense, awayPitcherStlats, home_team_batting, home_team_running, home_team_defense, homePitcherStlats
+    del away_bases_stolen, away_homers_hit, away_hits_hit, home_bases_stolen, home_homers_hit, home_hits_hit
 
     if away_score < 0:
         away_score += abs(away_score) * 2.0
@@ -1130,29 +1090,22 @@ def get_mofo_playerbased(dict_mods, awayPitcher, homePitcher, awayTeam, homeTeam
 
     numerator = away_score - home_score
     denominator = away_score + home_score
-    away_pitcher_era, home_pitcher_era = home_rbi, away_rbi
+    away_pitcher_era, home_pitcher_era = home_rbi, away_rbi        
+
     if not denominator:
         if not runtime_solution:
             return .5, .5    
         else:
             return .5, .5, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
-    away_formula = numerator / denominator        
-    #log_transform_base = math.e
+    away_formula = numerator / denominator           
+    
     log_transform_base = 10.0
-    away_odds = log_transform(away_formula, log_transform_base)
+    away_odds = log_transform(away_formula, log_transform_base)    
     if runtime_solution:        
         if weather == polarity_plus or weather == polarity_minus:
             return .5, .5, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
         return away_odds, 1.0 - away_odds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
     return away_odds, 1.0 - away_odds
-
-#def get_mofo(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, dict_terms, awayMods, homeMods, adjusted_stat_data, dict_adjustments, skip_mods=False, runtime_solution=False):
-#    pitching_terms = List([dict_terms["unthwack_base_hit"], dict_terms["ruth_strike"], dict_terms["overp_homer"], dict_terms["overp_triple"], dict_terms["overp_double"], dict_terms["shakes_runner_advances"], dict_terms["cold_clutch_factor"]])
-#    defense_terms = List([dict_terms["omni_base_hit"], dict_terms["watch_attempt_steal"], dict_terms["chasi_triple"], dict_terms["chasi_double"], dict_terms["anticap_caught_steal_base"], dict_terms["anticap_caught_steal_home"], dict_terms["tenacious_runner_advances"]])
-#    batting_terms = List([dict_terms["path_connect"], dict_terms["trag_runner_advances"], dict_terms["thwack_base_hit"], dict_terms["div_homer"], dict_terms["moxie_swing_correct"], dict_terms["muscl_foul_ball"], dict_terms["muscl_triple"], dict_terms["muscl_double"], dict_terms["martyr_sacrifice"]])
-#    running_terms = List([dict_terms["laser_attempt_steal"], dict_terms["laser_caught_steal_base"], dict_terms["laser_caught_steal_home"], dict_terms["laser_runner_advances"], dict_terms["baset_attempt_steal"], dict_terms["baset_caught_steal_home"], dict_terms["cont_triple"], dict_terms["cont_double"], dict_terms["ground_triple"], dict_terms["indulg_runner_advances"]])
-#    terms = List([pitching_terms, defense_terms, batting_terms, running_terms])
-#    return get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, weather, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods, adjusted_stat_data, dict_adjustments, skip_mods, runtime_solution)
 
 def get_park_mods(ballpark, ballpark_mods):
     awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])  
@@ -1288,14 +1241,6 @@ def setup(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
     ballpark = ballparks.get(homeTeamId, collections.defaultdict(lambda: 0.5))
     awayMods, homeMods = get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)
     return terms, awayMods, homeMods
-
-
-#def calculate(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, awayAttrs, homeAttrs,
-#              day, weather, skip_mods=False):
-#    terms, awayMods, homeMods = setup(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, team_stat_data, pitcher_stat_data)
-#    return get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods,
-#                    homeMods, skip_mods=skip_mods)
-
 
 def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods,
              skip_mods=False):
