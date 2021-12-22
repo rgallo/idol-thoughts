@@ -1712,11 +1712,12 @@ def minimize_func(parameters, *data):
                 detailtext += "\nBATMAN earnings (% of max possible) -  Seeds {:.2f}%{} ({:.2f}% Perfect), Dogs {:.2f}%{} ({:.2f}% Perfect), Seeds+Dogs {:.2f}%{} ({:.2f}% Perfect)".format(seeds_score * 100.0, ("!" if seeds_score > thresholds["seeds"] else ""), (perfect_seeds / seeds_score_max) * 100.0, dogs_score * 100.0, ("!" if dogs_score > thresholds["dogs"] else ""), (perfect_dogs / dogs_score_max) * 100.0, seeddogs_score * 100.0, ("!" if seeddogs_score > thresholds["seeddogs"] else ""), (perfect_seeddogs / seeddogs_score_max) * 100.0)
                 if crimes_list is not None:
                     detailtext += "\nENOCH earnings (% of max possible) - Pickles {:.2f}%{} ({:.2f}% Perfect), Seeds+Pickles {:.2f}%{} ({:.2f}% Perfect), Dogs+Pickles {:.2f}%{} ({:.2f}% Perfect), Trifecta {:.2f}%{} ({:.2f}% Perfect)".format(pickles_score * 100.0, ("!" if pickles_score > thresholds["pickles"] else ""), (perfect_pickles / pickles_score_max) * 100.0, seedpickles_score * 100.0, ("!" if seedpickles_score > thresholds["seedpickles"] else ""), (perfect_seedpickles / seedpickles_score_max) * 100.0, dogpickles_score * 100.0, ("!" if dogpickles_score > thresholds["dogpickles"] else ""), (perfect_dogpickles / dogpickles_score_max) * 100.0, trifecta_score * 100.0, ("!" if trifecta_score > thresholds["trifecta"] else ""), (perfect_trifecta / trifecta_score_max) * 100.0)
-                detailtext += "\nPitcher earnings (% of max possible) - Chips {:.2f}% ({:.2f}% Perfect), Burgers {:.2f}%, Meatballs {:.2f}% ({:.2f}% Perfect), Chips+Burgers {:.2f}%, Chips+Meatballs {:.2f}% ({:.2f}% Perfect)".format(chips_score * 100.0, (perfect_chips / chips_score_max) * 100.0, burgers_score * 100.0, meatballs_score * 100.0, (perfect_meatballs / meatballs_score_max) * 100.0, chipsburgers_score * 100.0, chipsmeatballs_score * 100.0, (perfect_chipsmeatballs / chipsmeatballs_score_max) * 100.0)    
+                detailtext += "\nPitcher earnings (% of max possible) - Chips {:.2f}% ({:.2f}% Perfect), Burgers {:.2f}%, Meatballs {:.2f}% ({:.2f}% Perfect), Chips+Burgers {:.2f}%, Chips+Meatballs {:.2f}% ({:.2f}% Perfect)".format(chips_score * 100.0, (perfect_chips / chips_score_max) * 100.0, burgers_score * 100.0, meatballs_score * 100.0, (perfect_meatballs / meatballs_score_max) * 100.0, chipsburgers_score * 100.0, chipsmeatballs_score * 100.0, (perfect_chipsmeatballs / chipsmeatballs_score_max) * 100.0)                    
                 if not solution_regen:
-                    if len(reported_focus) > 0:
-                        for report_focus in reported_focus:
-                            detailtext += "\n{}-factors '{}': {}".format(run_id, report_focus, FACTORS[report_focus])
+                    detailtext += "\n{}-all factors: {}".format(run_id, FACTORS)
+                    #if len(reported_focus) > 0:
+                    #    for report_focus in reported_focus:
+                    #        detailtext += "\n{}-factors '{}': {}".format(run_id, report_focus, FACTORS[report_focus])
                 detailtext += "\n{}-details,{},{},{},{},{},{}".format(run_id, int(seeds_error), int(dogs_error), int(pickles_error), int(chips_error), int(meatballs_error), int(linear_points))   
             debug_print(detailtext, debug, run_id)
             if outputdir:
