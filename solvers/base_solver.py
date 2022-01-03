@@ -40,7 +40,7 @@ DOGPICKLES_CACHE = {}
 TRIFECTA_CACHE = {}
 MAX_EVENTS = {'hits': 8, 'homers': 4, 'steals': 10, 'seeddogs': 20.5, 'seedpickles': 36.0, 'dogpickles': 30.0, 'trifecta': 36.0, 'chips': 19, 'meatballs': 9, 'burgers': 12.5, 'chipsburgers': 16.3, 'chipsmeatballs': 9.6}
 MASS_EVENTS = {'hits': 11, 'homers': 6, 'steals': 11, 'seeddogs': 26.5, 'seedpickles': 39.0, 'dogpickles': 38.0, 'trifecta': 51.5, 'chips': 28, 'meatballs': 13, 'chipsmeatballs': 14.0}
-FACTORS = {'seeds': [(5830574836565810, 23488585391653400), (5840320966648320, 23843951898871800), (5867365910819690, 23478352355856100), (5875726754954620, 23257271570441200), (5887275009041410, 23623303302473700)], 'dogs': [(3676658406399890, 24346883945710400), (3679564589051610, 23957067508515900), (3719542502011940, 24254606789529400), (3725687079835050, 23121107410407000), (3728071289480220, 23241345775947300)], 'pickles': [(2935744361536850, 23798626074887400), (2937526145995710, 24145042947052900), (2938505633530020, 23852633168439800), (2938562061811530, 24062378271153000), (2944638154520360, 24170105359468000)], 'chips': [(3023815555939160, 23970835703185200), (3038428975346370, 22816467135385200), (3091133586829120, 24110827736918400), (3125868888744890, 24116919421779900), (3137437032080280, 23304051862095900)], 'meatballs': [(5551512075903060, 23286463514636600), (5599158011397710, 23724254656204400), (5634246801510820, 24210462288927100), (5460021306196550, 23792359281037600), (5565918178440090, 24442269826434000)], 'all': [22531386580342100, 22557419780824400, 22638975484864400, 22641685789292600, 22677488968449100]}
+FACTORS = {'seeds': [(5917239793874850, 23771324163703300), (5919502441737250, 22989260681796500), (5932521808363860, 23080346440333600), (5963361204646700, 23507137067359600), (6006851241172820, 22988494568189600)], 'dogs': [(3703376265856280, 23879687527156700), (3713591205239080, 24211478466429900), (3729171232245370, 24425412421770000), (3800239547911670, 22814476903851800), (3800568858440860, 24821368163408400)], 'pickles': [(2923923408899660, 23563496964057800), (2925910133885540, 23783229923506400), (2939836798395930, 23347112179617400), (2939922482496850, 23582017060433800), (2947918423350250, 23632197548304000)], 'chips': [(2973085289780000, 23767340073266900), (3030840165821340, 23906899858610900), (3058333725679280, 23624998909378000), (3061519800036190, 23620101867226700), (3152758569831340, 23306846053632600)], 'meatballs': [(6329627632097580, 23879687527156700), (6341329294843430, 23767340073266900), (6287168312403160, 23306846053632600), (6217346736990650, 22732179508506400), (6223861796149440, 23694598227122300)], 'all': [22732179508506400, 22814476903851800, 22850007089166700, 22988494568189600, 22989260681796500]}
 ADJUSTED_STAT_CACHE = {}
 SORTED_BATTERS_CACHE = {}
 CACHED_CALCED_STAT_DATA = {}
@@ -715,10 +715,10 @@ def minimize_func(parameters, *data):
     running_terms = List([terms["laser_attempt_steal"], terms["laser_caught_steal_base"], terms["laser_caught_steal_home"], terms["laser_runner_advances"], terms["baset_attempt_steal"], terms["baset_caught_steal_home"], terms["cont_triple"], terms["cont_double"], terms["ground_triple"], terms["indulg_runner_advances"]])    
     list_terms = List([pitching_terms, defense_terms, batting_terms, running_terms])  
 
-    if CURRENT_ITERATION == 1:
-        factor_write_file = open(factorsdir, "wb")
-        pickle.dump(FACTORS, factor_write_file)
-        factor_write_file.close()
+    #if CURRENT_ITERATION == 1:
+    #    factor_write_file = open(factorsdir, "wb")
+    #    pickle.dump(FACTORS, factor_write_file)
+    #    factor_write_file.close()
 
     if solve_batman_too:
         solved_hits, solved_homers = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})                   
@@ -1518,7 +1518,7 @@ def minimize_func(parameters, *data):
         if CURRENT_ITERATION == 1:
             factor_file = open(factorsdir, "rb")        
             FACTORS = pickle.load(factor_file)        
-            factor_file.close()                
+            factor_file.close()                    
         for possible_focus in FACTORS:
             if possible_focus == "all":
                 max_all = max(FACTORS["all"])
@@ -1559,14 +1559,10 @@ def minimize_func(parameters, *data):
             if (min_factors_alls == 0.0) or (min_factors_alls > possible_min_all):
                 min_factors_alls = possible_min_all
         if max_all > min_factors_alls:
-            focus = "all"
-        if focus == "all":                        
-            BEST_RESULT = min(FACTORS["all"])
-            if linear_fail < BEST_RESULT:
-                BEST_RESULT = linear_fail                                                                   
-        else:
-            if CURRENT_ITERATION == 1:
-                BEST_RESULT = 24276626267281400.0
+            focus = "all"        
+        if CURRENT_ITERATION == 1:
+            BEST_RESULT = min(FACTORS["all"])    
+        #publish_solution = linear_fail < BEST_RESULT
 
     if CURRENT_ITERATION == 1: 
         SOLUTIONS_TO_FILL = popsize
@@ -1583,8 +1579,10 @@ def minimize_func(parameters, *data):
     #if ((linear_fail < BEST_RESULT) and publish_solution and focus == "all") or (publish_solution and focus != "all") or solution_regen:     
     if publish_solution or solution_regen:
         #if focus == "all":
-            #BEST_RESULT = linear_fail                
-        reported_focus = []        
+        BEST_RESULT = linear_fail                
+        #reported_focus = []       
+        # 
+        #commented out for dealing with init data
         if not solution_regen:
             factor_file = open(factorsdir, "rb")        
             FACTORS = pickle.load(factor_file)
@@ -1602,7 +1600,7 @@ def minimize_func(parameters, *data):
                 focused_values = List(FACTORS[pot_focus])
                 possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                
                 if (errors[pot_focus] < possible_focused) and (linear_points < possible_result):
-                    reported_focus.append(pot_focus)
+                    #reported_focus.append(pot_focus)
                     FACTORS[pot_focus][possible_replacement_index] = (int(errors[pot_focus]), int(linear_points))                        
                     pickle.dump(FACTORS, factor_write_file)
                     if pot_focus == focus:       
@@ -1615,7 +1613,8 @@ def minimize_func(parameters, *data):
                 max_focused_error = max(max_focused_error, focused_error, possible_result)
             factor_write_file.close()         
             if focus != "all":
-                BEST_RESULT = min(minimum_focused_error, BEST_RESULT)                
+                BEST_RESULT = min(minimum_focused_error, BEST_RESULT)    
+                            
         PLUS_NAME = best_plusname
         WORST_MOD = new_worstmod                                          
         if len(win_loss) > 0:
