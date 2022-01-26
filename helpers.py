@@ -16,9 +16,15 @@ from functools import reduce
 import requests
 from discord_webhook import DiscordWebhook, DiscordEmbed
 from blaseball_stat_csv import blaseball_stat_csv
+import numpy as np
 from numba import njit, float64
 from numba.typed import List
 from numba.experimental import jitclass
+
+#from numba.core.unsafe.nrt import NRT_get_api
+#from numba.core.runtime.nrt import rtsys
+#from numba.core.registry import cpu_target
+#cpu_target.target_context
 
 PITCHING_STLATS = ["overpowerment", "ruthlessness", "unthwackability", "shakespearianism", "coldness", "suppression"]
 BATTING_STLATS = ["divinity", "martyrdom", "moxie", "musclitude", "patheticism", "thwackability", "tragicness"]
@@ -41,19 +47,14 @@ class StlatTerm:
     def __init__(self, a, b, c):
         self.a = a
         self.b = b
-        self.c = c    
+        self.c = c        
     
     def calc(self, val):
-        b_val = self.b * val
-        c_val = 1.0 if (b_val < 0.0 or (b_val < 1.0 and self.c < 0.0)) else self.c        
-        calc_val = self.a * (b_val ** c_val)        
-        return calc_val
-
-    #def calc(self, val):
-    #    b_val = self.b 
-    #    c_val = self.c ** (val * b_val)
-    #    calc_val = self.a * c_val
-    #    return calc_val
+        b_val = float64(self.b * val)
+        c_val = float64(self.c)
+        #calc_val = float64(float64(self.a) * (b_val ** c_val)) if float64(float64(self.a) * (b_val ** c_val)) >= 0.01 else float64(0.0)
+        calc_val = float64(float64(self.a) * (b_val ** c_val))
+        return calc_val    
 
 class ParkTerm:
     def __init__(self, a, b, c):
@@ -73,14 +74,12 @@ class ParkTerm:
     #    calc_val = self.a * c_val
     #    return calc_val
 
-
 def geomean(numbers):
     correction = .001 if 0.0 in numbers else 0.0
     return (reduce(lambda x, y: x*y, [(n + correction) for n in numbers])**(1.0/len(numbers))) - correction
 
 
 WEB_CACHE = {}
-
 
 def parse_terms(data, special_case_list):
     results, special = {}, {}
@@ -165,13 +164,15 @@ def load_data(data_url):
 
 
 WEATHERS = []
-
+#backup weathers global in case can't get at the json again
+#WEATHERS = ['Void', 'Sun 2', 'Overcast', 'Rainy', 'Sandstorm', 'Snow', 'Acidic', 'Solar Eclipse', 'Glitter', 'Blooddrain', 'Peanuts', 'Birds', 'Feedback', 'Reverb', 'Black Hole', 'Coffee', 'Coffee 2', 'Coffee 3s', 'Flooding', 'Salmon', 'Polarity +', 'Polarity -', '???', 'Sun 90', 'Sun .1', 'Sum Sun', 'Supernova Eclipse', 'Black Hole (Black Hole)', 'Jazz', 'Night']
 
 def get_weather_idx(weather):        
     if not WEATHERS:
         weather_json = requests.get("https://raw.githubusercontent.com/xSke/blaseball-site-files/main/data/weather.json"
                                     "").json()
-        WEATHERS.extend([weather["name"] for weather in weather_json])    
+        WEATHERS.extend([weather["name"] for weather in weather_json]) 
+        #print("Weathers = {}".format(WEATHERS))
     return WEATHERS.index(weather)
 
 def load_ballparks(ballparks_url):
@@ -468,37 +469,46 @@ def adjust_stlats(row, game, day, roster_size, raw_player_attrs, team_attrs=None
 def calc_adjustments_per_team(attrs, team, team_stat_data):
     batter_order = {playerid: team_stat_data[team][playerid]["turnOrder"] for playerid in team_stat_data[team]}
     sorted_batters = dict(sorted(batter_order.items(), key=lambda item: item[1]))
-    batters = List(sorted_batters.keys())
-    adjusted_defense_stlats_list, adjusted_batting_stlats_list, adjusted_running_stlats_list = List(), List(), List()
+    batters = list(sorted_batters.keys())
+    adjusted_defense_data, adjusted_batting_data, adjusted_running_data = np.zeros((20, 5)), np.zeros((20, 7)), np.zeros((20, 5))
+    active_batters = 0
 
     blood = ("a" in attrs) or ("aa" in attrs) or ("aaa" in attrs)
     high_pressure = "high_pressure" in attrs    
 
-    for playerid in batters:
+    for idx in range(0, len(batters)):        
+        playerid = batters[idx]    
         adjusted_defense_stlats = {"omniscience": team_stat_data[team][playerid]["omniscience"], "watchfulness": team_stat_data[team][playerid]["watchfulness"], "chasiness": team_stat_data[team][playerid]["chasiness"], "anticapitalism": team_stat_data[team][playerid]["anticapitalism"], "tenaciousness": team_stat_data[team][playerid]["tenaciousness"]}
-        if not team_stat_data[team][playerid]["shelled"]:
+        if not team_stat_data[team][playerid]["shelled"]:            
             adjusted_batting_stlats = {"patheticism": team_stat_data[team][playerid]["patheticism"], "tragicness": team_stat_data[team][playerid]["tragicness"], "thwackability": team_stat_data[team][playerid]["thwackability"], "divinity": team_stat_data[team][playerid]["divinity"], "moxie": team_stat_data[team][playerid]["moxie"], "musclitude": team_stat_data[team][playerid]["musclitude"], "martyrdom": team_stat_data[team][playerid]["martyrdom"]}
             adjusted_running_stlats = {"laserlikeness": team_stat_data[team][playerid]["laserlikeness"], "baseThirst": team_stat_data[team][playerid]["baseThirst"], "continuation": team_stat_data[team][playerid]["continuation"], "groundFriction": team_stat_data[team][playerid]["groundFriction"], "indulgence": team_stat_data[team][playerid]["indulgence"]}            
-        if blood or high_pressure:            
+        if (blood or high_pressure) and (not team_stat_data[team][playerid]["shelled"]):                        
             if blood:
-                adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)
-            if not team_stat_data[team][playerid]["shelled"]:
-                adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
-                adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)                
-        adjusted_defense_stlats_list.append(List(adjusted_defense_stlats.values()))        
-        adjusted_defense_stlats.clear() 
+                adjusted_defense_stlats = adjust_by_pct(adjusted_defense_stlats, 0.2, DEFENSE_STLATS, defense_stars)            
+            adjusted_batting_stlats = adjust_by_pct(adjusted_batting_stlats, 0.2, BATTING_STLATS, batting_stars)
+            adjusted_running_stlats = adjust_by_pct(adjusted_running_stlats, 0.2, BASERUNNING_STLATS, baserunning_stars)    
+        adjusted_defense_values = list(adjusted_defense_stlats.values())
+        for vidx in range(0, 5):
+            adjusted_defense_data[idx, vidx] = float64(adjusted_defense_values[vidx])            
         if not team_stat_data[team][playerid]["shelled"]:
-            adjusted_batting_stlats_list.append(List(adjusted_batting_stlats.values())), adjusted_running_stlats_list.append(List(adjusted_running_stlats.values()))
-            adjusted_batting_stlats.clear(), adjusted_running_stlats.clear()        
+            adjusted_batting_values = list(adjusted_batting_stlats.values())
+            for vidx in range(0, 7):
+                adjusted_batting_data[active_batters, vidx] = float64(adjusted_batting_values[vidx]) if float64(adjusted_batting_values[vidx]) >= 0.01 else float64(0.0)
+            adjusted_running_values = list(adjusted_running_stlats.values())
+            for vidx in range(0, 5):
+                adjusted_running_data[active_batters, vidx] = float64(adjusted_running_values[vidx])        
+            active_batters += 1
+    
+    return adjusted_defense_data, adjusted_batting_data, adjusted_running_data, batters, active_batters
 
-    adjusted_stat_data = List([adjusted_defense_stlats_list, adjusted_batting_stlats_list, adjusted_running_stlats_list])
-    return adjusted_stat_data, batters
-
-def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_stat_data):        
-    adjusted_stat_data, sorted_batters = {}, {}
-    adjusted_stat_data["away"], sorted_batters["away"] = calc_adjustments_per_team(awayAttrs, awayTeam, team_stat_data)
-    adjusted_stat_data["home"], sorted_batters["home"] = calc_adjustments_per_team(homeAttrs, homeTeam, team_stat_data)
-    return adjusted_stat_data, sorted_batters
+def calculate_adjusted_stat_data(awayAttrs, homeAttrs, awayTeam, homeTeam, team_stat_data):     
+    #first, second, pre_mi_alloc, pre_mi_free = rtsys.get_allocation_stats()            
+    away_defense_data, away_batting_data, away_running_data, away_sorted_batters, away_active_batters = calc_adjustments_per_team(awayAttrs, awayTeam, team_stat_data)
+    home_defense_data, home_batting_data, home_running_data, home_sorted_batters, home_active_batters = calc_adjustments_per_team(homeAttrs, homeTeam, team_stat_data)     
+    #first, second, post_mi_alloc, post_mi_free = rtsys.get_allocation_stats()           
+    #if ((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)) > 0:
+    #    print("Leak from calculate adjusted stat data = {}".format(((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)))) 
+    return away_defense_data, away_batting_data, away_running_data, away_sorted_batters, away_active_batters, home_defense_data, home_batting_data, home_running_data, home_sorted_batters, home_active_batters
 
 
 def load_stat_data(filepath, schedule=None, day=None, team_attrs=None):

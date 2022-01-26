@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 sys.path.append("..")
 import requests
 import numpy as np
-from numba import njit
+from numba import njit, float64
 from numba.typed import List
 from solvers import base_solver
 from helpers import parse_mods, adjust_by_pct, StlatTerm, ParkTerm
@@ -27,35 +27,50 @@ from solvers.mofo_half_terms import MOFO_HALF_TERMS
 import mofo
 import helpers
 
-def get_mofo_results(game, awayAttrs, homeAttrs, team_stat_data, sorted_batters, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, runtime_solution, awayMods, homeMods, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs):
-    away_game, home_game = game["away"], game["home"]    
+#import tracemalloc
+#tracemalloc.start()    
+
+#from numba.core.unsafe.nrt import NRT_get_api
+#from numba.core.runtime.nrt import rtsys
+#from numba.core.registry import cpu_target
+#cpu_target.target_context
+
+def get_mofo_results(gameid, trace_mem, game, awayAttrs, homeAttrs, away_batters, away_active_batters, home_batters, home_active_batters, away_pitcher_stat_data, home_pitcher_stat_data, awayPitcher, homePitcher, terms, mods, ballpark, ballpark_mods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, awayMods, homeMods, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs):   
+    #if trace_mem:
+    #    before = tracemalloc.take_snapshot()
+    #    before = before.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+    #first, second, preall_mi_alloc, preall_mi_free = rtsys.get_allocation_stats()  
+    away_game, home_game = game["away"], game["home"]          
     home_rbi, away_rbi = float(away_game["opposing_team_rbi"]), float(home_game["opposing_team_rbi"])              
     if int(away_game["weather"]) == int(helpers.get_weather_idx("Sun 2")) or int(away_game["weather"]) == int(helpers.get_weather_idx("Black Hole")):
-        home_rbi, away_rbi = home_rbi % 10.0, away_rbi % 10.0
-    awayPitcher, awayTeam = pitchers.get(away_game["pitcher_id"])    
-    homePitcher, homeTeam = pitchers.get(home_game["pitcher_id"])          
-    if len(homeMods) == 0:        
-        awayMods, homeMods = mofo.get_park_mods(ballpark, ballpark_mods)         
+        #print("Tripping our condition for Black Hole or Sun 2 on the real data")
+        home_rbi, away_rbi = home_rbi % 10.0, away_rbi % 10.0         
+    #if trace_mem:
+    #    after = tracemalloc.take_snapshot()
+    #    after = after.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
+    #    top_stats = after.compare_to(before, 'lineno')                            
+    #    if top_stats[0].size_diff > 0:                        
+    #        print("Increase from before hitting get mofo playerbased {}".format(top_stats[0]))                        
+
+    #awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = mofo.get_mofo_playerbased(trace_mem, mods, awayPitcher, homePitcher, awayAttrs, homeAttrs, int(away_game["weather"]), away_pitcher_stat_data, home_pitcher_stat_data, terms, away_batters, home_batters, awayMods, homeMods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, away_shelled, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs, False)
     
-    away_batters, home_batters = sorted_batters["away"], sorted_batters["home"]
-    
-    if runtime_solution:
-        awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, int(away_game["weather"]), team_stat_data, pitcher_stat_data, terms, away_batters, home_batters, awayMods, homeMods, adjusted_stat_data, adjustments, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs, skip_mods=False, runtime_solution=True)        
-        if awayodds == .5:
-            return 1, 0, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayMods, homeMods
-        if away_rbi == home_rbi and abs(awayodds - homeodds) <= 0.04:        
-            return 1, 0, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayMods, homeMods
-        fail = 0 if ((awayodds > .5 and away_rbi > home_rbi) or (awayodds < .5 and away_rbi < home_rbi)) else 1
-        return 1, fail, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayMods, homeMods
-    else:        
-        awayodds, homeodds = mofo.get_mofo_playerbased(mods, awayPitcher, homePitcher, awayTeam, homeTeam, awayAttrs, homeAttrs, int(away_game["weather"]), team_stat_data, pitcher_stat_data, terms, away_batters, home_batters, awayMods, homeMods, adjusted_stat_data, adjustments, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs)        
-        if awayodds == .5:
-            return 1, 0, awayodds, homeodds
-        if away_rbi == home_rbi and abs(awayodds - homeodds) <= 0.04:        
-            return 1, 0, awayodds, homeodds 
-        fail = 0 if ((awayodds > .5 and away_rbi > home_rbi) or (awayodds < .5 and away_rbi < home_rbi)) else 1
-        return 1, fail, awayodds, homeodds
-    return 1, fail, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayMods, homeMods
+    awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = mofo.get_mofo_playerbased(gameid, trace_mem, mods, awayPitcher, homePitcher, awayAttrs, homeAttrs, int(away_game["weather"]), away_pitcher_stat_data, home_pitcher_stat_data, terms, away_batters, away_active_batters, home_batters, home_active_batters, awayMods, homeMods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs, False)
+
+    #if trace_mem:
+    #    after_gmpb = tracemalloc.take_snapshot()
+    #    after_gmpb = after_gmpb.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
+    #    top_stats = after_gmpb.compare_to(after, 'lineno')                            
+    #    if top_stats[0].size_diff > 0:                        
+    #        print("Increase from get mofo playerbased {}".format(top_stats[0]))
+    #first, second, postall_mi_alloc, postall_mi_free = rtsys.get_allocation_stats()    
+    #if ((postall_mi_alloc - preall_mi_alloc) - (postall_mi_free - preall_mi_free)) > 0:
+    #    print("Leak prior to return get_mofo_results = {}".format(((postall_mi_alloc - preall_mi_alloc) - (postall_mi_free - preall_mi_free)))) 
+    if awayodds == .5:
+        return 1, 0, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
+    if away_rbi == home_rbi and abs(awayodds - homeodds) <= 0.04:        
+        return 1, 0, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
+    fail = 0 if ((awayodds > .5 and away_rbi > home_rbi) or (awayodds < .5 and away_rbi < home_rbi)) else 1
+    return 1, fail, awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
 
 def get_season_team_attrs(team_attrs, season):
     attrs = []

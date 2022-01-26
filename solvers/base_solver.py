@@ -11,15 +11,25 @@ import re
 import uuid
 import math
 import copy
-from numba import njit
+import mofo
+from numba import njit, float64
 from numba.typed import List
 import numpy as np
 from glob import glob
 
-from helpers import StlatTerm, ParkTerm, get_weather_idx
+from helpers import StlatTerm, ParkTerm, get_weather_idx, WEATHERS
 from helpers import load_stat_data, load_stat_data_pid, adjust_by_pct, calculate_adjusted_stat_data
 from helpers import DEFENSE_STLATS, defense_stars, BATTING_STLATS, batting_stars, BASERUNNING_STLATS, baserunning_stars
 from statistics import fmean, StatisticsError
+
+#import gc
+#from numba.core.unsafe.nrt import NRT_get_api
+#from numba.core.runtime.nrt import rtsys
+#from numba.core.registry import cpu_target
+#cpu_target.target_context
+
+import tracemalloc
+tracemalloc.start()    
 
 STAT_CACHE = {}
 BALLPARK_CACHE = {}
@@ -40,7 +50,7 @@ DOGPICKLES_CACHE = {}
 TRIFECTA_CACHE = {}
 MAX_EVENTS = {'hits': 8, 'homers': 4, 'steals': 10, 'seeddogs': 20.5, 'seedpickles': 36.0, 'dogpickles': 30.0, 'trifecta': 36.0, 'chips': 19, 'meatballs': 9, 'burgers': 12.5, 'chipsburgers': 16.3, 'chipsmeatballs': 9.6}
 MASS_EVENTS = {'hits': 11, 'homers': 6, 'steals': 11, 'seeddogs': 26.5, 'seedpickles': 39.0, 'dogpickles': 38.0, 'trifecta': 51.5, 'chips': 28, 'meatballs': 13, 'chipsmeatballs': 14.0}
-FACTORS = {'seeds': [(5917239793874850, 23771324163703300), (5919502441737250, 22989260681796500), (5932521808363860, 23080346440333600), (5963361204646700, 23507137067359600), (6006851241172820, 22988494568189600)], 'dogs': [(3703376265856280, 23879687527156700), (3713591205239080, 24211478466429900), (3729171232245370, 24425412421770000), (3800239547911670, 22814476903851800), (3800568858440860, 24821368163408400)], 'pickles': [(2923923408899660, 23563496964057800), (2925910133885540, 23783229923506400), (2939836798395930, 23347112179617400), (2939922482496850, 23582017060433800), (2947918423350250, 23632197548304000)], 'chips': [(2973085289780000, 23767340073266900), (3030840165821340, 23906899858610900), (3058333725679280, 23624998909378000), (3061519800036190, 23620101867226700), (3152758569831340, 23306846053632600)], 'meatballs': [(6329627632097580, 23879687527156700), (6341329294843430, 23767340073266900), (6287168312403160, 23306846053632600), (6217346736990650, 22732179508506400), (6223861796149440, 23694598227122300)], 'all': [22732179508506400, 22814476903851800, 22850007089166700, 22988494568189600, 22989260681796500]}
+FACTORS = {'seeds': [(806626832377123, 4541920274256100), (813016387140880, 4693965584725070), (820297105332651, 4410527544181940), (821623606231642, 4449876335276020), (823674464439875, 4606848860767040)], 'dogs': [(564396117172977, 4707922985920740), (564732834664165, 4572929022018910), (567773121230735, 4627235982853040), (570169949121947, 4592171951410490), (573534480077540, 4555680296013830)], 'pickles': [(706556147411997, 4544070029247440), (711451669940013, 4570994350807620), (725338778460775, 4469597083631040), (735025934505032, 4661702483920460), (737729612469865, 4606848860767040)], 'chips': [(627846368229673, 4667743792684170), (657623854462783, 4611595665081270), (697027465409894, 4682932670181200), (697909031980888, 4410527544181940), (707284215142962, 4518543684100260)], 'meatballs': [(1414195560901010, 4567079932112680), (1419276367120210, 4566727145141770), (1423184595483380, 4707922985920740), (1438320456064370, 4627235982853040), (1425422001244770, 4593031390601420)], 'all': [4410527544181940, 4449876335276020, 4469597083631040, 4484868930709090, 4518543684100260]}
 ADJUSTED_STAT_CACHE = {}
 SORTED_BATTERS_CACHE = {}
 CACHED_CALCED_STAT_DATA = {}
@@ -50,7 +60,7 @@ IGNORE_BP_STATS = ['birds', 'model', 'renoCost', 'mysticism', 'filthiness', 'lux
 MIN_SEASON = 22
 MAX_SEASON = 23
 
-BEST_RESULT = 22687498004247900.0    
+BEST_RESULT = 22687498004247900
 BEST_FAIL_RATE = 1.0
 SOLUTIONS_TO_FILL = 0
 MIN_DAY = 1
@@ -69,6 +79,7 @@ EXPECTED_MOD_RATES = {}
 HAS_GAMES = {}
 FAILED_SOLUTIONS = []
 LAST_ITERATION_TIME = datetime.datetime.now()
+SNAPSHOT = tracemalloc.take_snapshot()
 
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "A", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
@@ -82,23 +93,54 @@ CALC_MOD_SUCCESS = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electri
 BIRD_WEATHER = get_weather_idx("Birds")
 FLOOD_WEATHER = get_weather_idx("Flooding")
 
-def get_lists_from_loop(batter_order, team_stat_data, team, adjusted_stat_data, away_home):
-    shelled, active_batters, average_aa_impact, average_aaa_impact, high_pressure_mod = List(), List(), List(), List(), List()    
-    defense_data, batting_data, running_data, playerAttrs = List(), List(), List(), List()
-    for playerid in batter_order:
-        shelled.append(team_stat_data[team][playerid]["shelled"])        
-        defense_data.append(List([team_stat_data[team][playerid]["omniscience"], team_stat_data[team][playerid]["watchfulness"], team_stat_data[team][playerid]["chasiness"], team_stat_data[team][playerid]["anticapitalism"], team_stat_data[team][playerid]["tenaciousness"]]))
-        if not team_stat_data[team][playerid]["shelled"]:
-            active_batters.append(playerid)
-            average_aa_impact.append(0.0), average_aaa_impact.append(0.0), high_pressure_mod.append(0.0)                                 
-            batting_data.append(List([team_stat_data[team][playerid]["patheticism"], team_stat_data[team][playerid]["tragicness"], team_stat_data[team][playerid]["thwackability"], team_stat_data[team][playerid]["divinity"], team_stat_data[team][playerid]["moxie"], team_stat_data[team][playerid]["musclitude"], team_stat_data[team][playerid]["martyrdom"]])) 
-            running_data.append(List([team_stat_data[team][playerid]["laserlikeness"], team_stat_data[team][playerid]["baseThirst"], team_stat_data[team][playerid]["continuation"], team_stat_data[team][playerid]["groundFriction"], team_stat_data[team][playerid]["indulgence"]]))
-            if len(team_stat_data[team][playerid]["attrs"]) > 0:
-                playerAttrs.append(List(team_stat_data[team][playerid]["attrs"]))
-            else:
-                playerAttrs.append(List(["none", "none"]))    
-    team_stat_data = List([defense_data, batting_data, running_data])    
-    return shelled, active_batters, average_aa_impact, average_aaa_impact, high_pressure_mod, adjusted_stat_data[away_home], team_stat_data, playerAttrs
+#@njit
+def jitclassed_stlatterms(parameters):       
+    stlatterms = []
+    last_term = 2
+    while last_term < len(parameters):
+        stlatterms.append(StlatTerm(float64(parameters[last_term - 2]), float64(parameters[last_term - 1]), float64(parameters[last_term])))
+        last_term += 3
+    tuple_stlats = tuple(stlatterms)
+    return tuple_stlats
+
+def get_lists_from_loop(batter_order, team_stat_data, team):    
+    playerAttrs = []
+    shelled = np.zeros((20), dtype=bool)
+    defense_data, batting_data, running_data = np.zeros((20, 5)), np.zeros((20, 7)), np.zeros((20, 5))
+    active_batter = 0
+    for idx in range(0, len(batter_order)):
+        playerid = batter_order[idx]
+        shelled[idx] = team_stat_data[team][playerid]["shelled"]                
+        defense_data[idx, 0] = float64(team_stat_data[team][playerid]["omniscience"])
+        defense_data[idx, 1] = float64(team_stat_data[team][playerid]["watchfulness"])
+        defense_data[idx, 2] = float64(team_stat_data[team][playerid]["chasiness"])
+        defense_data[idx, 3] = float64(team_stat_data[team][playerid]["anticapitalism"])
+        defense_data[idx, 4] = float64(team_stat_data[team][playerid]["tenaciousness"])        
+        if not team_stat_data[team][playerid]["shelled"]:            
+            batting_data[active_batter, 0] = float64(team_stat_data[team][playerid]["patheticism"]) if float64(team_stat_data[team][playerid]["patheticism"]) >= 0.01 else float64(0.0)
+            batting_data[active_batter, 1] = float64(team_stat_data[team][playerid]["tragicness"]) if float64(team_stat_data[team][playerid]["tragicness"]) >= 0.01 else float64(0.0)
+            batting_data[active_batter, 2] = float64(team_stat_data[team][playerid]["thwackability"])
+            batting_data[active_batter, 3] = float64(team_stat_data[team][playerid]["divinity"])
+            batting_data[active_batter, 4] = float64(team_stat_data[team][playerid]["moxie"])
+            batting_data[active_batter, 5] = float64(team_stat_data[team][playerid]["musclitude"])
+            batting_data[active_batter, 6] = float64(team_stat_data[team][playerid]["martyrdom"])           
+            
+            running_data[active_batter, 0] = float64(team_stat_data[team][playerid]["laserlikeness"])
+            running_data[active_batter, 1] = float64(team_stat_data[team][playerid]["baseThirst"])
+            running_data[active_batter, 2] = float64(team_stat_data[team][playerid]["continuation"])
+            running_data[active_batter, 3] = float64(team_stat_data[team][playerid]["groundFriction"])
+            running_data[active_batter, 4] = float64(team_stat_data[team][playerid]["indulgence"])
+            
+            startingAttrs = list(team_stat_data[team][playerid]["attrs"])
+            while len(startingAttrs) < 20:
+                startingAttrs.append("")
+            playerAttrs.append(tuple(startingAttrs))            
+            active_batter += 1
+    while len(playerAttrs) < 20:
+        playerAttrs.append(("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""))
+    tuplePlayerAttrs = tuple(playerAttrs)
+    #print("Can we make it a tuple of tuples? {}".format(tuplePlayerAttrs))
+    return shelled, defense_data, batting_data, running_data, tuplePlayerAttrs
 
 def get_pitcher_id_lookup(filename):
     with open(filename) as f:
@@ -211,7 +253,6 @@ def get_schedule_from_paired_games(paired_games, season, day):
         "awayInningsPitched": int(game["away"]["innings_pitched"])
     } for game in paired_games]
 
-
 def should_regen(day_mods):
     return any([d in day_mods for d in FORCE_REGEN])
 
@@ -243,59 +284,54 @@ def debug_print(s, debug, run_id):
     if debug:
         print("{} - {}".format(run_id, s))
 
-@njit(cache=True)
-def get_factor_and_best(focused_values):
-    best_all, best_focused, factor, max_value, min_all = 0.0, 0.0, 0.0, 0.0, 0.0
-    for idx in range(0, len(focused_values)):
-        (focused_result_int, all_result_int) = focused_values[idx]
-        focused_result, all_result = float(focused_result_int), float(all_result_int)
-        factor = (all_result / focused_result) if (all_result / focused_result) > factor else factor
-        if all_result > best_all:
-            best_all = float(all_result)
-            best_focused = float(focused_result)
-        if focused_result > max_value:
-            max_value = float(focused_result)
+@njit
+def get_factor_and_best(focused_values):  
+    replacement_index = 6
+    best_all, best_focused, max_value, min_all = 0.0, 0.0, 0.0, 0.0
+    for idx in range(0, len(focused_values)):                
+        if float(focused_values[idx][1]) > best_all:
+            best_all = float(focused_values[idx][1])
+            best_focused = float(focused_values[idx][0])
+        if float(focused_values[idx][0]) > max_value:
+            max_value = float(focused_values[idx][0])
             replacement_index = int(idx)
-        if (min_all == 0.0) or (float(all_result) < min_all):
-            min_all = float(all_result)
+        if (min_all == 0.0) or (float(focused_values[idx][1]) < min_all):
+            min_all = float(focused_values[idx][1])
     return best_all, best_focused, max_value, replacement_index, min_all
 
-def calc_linear_unex_error(vals, wins_losses, modname=None):    
+def calc_linear_unex_error(vals, wins_losses, modname=None):        
     max_error_game = ""    
     exponent_check = modname == "psychic" or modname == "a" or modname == "acidic" or modname == "base_instincts" or modname == "electric" or modname == "fiery" or modname == "love" or modname == "overall"
     exponent = 4.0 if exponent_check else 6.0
-    window_size, half_window = 100, 50        
+    window_size, half_window = 100, 50                 
+    vals_typed_list = np.array(vals)    
+    wins_losses_typed_list = np.array(wins_losses)
     win_threshold = False    
-    starting_size = (window_size - 1)
-    wins = wins_losses[:starting_size]    
-    numba_wins, numba_wins_losses, numba_vals = List(wins), List(wins_losses), List(vals)
-    error, max_error, min_error, max_error_val, min_error_val = linear_unex_loop(numba_wins, window_size, half_window, numba_vals, numba_wins_losses, exponent)    
-    del numba_wins, numba_wins_losses, numba_vals, wins
+    
+    error, max_error, min_error, max_error_val, min_error_val = linear_unex_loop(window_size, half_window, vals_typed_list, wins_losses_typed_list, exponent, win_threshold)            
+    
     return error, max_error, min_error, max_error_val, min_error_val
 
-@njit(cache=True)
-def linear_unex_loop(wins, window_size, half_window, vals, wins_losses, exponent):
-    win_threshold = False
-    error, max_error, min_error, max_error_val, min_error_val, current_val = 0.0, 0.0, 150.0, 0.0, 0.0, 0.0    
-    for idx in range(window_size - 1, len(vals)):                 
-        wins.append(wins_losses[idx])                        
-        current_val = vals[idx - half_window] * 100.0
-        total_wins = sum(wins)
-        if (total_wins > 1):
+@njit
+def linear_unex_loop(window_size, half_window, vals, wins_losses, exponent, win_threshold):        
+    error, max_error, min_error, max_error_val, min_error_val, current_error = 0.0, 0.0, 150.0, 0.0, 0.0, 0.0  
+    for idx in range(window_size - 1, len(vals)):                     
+        #wins.append(wins_losses[idx])                                        
+        #wins_losses[(idx - (window_size - 1)):idx]
+        if (sum(wins_losses[(idx - (window_size - 1)):idx]) > 1):
             win_threshold = True            
-        if win_threshold:
-            actual_val = total_wins * (100.0 / window_size)
-            current_error = max(abs(current_val - actual_val), 1.0) - 1.0
-            if ((actual_val > 50.0) and (current_val < 50.0)) or ((actual_val < 50.0) and (current_val > 50.0)):
+        if win_threshold:            
+            current_error = max(abs((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size)))), 1.0) - 1.0
+            if (((float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size))) > 50.0) and ((vals[idx - half_window] * 100.0) < 50.0)) or (((float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size))) < 50.0) and ((vals[idx - half_window] * 100.0) > 50.0)):
                 current_error *= 2.0
             error += current_error ** exponent                               
-            if ((current_val - actual_val) > max_error):
-                max_error = (current_val - actual_val)
-                max_error_val = current_val                                
-            if ((current_val - actual_val) < min_error):
-                min_error = (current_val - actual_val)
-                min_error_val = current_val                                               
-        del wins[0]
+            if (((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size)))) > max_error):
+                max_error = ((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / window_size)))
+                max_error_val = (vals[idx - half_window] * 100.0)                                
+            if (((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size)))) < min_error):
+                min_error = ((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size))))
+                min_error_val = (vals[idx - half_window] * 100.0)                                               
+        #del wins[0]
     error += (max_error ** (exponent + 2)) + (abs(min_error ** (exponent + 2)))    
     return error, max_error, min_error, max_error_val, min_error_val
 
@@ -323,38 +359,37 @@ def calc_best_penalty(best_leader_score, solved_leader_score, solved_score, best
 
 #different idea for potential use later - gather and evaluate all solved scores within a particular value that are less than or equal to the average of the solved score of a previous value and evaluate thier linear penalty accordingly
 
-@njit(cache=True)
-def calc_batman_linear_penalty(real_scores, real_values, sorted_real_values, mean_event, exponent):
-    penalty = 0.0             
-    for idx in range(0, len(real_scores)):                  
-        scored_value, real_value = float(real_values[idx]), float(sorted_real_values[idx])
-        if scored_value != real_value:
-            penalty_value = max(scored_value, real_value)
-            #relative_error = ((penalty_value / max_real) * 100.0) ** exponent
-            relative_error = (((real_value - scored_value) / penalty_value) * 100.0) ** exponent
-            penalty += relative_error * (penalty_value / mean_event)    
+@njit
+def calc_batman_linear_penalty(logbase, scores, real_values, sorted_real_values, mean_event, exponent):
+    penalty = 0.0      
+    for idx in range(0, scores):                          
+        if float(real_values[idx]) != float(sorted_real_values[idx]):            
+            logtransform = 1.0 / (1.0 + (logbase ** (-1 * ((max(float(real_values[idx]), float(sorted_real_values[idx])) - min(float(real_values[idx]), float(sorted_real_values[idx]))) - mean_event))))
+            penalty += (logtransform * 100.0) ** exponent     
     return penalty
 
 def sort_batman_linear_penalty(event, event_values, max_event):
     global CACHED_NONZERO_MEAN
-    global CACHED_SORTED_REAL
+    global CACHED_SORTED_REAL    
     unsorted_real_values, unsorted_solved_values = list(event_values["real_values"]), list(event_values["solved_values"])    
     unsorted_values = zip(unsorted_solved_values, unsorted_real_values)    
-    sorted_values = sorted(unsorted_values)        
-    real_scores = List([element for element, _ in sorted_values])
-    real_values = List([element for _, element in sorted_values])
-    
+    sorted_values = sorted(unsorted_values)     
+    list_real_values = [element for _, element in sorted_values]
+    real_values = np.array(list_real_values)
+    real_scores = len(real_values)
+    logbase = math.e
+
     if event not in CACHED_SORTED_REAL:
         unsorted_real_values.sort()    
-        nonzero_values = [val for val in unsorted_real_values if val > 0]
-        sorted_real_values = List([element for element in unsorted_real_values])    
-        nonzero_mean = min(float(sum(nonzero_values)) / float(len(nonzero_values)), 2.0)
+        #nonzero_values = [val for val in unsorted_real_values if val > 0]
+        list_sorted_real_values = [element for element in unsorted_real_values]
+        sorted_real_values = np.array(list_sorted_real_values)
+        nonzero_mean = float(sum(unsorted_real_values)) / float(len(unsorted_real_values))
         CACHED_NONZERO_MEAN[event] = nonzero_mean
         CACHED_SORTED_REAL[event] = sorted_real_values
     else:
-        nonzero_mean, sorted_real_values = CACHED_NONZERO_MEAN[event], CACHED_SORTED_REAL[event]
-    penalty = calc_batman_linear_penalty(real_scores, real_values, sorted_real_values, nonzero_mean, 6.0)
-    del real_scores, real_values, unsorted_real_values, unsorted_solved_values, unsorted_values, sorted_values
+        nonzero_mean, sorted_real_values = CACHED_NONZERO_MEAN[event], CACHED_SORTED_REAL[event]    
+    penalty = calc_batman_linear_penalty(logbase, real_scores, real_values, sorted_real_values, nonzero_mean, 6.0)        
     return penalty
 
 def calc_snack(event, all_event_values, real_values, sorted_solved_values, score_earned, score_max, event_max, event_mass, perfect_score, score_method, *args):    
@@ -377,8 +412,6 @@ def calc_snack(event, all_event_values, real_values, sorted_solved_values, score
     linear_penalty = 0.0
     
     scores = score_method(sorted_solved_values, solved_best_score, best_score, best_leader, solved_leader, event_max, event_mass, perfect_score, best_mass_score, best_mass_solved_score, solved_mass_score, solved_mass_solved_score, linear_penalty, *args)    
-
-    del best_keys, solved_keys
                     
     return all_event_values, score_earned, score_max, *scores
 
@@ -530,75 +563,6 @@ def get_max_events(seasonrange, dayrange, stat_file_map, team_attrs, game_list, 
 
     return maximum_events, mass_event
 
-def store_ev_by_team(ev_by_team, hometeam, awayteam, web_ev, mofo_ev):
-    if hometeam not in ev_by_team:
-        ev_by_team[hometeam] = {}
-        ev_by_team[hometeam]["web_ev"] = 0
-        ev_by_team[hometeam]["mofo_ev"] = 0
-        ev_by_team[hometeam]["net_ev"] = 0
-    ev_by_team[hometeam]["web_ev"] += web_ev
-    ev_by_team[hometeam]["mofo_ev"] += mofo_ev
-    ev_by_team[hometeam]["net_ev"] = ev_by_team[hometeam]["mofo_ev"] - ev_by_team[hometeam]["web_ev"]
-
-    if awayteam not in ev_by_team:
-        ev_by_team[awayteam] = {}
-        ev_by_team[awayteam]["web_ev"] = 0
-        ev_by_team[awayteam]["mofo_ev"] = 0
-        ev_by_team[awayteam]["net_ev"] = 0
-    ev_by_team[awayteam]["web_ev"] += web_ev
-    ev_by_team[awayteam]["mofo_ev"] += mofo_ev
-    ev_by_team[awayteam]["net_ev"] = ev_by_team[awayteam]["mofo_ev"] - ev_by_team[awayteam]["web_ev"]
-    
-    return ev_by_team
-
-def game_ev_calculate(ev_set, game):
-    net_payout, web_payout, dadbets, mismatches, season_ev, season_web_ev = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0    
-    gameid = ev_set[game]
-    #set winning mofoodds equal to the mofo odds for whichever team actually won the game (max odds if favorite; min odds otherwise)
-    if gameid["favorite_won"]:
-        winning_mofoodds = max(gameid["mofoodds"], 1.0 - gameid["mofoodds"])            
-    else:
-        winning_mofoodds = min(gameid["mofoodds"], 1.0 - gameid["mofoodds"])     
-    #set winning webodds; we store webodds and mofoodds for the away team, so if winning mofoodds is the away odds we also want the away webodds
-    winning_webodds = gameid["webodds"] if (winning_mofoodds == gameid["mofoodds"]) else (1.0 - gameid["webodds"])
-    #dadbets only exist for the mofo underdog
-    dadbet_mofoodds = min(gameid["mofoodds"], 1.0 - gameid["mofoodds"])
-    #webodss for dadbets need to match, just as above, so get the matching webodds
-    dadbet_webodds = gameid["webodds"] if (dadbet_mofoodds == gameid["mofoodds"]) else (1.0 - gameid["webodds"])
-    payout = round(webodds_payout(winning_webodds, 1000.0))             
-    mismatch = ((gameid["mofoodds"] > 0.5) and (gameid["webodds"] < 0.5)) or ((gameid["mofoodds"] < 0.5) and (gameid["webodds"] > 0.5))
-    dadbet = (round(webodds_payout(dadbet_webodds, 1000.0)) * dadbet_mofoodds) > (round(webodds_payout((1.0 - dadbet_webodds), 1000.0)) * (1.0 - dadbet_mofoodds))
-    #if mismatch:
-        #print("mismatch! mofo odds {}, web odds {}".format(gameid["mofoodds"], gameid["webodds"]))
-    if dadbet:
-        if not gameid["favorite_won"]:
-            net_payout += payout - 1000.0
-            dadbets += payout - 1000.0
-        else:
-            net_payout -= 1000.0
-            dadbets -= 1000.0
-    elif gameid["favorite_won"]:
-        if mismatch:                
-            mismatches += payout - 1000.0                                    
-        net_payout += payout - 1000.0
-    else:
-        if mismatch:
-            mismatches -= 1000.0
-        net_payout -= 1000.0
-    if winning_webodds > 0.5:
-        web_payout += payout - 1000.0
-    else:
-        web_payout -= 1000.0    
-    #print("Winning webodds = {:.4f}, winning mofoodds = {:.4f}, mismatch = {}, dadbet = {}, web pay = {:.4f}, mofopay = {:.4f}".format(winning_webodds, winning_mofoodds, mismatch, dadbet, web_payout, net_payout))
-    ev = net_payout / 1000.0
-    mismatches = mismatches / 1000.0
-    dadbets = dadbets / 1000.0
-    web_ev = web_payout / 1000.0
-    if gameid["season"] == MAX_SEASON:
-        season_ev = ev
-        season_web_ev = web_ev
-    return ev, mismatches, dadbets, web_ev, season_ev, season_web_ev
-
 def webodds_payout(odds, amt):
     if odds == .5:
         return 2 * amt
@@ -608,7 +572,7 @@ def webodds_payout(odds, amt):
         return amt * (3.206 / (1 + ((.443 * (odds - .5)) ** .95)) - 1.206)
 
 def calc_half_term(terms, half_stlats, stlat, event):
-    val = half_stlats[stlat][event]
+    val = half_stlats[stlat][event]    
     calced_val = terms[event].calc(abs(val))
     try:
         adjustment = calced_val * (val / abs(val))
@@ -641,9 +605,9 @@ def write_parameters(outputdir, run_id, filename, parameters):
     with open(os.path.join(outputdir, "{}-{}".format(run_id, filename)), "w") as f:
         json.dump(list(parameters), f)
 
-
 #for mofo and k9
 def minimize_func(parameters, *data):
+    #first, second, pre_mi_alloc, pre_mi_free = rtsys.get_allocation_stats()            
     run_id = uuid.uuid4()
     starttime = datetime.datetime.now()
     global BEST_RESULT    
@@ -667,6 +631,13 @@ def minimize_func(parameters, *data):
     global FACTORS
     global PREVIOUS_FOCUS
     global SOLUTIONS_TO_FILL
+    #global JITCLASSED_TUPLELIST
+    #global STLAT_TERMS
+    #global VALUES_OF_FOCUS
+    global SNAPSHOT                 
+    #if CURRENT_ITERATION > 1:                    
+    #    start_method = tracemalloc.take_snapshot()
+    #    start_method = start_method.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
     calc_func, stlat_list, special_case_list, mod_list, ballpark_list, stat_file_map, ballpark_file_map, game_list, team_attrs, number_to_beat, solve_for_ev, final_solution, solved_terms, solved_halfterms, solved_mods, solved_ballpark_mods, batter_list, crimes_list, solve_batman_too, popsize, focus, debug, debug2, debug3, outputdir, factorsdir, solution_regen = data    
     debug_print("func start: {}".format(starttime), debug3, run_id)
     if number_to_beat is not None:
@@ -676,10 +647,13 @@ def minimize_func(parameters, *data):
     team_mod_list_size = len(mod_list)
     special_cases_count = len(special_case_list)
     total_parameters = len(parameters)
-    base_mofo_list_size = total_parameters - special_cases_count - park_mod_list_size - team_mod_list_size
-    terms = solved_terms if solved_terms else collections.defaultdict(lambda: {})        
-    if base_mofo_list_size > 0:        
-        terms = {stat: StlatTerm(a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:base_mofo_list_size])] * 3))}
+    base_mofo_list_size = total_parameters - special_cases_count - park_mod_list_size - team_mod_list_size        
+    if base_mofo_list_size > 0 and not solved_terms:                                  
+        jc_params = tuple(parameters[:base_mofo_list_size])                
+        tuple_terms = jitclassed_stlatterms(jc_params)                   
+        terms = {stat: stlatterm for stat, stlatterm in zip(stlat_list, list(tuple_terms[:]))}
+    else:
+        terms = solved_terms    
         
     mods = solved_mods if solved_mods else {mod.attr.lower(): {modteam.team.lower(): {modstat.stat.lower(): a for modstat, a in zip(mod_list, parameters[(base_mofo_list_size + special_cases_count):(total_parameters-park_mod_list_size)]) if modstat.team == modteam.team and modstat.attr == mod.attr} for modteam in mod_list} for mod in mod_list}
     ballpark_mods = solved_ballpark_mods if solved_ballpark_mods else {bp.ballparkstat.lower(): {parkterm.playerstat.lower(): ParkTerm(a, b, c) for parkterm, (a, b, c) in zip(ballpark_list, zip(*[iter(parameters[-park_mod_list_size:])] * 3)) if bp.ballparkstat == parkterm.ballparkstat} for bp in ballpark_list}
@@ -687,38 +661,37 @@ def minimize_func(parameters, *data):
     
     mod_mode = True
     
-    game_counter, fail_counter, season_game_counter, half_fail_counter, pass_exact, pass_within_one, pass_within_two, pass_within_three, pass_within_four = 0, 0, 0, 1000000000, 0, 0, 0, 0, 0
-    quarter_fail = 100.0
+    game_counter, fail_counter= 0, 0    
     linear_fail = 100.0    
-    batman_solved_error, batman_best_error, enoch_solved_error, enoch_best_error, pitcher_solved_error, pitcher_best_error, all_seeds_error = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    batman_best_error = 0.0
     seeds_error, dogs_error, pickles_error, chips_error, meatballs_error = 0.0, 0.0, 0.0, 0.0, 0.0
-    linear_error, check_fail_rate, web_margin, early_linear, last_linear, worstmod_linear_error, unmod_linear_error = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    linear_error, worstmod_linear_error, unmod_linear_error = 0.0, 0.0, 0.0
     max_linear_error, min_linear_error, unmod_max_linear_error, unmod_min_linear_error, max_error_value, min_error_value = 0.0, 150.0, 0.0, 150.0, 0.0, 0.0
-    max_error_mod, min_error_mod = "", ""
-    love_rate, instinct_rate, ono_rate, wip_rate, exk_rate, exb_rate, unmod_rate = 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0
-    k9_max_err, k9_min_err, ljg_passed, ev_neg_count, lastlin_games = 0, 0, 0, 0, 1
-    season_ev, season_web_ev, max_team_ev, min_team_ev, max_run_span = 0.0, 0.0, -1000.0, 1000.0, 1000.0
+    max_error_mod, min_error_mod = "", ""            
     mod_fails, mod_games, mod_rates, mod_web_fails = {}, {}, {}, {}
     multi_mod_fails, multi_mod_games, multi_mod_web_fails, mvm_fails, mvm_games, mvm_web_fails, ljg_fail_savings = 0, 0, 0, 0, 0, 0, 0
     unmod_fails, unmod_games, unmod_rate, unmod_web_fails = 0, 0, 0.0, 0
-    reject_solution, viability_unchecked, new_pass, addfails, stats_regened, early_linear_checked = False, True, False, False, False, True
-    ev_set, ev_by_team, games_by_mod, vals_by_mod = {}, {}, {}, {}
+    reject_solution, stats_regened = False, False
+    games_by_mod, vals_by_mod = {}, {}
     all_vals, win_loss, gameids, early_vals, early_sorted = [], [], [], [], []
-    worst_vals, worst_win_loss, worst_gameids, overall_vals, overall_win_loss, overall_gameids, remove_list, steals_remove_list = [], [], [], [], [], [], [], []
-    awayAttrs, homeAttrs = [], []    
-    cachedAwayMods, cachedHomeMods = List(), List()
+    worst_vals, worst_win_loss, worst_gameids, overall_vals, overall_win_loss, overall_gameids, remove_list, steals_remove_list = [], [], [], [], [], [], [], []          
     cachedParkAwayMods, cachedParkHomeMods = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})
     previous_ballparks = collections.defaultdict(lambda: collections.defaultdict(lambda: 0.5))
-    pitching_terms = List([terms["unthwack_base_hit"], terms["ruth_strike"], terms["overp_homer"], terms["overp_triple"], terms["overp_double"], terms["shakes_runner_advances"]])
-    defense_terms = List([terms["omni_base_hit"], terms["watch_attempt_steal"], terms["chasi_triple"], terms["chasi_double"], terms["anticap_caught_steal_base"], terms["anticap_caught_steal_home"], terms["tenacious_runner_advances"]])
-    batting_terms = List([terms["path_connect"], terms["trag_runner_advances"], terms["thwack_base_hit"], terms["div_homer"], terms["moxie_swing_correct"], terms["muscl_foul_ball"], terms["muscl_triple"], terms["muscl_double"], terms["martyr_sacrifice"]])
-    running_terms = List([terms["laser_attempt_steal"], terms["laser_caught_steal_base"], terms["laser_caught_steal_home"], terms["laser_runner_advances"], terms["baset_attempt_steal"], terms["baset_caught_steal_home"], terms["cont_triple"], terms["cont_double"], terms["ground_triple"], terms["indulg_runner_advances"]])    
-    list_terms = List([pitching_terms, defense_terms, batting_terms, running_terms])  
+    #first, second, termlist_mi_alloc, termlist_mi_free = rtsys.get_allocation_stats()  
+    pitching_terms = (terms["unthwack_base_hit"], terms["ruth_strike"], terms["overp_homer"], terms["overp_triple"], terms["overp_double"], terms["shakes_runner_advances"])
+    defense_terms = (terms["omni_base_hit"], terms["watch_attempt_steal"], terms["chasi_triple"], terms["chasi_double"], terms["anticap_caught_steal_base"], terms["anticap_caught_steal_home"], terms["tenacious_runner_advances"])
+    batting_terms = (terms["path_connect"], terms["trag_runner_advances"], terms["thwack_base_hit"], terms["div_homer"], terms["moxie_swing_correct"], terms["muscl_foul_ball"], terms["muscl_triple"], terms["muscl_double"], terms["martyr_sacrifice"])
+    running_terms = (terms["laser_attempt_steal"], terms["laser_caught_steal_base"], terms["laser_caught_steal_home"], terms["laser_runner_advances"], terms["baset_attempt_steal"], terms["baset_caught_steal_home"], terms["cont_triple"], terms["cont_double"], terms["ground_triple"], terms["indulg_runner_advances"])
+    list_terms = (pitching_terms[:], defense_terms[:], batting_terms[:], running_terms[:])
 
-    #if CURRENT_ITERATION == 1:
-    #    factor_write_file = open(factorsdir, "wb")
-    #    pickle.dump(FACTORS, factor_write_file)
-    #    factor_write_file.close()
+    #first, second, somev_mi_alloc, somev_mi_free = rtsys.get_allocation_stats()   
+
+    if CURRENT_ITERATION == 1:
+        if solution_regen:
+            FACTORS = {'seeds': [(9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999)], 'dogs': [(9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999)], 'pickles': [(9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999)], 'chips': [(9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999)], 'meatballs': [(9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999)], 'all': [99999999999999999, 99999999999999999, 99999999999999999, 99999999999999999, 99999999999999999]}
+            factor_write_file = open(factorsdir, "wb")
+            pickle.dump(FACTORS, factor_write_file)
+            factor_write_file.close()
 
     if solve_batman_too:
         solved_hits, solved_homers = collections.defaultdict(lambda: {}), collections.defaultdict(lambda: {})                   
@@ -731,9 +704,9 @@ def minimize_func(parameters, *data):
         meatballs_score, meatballs_score_earned, meatballs_score_max = 0.0, 0.0, 0.0
         chipsburgers_score, chipsburgers_score_earned, chipsburgers_score_max = 0.0, 0.0, 0.0
         chipsmeatballs_score, chipsmeatballs_score_earned, chipsmeatballs_score_max = 0.0, 0.0, 0.0
-        hitters, sluggers, seeddogers, chips_pitchers, sho_pitchers = 0, 0, 0, 0, 0  
+        hitters, chips_pitchers, sho_pitchers = 0, 0, 0
         perfect_seeds, perfect_dogs, perfect_seeddogs, perfect_chips, perfect_meatballs, perfect_chipsmeatballs = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-        qualified_events = ["hits", "homers", "chips", "meatballs"]
+        qualified_events = ["hits", "homers", "chips", "meatballs", "steals"]
         
         burger_penalty = 0.0
         if crimes_list is not None:
@@ -760,10 +733,26 @@ def minimize_func(parameters, *data):
 
     if solve_batman_too and CURRENT_ITERATION == 1:
         print("Maximum events = {}".format(MAX_EVENTS))
-        print("Mass events = {}".format(MASS_EVENTS))
+        print("Mass events = {}".format(MASS_EVENTS))    
 
+    #first, second, preg_mi_alloc, preg_mi_free = rtsys.get_allocation_stats()
     #non_calcfunc_time, calcfunc_time = 0.0, 0.0
+    #if CURRENT_ITERATION > 1:                    
+    #    before_games = tracemalloc.take_snapshot()
+    #    before_games = before_games.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+        #top_stats = before_games.compare_to(start_method, 'lineno')                                
+        #if top_stats[0].size_diff > 0:                        
+        #    print("Increase between method start and games start: {}".format(top_stats[0]))
     for season in seasonrange:        
+        days_of_interest = [8, 21, 35, 52, 71, 94]        
+        #days_of_interest = [1, 5, 14, 16, 28, 30, 43, 47, 61, 65, 80, 88]
+        #days_of_interest = []        
+        #stat_games = ['90f6de73-0072-417f-aad4-834410735cd5', '10baa0e2-00fc-4de0-9b18-4f7ef2f646ab', '00a3e33a-eb31-431f-9eac-559611480b81', '07ee20a1-18de-440f-a07c-a0a131d55e08', 'd0ecb078-1c49-4424-804f-4f9df2791045', '230e6673-faaf-4989-a8bf-8416ec4a946b']
+        #blood_games = ['cb1b6553-1042-49fd-a279-d8b78b5f808a', '5e39f728-64f5-4236-b820-460b7eef38d2', '9b940412-8ca6-4ec2-81fd-35e772d04b96', '61eedcca-8d6f-4bd1-8a06-c70fcb046657', 'ea8329eb-529b-44d9-96ae-9e902c263e11', '5e516810-4e53-49dd-8ada-5be605b3947a', '058741c5-4f4a-4657-9fc4-470c95628112']
+        #score_games = ['b718393f-22f8-457c-beee-48e80830bff1', '53380ee0-6e2f-4af2-83fd-6d90cee16a00', 'fcf98e27-ae6d-4259-85ab-80ed4a0e8abf', '74a59f47-f974-40eb-99b0-0346514b93bd', '1f4320d3-8f5c-41e2-a433-16d140c69bbc', '2d03beac-a081-41d9-b5dd-603d6279906f', '47d3fc13-b734-4595-8f64-d0d423c2e0ae', '08881612-5332-4562-a6a2-8c131de07d3c']                      
+        games_of_interest = ['88c2d078-6791-4c14-b118-f6e56da2370c', '792839eb-4a7c-4504-8162-1b2be9f2a5f5', '4665b09d-99af-4dd8-914f-a43b4d2e554e', 'b9176108-1b01-456b-a527-d378b4de01b1', 'f4efddbd-cd3b-43e5-9adf-0f609f4df6ad', '82a6c932-aa3b-48aa-acd0-a4a1df532886']
+        #games_of_interest = ['82ad9244-50ca-4e90-93da-6ffb04c15a68', '88c2d078-6791-4c14-b118-f6e56da2370c', '4665b09d-99af-4dd8-914f-a43b4d2e554e', 'b9176108-1b01-456b-a527-d378b4de01b1', 'f4efddbd-cd3b-43e5-9adf-0f609f4df6ad', '82a6c932-aa3b-48aa-acd0-a4a1df532886']
+        #games_of_interest = []
         if reject_solution:            
             break
         # if (season in HAS_GAMES and not HAS_GAMES[season]) or season < 12:
@@ -805,8 +794,21 @@ def minimize_func(parameters, *data):
                 previous_season_start_day = 100 - (days_to_solve - ((MAX_DAY + 1) - MIN_DAY))
                 dayrange = range(previous_season_start_day, 100)
         else:
-            continue            
-        for day in dayrange:                
+            continue  
+        #if CURRENT_ITERATION > 1:                    
+        #    before_dayloop = tracemalloc.take_snapshot()
+        #    before_dayloop = before_dayloop.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+        #    top_stats = before_dayloop.compare_to(before_games, 'lineno')                                
+        #    if top_stats[0].size_diff > 0:                        
+        #        print("Increase before dayloop: {}".format(top_stats[0]))
+        previous_gameid = ""
+        for day in dayrange:         
+            #if day == 1:
+            #    continue
+            #if (CURRENT_ITERATION > 1) and (int(day) in days_of_interest):                    
+            #if (CURRENT_ITERATION > 1):                    
+                #before_gameloop = tracemalloc.take_snapshot()
+                #before_gameloop = before_gameloop.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
             if reject_solution:                
                 break
             is_cached = False
@@ -830,6 +832,8 @@ def minimize_func(parameters, *data):
             if cached_stats:
                 team_stat_data, pitcher_stat_data, pitchers = cached_stats                
             else:
+                if CURRENT_ITERATION > 1:
+                    print("Should not be hitting this past first iteration, but am; no cached stats for day {}".format(day))
                 stat_filename = stat_file_map.get((season, day))
                 if stat_filename:
                     last_stat_filename = stat_filename
@@ -942,22 +946,79 @@ def minimize_func(parameters, *data):
                         real_steals = STEALS_CACHE.get((season, day))
                         real_seedpickles = SEEDPICKLES_CACHE.get((season, day))
                         real_dogpickles = DOGPICKLES_CACHE.get((season, day))
-                        real_trifecta = TRIFECTA_CACHE.get((season, day))
-            for game in paired_games:     
+                        real_trifecta = TRIFECTA_CACHE.get((season, day))            
+            #if CURRENT_ITERATION > 1:
+            #    before_gameloop = tracemalloc.take_snapshot()
+            #    before_gameloop = before_gameloop.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+            #if (CURRENT_ITERATION > 1) and not (int(day) in days_of_interest):                    
+            #    before_games = tracemalloc.take_snapshot()
+            #    before_games = before_games.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+            #    top_stats = before_games.compare_to(before_gameloop, 'lineno')                                
+            #    if top_stats[0].size_diff > 0:                        
+            #        print("Increase before games on day {}: {}".format(day, top_stats[0]))
+            #trace_mem = (CURRENT_ITERATION == 1) and (int(day) == 1)
+            for game in paired_games:               
+                #trace_mem = (CURRENT_ITERATION > 1) and (game["away"]["game_id"] in games_of_interest)                
+                trace_mem = True
+                #trace_day = (CURRENT_ITERATION > 1) and (int(day) in days_of_interest)                
+                trace_day = False
+                #trace_mem = (CURRENT_ITERATION > 1) and (int(day) in days_of_interest)
+                #if trace_mem or trace_day:                    
+                #    before = tracemalloc.take_snapshot()
+                #    before = before.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+                #    gameloop_start = tracemalloc.take_snapshot()
+                #    gameloop_start = gameloop_start.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+                gamehomeTeam = get_team_name(game["home"]["team_id"], season, day)
+                gameawayTeam = get_team_name(game["away"]["team_id"], season, day)
+                #teams_to_check = ["Philly Pies", "Canada Moist Talkers", "Dallas Steaks"]                
                 #non_calcfunc_time_one = time.time()
-                homePitcher, homePitcherTeam = pitchers.get(game["home"]["pitcher_id"])                        
+                homePitcher, homePitcherTeam = pitchers.get(game["home"]["pitcher_id"])     
+                awayPitcher, awayPitcherTeam = pitchers.get(game["away"]["pitcher_id"]) 
                 if game["away"]["game_id"] in ATTRS_CACHE:
                     awayAttrs = ATTRS_CACHE[game["away"]["game_id"]][game["away"]["team_id"]]
                     homeAttrs = ATTRS_CACHE[game["away"]["game_id"]][game["home"]["team_id"]]
-                else:                          
-                    awayAttrs.clear(), homeAttrs.clear()
+                    awaypitcherAttrs = ATTRS_CACHE[game["away"]["game_id"]][game["away"]["pitcher_id"]]
+                    homepitcherAttrs = ATTRS_CACHE[game["away"]["game_id"]][game["home"]["pitcher_id"]]
+                else:                                              
                     game_attrs = get_attrs_from_paired_game(season_team_attrs, game)
-                    awayAttrs, homeAttrs = List(["none", "none"]) if len(game_attrs["away"]) == 0 else List([attr.lower() for attr in game_attrs["away"]]), List(["none", "none"]) if len(game_attrs["home"]) == 0 else List([attr.lower() for attr in game_attrs["home"]])                                        
+                    if len(game_attrs["away"]) > 0:
+                        list_team_attrs = [attr.lower() for attr in game_attrs["away"]]
+                        while len(list_team_attrs) < 10:
+                            list_team_attrs.append("none")
+                    else:
+                        list_team_attrs = ["none", "none", "none", "none", "none", "none", "none", "none", "none", "none"]
+                    awayAttrs = tuple(list_team_attrs)                    
+
+                    if len(game_attrs["home"]) > 0:
+                        list_team_attrs = [attr.lower() for attr in game_attrs["home"]]
+                        while len(list_team_attrs) < 10:
+                            list_team_attrs.append("none")
+                    else:
+                        list_team_attrs = ["none", "none", "none", "none", "none", "none", "none", "none", "none", "none"]
+                    homeAttrs = tuple(list_team_attrs)
+
+                    if len(list(pitcher_stat_data[awayPitcher]["attrs"])) > 0:
+                        list_pitcher_attrs = list(pitcher_stat_data[awayPitcher]["attrs"])
+                        while len(list_pitcher_attrs) < 20:
+                            list_pitcher_attrs.append("none")
+                    else:
+                        list_pitcher_attrs = ["none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none"]
+                    awaypitcherAttrs = tuple(list_pitcher_attrs)
+
+                    if len(list(pitcher_stat_data[homePitcher]["attrs"])) > 0:
+                        list_pitcher_attrs = list(pitcher_stat_data[homePitcher]["attrs"])
+                        while len(list_pitcher_attrs) < 20:
+                            list_pitcher_attrs.append("none")
+                    else:
+                        list_pitcher_attrs = ["none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none", "none"]
+                    homepitcherAttrs = tuple(list_pitcher_attrs)
+                    
+                    #print("Checking that attrs get reset each time.\nAwayAttrs = {}\nHomeAttrs = {}\nawaypitcherAttrs = {}\nhomepitcherAttrs = {}\n".format(awayAttrs, homeAttrs, awaypitcherAttrs, homepitcherAttrs))
                     ATTRS_CACHE[game["away"]["game_id"]] = {}
-                    ATTRS_CACHE[game["away"]["game_id"]][game["away"]["team_id"]] = List(["none", "none"]) if len(game_attrs["away"]) == 0 else List([attr.lower() for attr in game_attrs["away"]])
-                    ATTRS_CACHE[game["away"]["game_id"]][game["home"]["team_id"]] = List(["none", "none"]) if len(game_attrs["home"]) == 0 else List([attr.lower() for attr in game_attrs["home"]])
-                gamehomeTeam = get_team_name(game["home"]["team_id"], season, day)
-                gameawayTeam = get_team_name(game["away"]["team_id"], season, day)     
+                    ATTRS_CACHE[game["away"]["game_id"]][game["away"]["team_id"]] = awayAttrs
+                    ATTRS_CACHE[game["away"]["game_id"]][game["home"]["team_id"]] = homeAttrs
+                    ATTRS_CACHE[game["away"]["game_id"]][game["away"]["pitcher_id"]] = awaypitcherAttrs
+                    ATTRS_CACHE[game["away"]["game_id"]][game["home"]["pitcher_id"]] = homepitcherAttrs
                 if not using_cached_batters:
                     if float(game["home"]["opposing_team_abs_rbi"]) == 0.0:
                         real_sho.append(game["home"]["pitcher_id"])
@@ -974,19 +1035,68 @@ def minimize_func(parameters, *data):
                         real_chipsmeatballs[game["away"]["pitcher_id"]] = 0.0
                     real_chipsmeatballs[game["away"]["pitcher_id"]] += int(game["away"]["strikeouts"]) * 0.2
                 if game["away"]["game_id"] in ADJUSTED_STAT_CACHE:                    
-                    adjusted_stat_data = ADJUSTED_STAT_CACHE[game["away"]["game_id"]]
-                    sorted_batters = SORTED_BATTERS_CACHE[game["away"]["game_id"]]
-                    (away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs) = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away"]
-                    (home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs) = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home"]
-                else:
-                    adjusted_stat_data, sorted_batters = calculate_adjusted_stat_data(awayAttrs, homeAttrs, gameawayTeam, gamehomeTeam, team_stat_data)
-                    away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs = get_lists_from_loop(sorted_batters["away"], team_stat_data, gameawayTeam, adjusted_stat_data, "away")
-                    home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs = get_lists_from_loop(sorted_batters["home"], team_stat_data, gamehomeTeam, adjusted_stat_data, "home")
-                    ADJUSTED_STAT_CACHE[game["away"]["game_id"]] = adjusted_stat_data
-                    SORTED_BATTERS_CACHE[game["away"]["game_id"]] = sorted_batters
+                    #adjusted and sorted batters
+                    away_adj_def = ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["away_defense"]
+                    away_adj_bat = ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["away_batting"]
+                    away_adj_run = ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["away_running"]
+                    away_batters = SORTED_BATTERS_CACHE[game["away"]["game_id"]]["away_batters"]
+                    away_active_batters = SORTED_BATTERS_CACHE[game["away"]["game_id"]]["away_active"]
+                    home_adj_def = ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["home_defense"]
+                    home_adj_bat = ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["home_batting"]
+                    home_adj_run = ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["home_running"]
+                    home_batters = SORTED_BATTERS_CACHE[game["away"]["game_id"]]["home_batters"]
+                    home_active_batters = SORTED_BATTERS_CACHE[game["away"]["game_id"]]["home_active"]
+                    #stats
+                    away_defense = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away_def_data"]
+                    away_batting = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away_bat_data"]
+                    away_running = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away_run_data"]
+                    home_defense = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home_def_data"]
+                    home_batting = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home_bat_data"]
+                    home_running = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home_run_data"]
+                    #shelled et al
+                    away_shelled = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away_shelled"]                                        
+                    awayPlayerAttrs = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away_player_attrs"]
+                    home_shelled = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home_shelled"]                                                                    
+                    homePlayerAttrs = CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home_player_attrs"]                    
+                else:              
+                    if CURRENT_ITERATION > 1:
+                        print("This should not be hitting past iteration one, but this prompt means it is being hit after iteration one")
+                    away_adj_def, away_adj_bat, away_adj_run, away_batters, away_active_batters, home_adj_def, home_adj_bat, home_adj_run, home_batters, home_active_batters = calculate_adjusted_stat_data(awayAttrs, homeAttrs, gameawayTeam, gamehomeTeam, team_stat_data)
+                    away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs = get_lists_from_loop(away_batters, team_stat_data, gameawayTeam)
+                    home_shelled, home_defense, home_batting, home_running, homePlayerAttrs = get_lists_from_loop(home_batters, team_stat_data, gamehomeTeam)
+                    #prime the global dicts                                                                                                                                                         
+                    SORTED_BATTERS_CACHE[game["away"]["game_id"]] = {}           
+                    ADJUSTED_STAT_CACHE[game["away"]["game_id"]] = {}
+
+                    #assign adjusted data to global dict as List type
+                    ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["away_defense"] = away_adj_def
+                    ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["away_batting"] = away_adj_bat
+                    ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["away_running"] = away_adj_run
+                    SORTED_BATTERS_CACHE[game["away"]["game_id"]]["away_batters"] = away_batters
+                    SORTED_BATTERS_CACHE[game["away"]["game_id"]]["away_active"] = away_active_batters
+                    ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["home_defense"] = home_adj_def
+                    ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["home_batting"] = home_adj_bat
+                    ADJUSTED_STAT_CACHE[game["away"]["game_id"]]["home_running"] = home_adj_run
+                    SORTED_BATTERS_CACHE[game["away"]["game_id"]]["home_batters"] = home_batters
+                    SORTED_BATTERS_CACHE[game["away"]["game_id"]]["home_active"] = home_active_batters                    
+                    
                     CACHED_CALCED_STAT_DATA[game["away"]["game_id"]] = {}
-                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away"] = (away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs)
-                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home"] = (home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs)
+                    #shelled et al
+                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away_shelled"] = away_shelled                    
+                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away_player_attrs"] = awayPlayerAttrs                                                           
+                    
+                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home_shelled"] = home_shelled                    
+                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home_player_attrs"] = homePlayerAttrs                   
+                    
+                    #stat data
+                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away_def_data"] = away_defense
+                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away_bat_data"] = away_batting
+                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["away_run_data"] = away_running
+                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home_def_data"] = home_defense
+                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home_bat_data"] = home_batting
+                    CACHED_CALCED_STAT_DATA[game["away"]["game_id"]]["home_run_data"] = home_running
+                                                      
+                    
                 ballpark = ballparks.get(game["home"]["team_id"], collections.defaultdict(lambda: 0.5))
                 use_cached_mods = USE_CACHED_PARK_MODS.get((season, day, game["home"]["team_id"]))
                 if use_cached_mods is None:
@@ -1005,24 +1115,62 @@ def minimize_func(parameters, *data):
                         use_cached_mods = False
                     USE_CACHED_PARK_MODS[(season, day, game["home"]["team_id"])] = use_cached_mods
                 if use_cached_mods:
-                    cachedAwayMods, cachedHomeMods = cachedParkAwayMods[game["home"]["team_id"]], cachedParkHomeMods[game["home"]["team_id"]]
-                    #print("Confirming cache is correct: \nPrevious ballpark {} \ncurrent ballpark {}".format(previous_ballparks[game["home"]["team_id"]], ballpark))
-                else:
-                    #print("Not cached")
-                    cachedAwayMods, cachedHomeMods = List(), List()
-                previous_ballparks[game["home"]["team_id"]] = ballpark
-                if solve_batman_too:                                        
-                    game_game_counter, game_fail_counter, game_away_val, game_home_val, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era, awayParkMods, homeParkMods = calc_func(game, awayAttrs, homeAttrs, team_stat_data, sorted_batters, pitcher_stat_data, pitchers, list_terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, True, cachedAwayMods, cachedHomeMods, away_shelled, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, adjusted_stat_data_away, away_team_stat_data, awayPlayerAttrs, home_shelled, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, adjusted_stat_data_home, home_team_stat_data, homePlayerAttrs)                           
-                    cachedParkAwayMods[game["home"]["team_id"]], cachedParkHomeMods[game["home"]["team_id"]] = awayParkMods, homeParkMods
-                    solved_hits, solved_homers = {**solved_hits, **away_hits, **home_hits}, {**solved_homers, **away_homers, **home_homers}
-                    if crimes_list is not None:
-                        solved_steals = {**solved_steals, **away_stolen_bases, **home_stolen_bases}
-                    solved_ks[game["away"]["pitcher_id"]], solved_ks[game["home"]["pitcher_id"]] = away_pitcher_ks, home_pitcher_ks
-                    solved_era[game["away"]["pitcher_id"]], solved_era[game["home"]["pitcher_id"]] = away_pitcher_era, home_pitcher_era
-                    total_away_homers, total_home_homers = sum(away_homers.values()), sum(home_homers.values())
-                    solved_meatballs[game["away"]["pitcher_id"]], solved_meatballs[game["home"]["pitcher_id"]] = total_home_homers, total_away_homers                                  
-                else:
-                    game_game_counter, game_fail_counter, game_away_val, game_home_val = calc_func(game, season_team_attrs, team_stat_data, pitcher_stat_data, pitchers, terms, mods, ballpark, ballpark_mods, adjusted_stat_data, adjustments, False)                
+                    cachedAwayMods, cachedHomeMods = cachedParkAwayMods[game["home"]["team_id"]], cachedParkHomeMods[game["home"]["team_id"]]                    
+                else:                    
+                    cachedAwayMods, cachedHomeMods = ((float64(0.0), float64(0.0)), (float64(0.0), float64(0.0))), ((float64(0.0), float64(0.0)), (float64(0.0), float64(0.0)))
+                previous_ballparks[game["home"]["team_id"]] = ballpark                                             
+                #first, second, justgames_mi_alloc, justgames_mi_free = rtsys.get_allocation_stats()       
+                if len(cachedHomeMods) == 2:                            
+                    cachedAwayMods, cachedHomeMods = mofo.get_park_mods(ballpark, ballpark_mods)                          
+                
+                away_pitcher_stat_data, home_pitcher_stat_data = (float64(pitcher_stat_data[awayPitcher]["unthwackability"]), float64(pitcher_stat_data[awayPitcher]["ruthlessness"]), float64(pitcher_stat_data[awayPitcher]["overpowerment"]), float64(pitcher_stat_data[awayPitcher]["shakespearianism"]), float64(pitcher_stat_data[awayPitcher]["coldness"])), (float64(pitcher_stat_data[homePitcher]["unthwackability"]), float64(pitcher_stat_data[homePitcher]["ruthlessness"]), float64(pitcher_stat_data[homePitcher]["overpowerment"]), float64(pitcher_stat_data[homePitcher]["shakespearianism"]), float64(pitcher_stat_data[homePitcher]["coldness"]))
+                
+                #if (CURRENT_ITERATION > 1) and (int(day) in days_of_interest):
+                #    print("\nDay {}, Game id: {}".format(day, game["away"]["game_id"]))    
+                #    #print("Attrs\n Away team {}\n Home team {}\n Away player {}\n Home player {}\n Away pitcher {}\n Home pitcher {}\n".format(awayAttrs, homeAttrs, awayPlayerAttrs, homePlayerAttrs, awaypitcherAttrs, homepitcherAttrs))
+                #    #print("Stats\n Away def {}\n Away bat {}\n Away run {}\n Away pitch {}\n Home def {}\n Home bat {}\n Home run {}\n Home pitch {}\n".format(away_defense, away_batting, away_running, away_pitcher_stat_data, home_defense, home_batting, home_running, home_pitcher_stat_data))
+                #    print("Misc\n Away shelled {}\n Away aa {}\n Away aaa {}\n Away hp {}\n Home shelled {}\n Home aa {}\n Home aaa {}\n Home hp {}\n".format(away_shelled, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, home_shelled, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod))
+                #    print("Active vs total\n Away batters {}, Away active batters {}\n Home batters {}, Home active batters {}\n".format(len(away_batters), len(away_active_batters), len(home_batters), len(home_active_batters)))
+                if trace_mem or trace_day:            
+                    #print("\nDay {}, Game id: {}".format(day, game["away"]["game_id"])) 
+                    before = tracemalloc.take_snapshot()
+                    before = before.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))               
+                #    
+                #if CURRENT_ITERATION == 1:
+                #    start = datetime.datetime.now()       
+                #    
+                gameid = str(game["away"]["game_id"])         
+                    
+                game_game_counter, game_fail_counter, game_away_val, game_home_val, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = calc_func(gameid, trace_mem, game, awayAttrs, homeAttrs, away_batters, away_active_batters, home_batters, home_active_batters, away_pitcher_stat_data, home_pitcher_stat_data, awayPitcher, homePitcher, list_terms, mods, ballpark, ballpark_mods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, cachedAwayMods, cachedHomeMods, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs)                
+
+                #if CURRENT_ITERATION == 1:
+                #    end = datetime.datetime.now()                
+                #    if ((end-start).total_seconds()) > 1.0:
+                #        print("Game {} - {:.2f} seconds to process".format(game["away"]["game_id"], ((end-start).total_seconds())))
+                if trace_mem or trace_day:
+                    after = tracemalloc.take_snapshot()
+                    after = after.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
+                    top_stats = after.compare_to(before, 'lineno')                            
+                    if top_stats[0].size_diff > 0:                        
+                        print("Increase from day {}, game {}: {}".format(day, game["away"]["game_id"], top_stats[0]))                        
+                        #games_of_interest.append(game["away"]["game_id"])
+                        #print(games_of_interest)
+                    else:
+                        print("No increase from day {}, game {}: {}".format(day, game["away"]["game_id"], top_stats[0]))                        
+                        #print(games_of_interest)
+
+                cachedParkAwayMods[game["home"]["team_id"]], cachedParkHomeMods[game["home"]["team_id"]] = cachedAwayMods[:], cachedHomeMods[:]
+                solved_hits, solved_homers = {**solved_hits, **away_hits, **home_hits}, {**solved_homers, **away_homers, **home_homers}
+                if crimes_list is not None:
+                    solved_steals = {**solved_steals, **away_stolen_bases, **home_stolen_bases}
+                solved_ks[game["away"]["pitcher_id"]], solved_ks[game["home"]["pitcher_id"]] = away_pitcher_ks, home_pitcher_ks
+                solved_era[game["away"]["pitcher_id"]], solved_era[game["home"]["pitcher_id"]] = away_pitcher_era, home_pitcher_era
+                total_away_homers, total_home_homers = sum(away_homers.values()), sum(home_homers.values())
+                solved_meatballs[game["away"]["pitcher_id"]], solved_meatballs[game["home"]["pitcher_id"]] = total_home_homers, total_away_homers                       
+                #print("solved_hits = {}".format(solved_hits))
+                #first, second, postgames_mi_alloc, postgames_mi_free = rtsys.get_allocation_stats()
+                #if ((postgames_mi_alloc - justgames_mi_alloc) - (postgames_mi_free - justgames_mi_free)) > 0:
+                #    print("Leak from just one game = {}".format(((postgames_mi_alloc - justgames_mi_alloc) - (postgames_mi_free - justgames_mi_free))))                                                                  
                 if not is_cached and game_game_counter:
                     good_game_list.extend([game["home"], game["away"]])
                     HAS_GAMES[season] = True
@@ -1031,16 +1179,16 @@ def minimize_func(parameters, *data):
                 game_counter += game_game_counter                
                 if game_game_counter == 1:   
                     daily_games += 1
-                    ev_set[game["away"]["game_id"]] = {}
-                    ev_set[game["away"]["game_id"]]["mofoodds"] = game_away_val
-                    ev_set[game["away"]["game_id"]]["webodds"] = float(game["away"]["webodds"])
-                    ev_set[game["away"]["game_id"]]["season"] = season
+                    #ev_set[game["away"]["game_id"]] = {}
+                    #ev_set[game["away"]["game_id"]]["mofoodds"] = game_away_val
+                    #ev_set[game["away"]["game_id"]]["webodds"] = float(game["away"]["webodds"])
+                    #ev_set[game["away"]["game_id"]]["season"] = season
                     all_vals.append(game_away_val)                       
                     gameids.append(game["away"]["game_id"])
-                    if game_fail_counter == 0:
-                        ev_set[game["away"]["game_id"]]["favorite_won"] = True
-                    else:
-                        ev_set[game["away"]["game_id"]]["favorite_won"] = False
+                    #if game_fail_counter == 0:
+                    #    ev_set[game["away"]["game_id"]]["favorite_won"] = True
+                    #else:
+                    #    ev_set[game["away"]["game_id"]]["favorite_won"] = False
                     if (game_away_val > 0.5 and game_fail_counter == 0) or (game_away_val < 0.5 and game_fail_counter == 1):                        
                         win_loss.append(1)
                         win_loss.append(0)                
@@ -1049,7 +1197,7 @@ def minimize_func(parameters, *data):
                         win_loss.append(1)
                     gameids.append(game["home"]["game_id"])
                     all_vals.append(game_home_val)                      
-                    game_ev, game_mismatch, game_dadbets, game_web_ev, season_ev, season_web_ev = game_ev_calculate(ev_set, game["away"]["game_id"])    
+                    #game_ev, game_mismatch, game_dadbets, game_web_ev, season_ev, season_web_ev = game_ev_calculate(ev_set, game["away"]["game_id"])    
                     
                     fail_counter += game_fail_counter                                                                
                                                    
@@ -1118,12 +1266,24 @@ def minimize_func(parameters, *data):
                                 vals_by_mod["unmod"][game["away"]["game_id"]]["home_win"] = 0
                             else:
                                 vals_by_mod["unmod"][game["away"]["game_id"]]["away_win"] = 0
-                                vals_by_mod["unmod"][game["away"]["game_id"]]["home_win"] = 1
-                            #if solve_for_ev:
-                            #    unmod_web_fails -= game_web_ev  
-                #non_calcfunc_time += (non_calcfunc_time_two - non_calcfunc_time_one) + (time.time() - non_calcfunc_time_three)
-                #calcfunc_time += calcfunc_time_end - calcfunc_time_start
-                #print("Non-calcfunc time = {}\nCalcfunc time     = {}".format(non_calcfunc_time, calcfunc_time))
+                                vals_by_mod["unmod"][game["away"]["game_id"]]["home_win"] = 1                                        
+                
+                #if trace_mem or trace_day:
+                ##if (CURRENT_ITERATION > 1) and (int(day) in days_of_interest):
+                #    after_games = tracemalloc.take_snapshot()
+                #    after_games = after_games.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
+                #    top_stats = after_games.compare_to(before, 'lineno')                        
+                #    if top_stats[0].size_diff > 0:
+                #        print("Increase after game id {} on day {}:\n {}".format(game["away"]["game_id"], day, top_stats[0]))
+                #        if game["away"]["game_id"] not in games_of_interest:
+                #            games_of_interest.append(game["away"]["game_id"])
+                #            print(games_of_interest)                        
+                #        #if previous_gameid not in games_of_interest:
+                #        #    games_of_interest.append(previous_gameid)
+                #        #    print(games_of_interest)                      
+                #    else:
+                #        print("No increase after game id {} on day {}:\n {}\n".format(game["away"]["game_id"], day, top_stats[0]))
+                #previous_gameid = game["away"]["game_id"]
             if solve_batman_too:               
                 if not using_cached_batters:
                     remove_list.clear(), steals_remove_list.clear()                                                          
@@ -1291,27 +1451,60 @@ def minimize_func(parameters, *data):
                 if crimes_list is not None:
                     solved_steals.clear(), solved_seedpickles.clear(), solved_dogpickles.clear(), solved_trifecta.clear(), sorted_solved_steals.clear() 
                     sorted_solved_seedpickles.clear(), sorted_solved_dogpickles.clear(), sorted_solved_trifecta.clear()
-                
+            
             if not is_cached:
                 GAME_CACHE[(season, day)] = good_game_list
+            #if (CURRENT_ITERATION > 1) and (int(day) in days_of_interest):
+            ##if (CURRENT_ITERATION > 1):
+            #    end_dayloop = tracemalloc.take_snapshot()
+            #    end_dayloop = end_dayloop.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
+            #    top_stats = end_dayloop.compare_to(before_gameloop, 'lineno')                        
+            #    if top_stats[0].size_diff > 0:
+            #        print("Increase during day {}: {}".format(day, top_stats[0]))
+            #        #days_of_interest.append(int(day))
+            #        #print(days_of_interest)
+            #    else:
+            #        print("No increase during day {}: {}".format(day, top_stats[0]))
+                
+
+        #if CURRENT_ITERATION > 1:                    
+        #    after_dayloop = tracemalloc.take_snapshot()
+        #    after_dayloop = after_dayloop.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+        #    top_stats = after_dayloop.compare_to(before_dayloop, 'lineno')                                
+        #    if top_stats[0].size_diff > 0:                        
+        #        print("Increase after dayloop: {}".format(top_stats[0]))
+        #    else:                        
+        #        print("No increase after dayloop: {}".format(top_stats[0]))
         if season not in HAS_GAMES:
             HAS_GAMES[season] = False
-        season_end = datetime.datetime.now()
-        
+        season_end = datetime.datetime.now()       
+
+    #print("Games of interest:\n{}".format(version))
+    #first, second, pgame_mi_alloc, pgame_mi_free = rtsys.get_allocation_stats()        
+    #if CURRENT_ITERATION > 1:                    
+    #    after_games = tracemalloc.take_snapshot()
+    #    after_games = after_games.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+    #    top_stats = after_games.compare_to(before_games, 'lineno')                                
+    #    if top_stats[0].size_diff > 0:                        
+    #        print("Increase between games start and games end: {}".format(top_stats[0]))
+
+    #destroy on first iteration
+    #firehog = skiddlebumkin
+
     if not reject_solution:
         fail_rate = fail_counter / game_counter       
     else:
         fail_rate = 1.0             
             
+    #first, second, batlin_mi_alloc, batlin_mi_free = rtsys.get_allocation_stats()
     batman_linearity_error = {}
-
-    for event in all_event_values:
-        #print("Checking {}".format(event))
-        batman_linearity_error[event] = sort_batman_linear_penalty(event, all_event_values[event], MAX_EVENTS[event])
-
-    del solved_hits, solved_homers, solved_seeddogs, solved_ks, solved_era, solved_meatballs, solved_chipsmeatballs, sorted_solved_hits, sorted_solved_homers, sorted_solved_seeddogs, sorted_solved_ks, sorted_solved_era, sorted_solved_meatballs, sorted_solved_chipsmeatballs
-    if crimes_list is not None:
-        del solved_steals, solved_seedpickles, solved_dogpickles, solved_trifecta, sorted_solved_steals, sorted_solved_seedpickles, sorted_solved_dogpickles, sorted_solved_trifecta
+    
+    for event in all_event_values:     
+        batman_linearity_error[event] = sort_batman_linear_penalty(event, all_event_values[event], MAX_EVENTS[event])    
+    
+    #first, second, post_mi_alloc, post_mi_free = rtsys.get_allocation_stats()
+    #if ((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)) > 0:
+    #    print("Leak from batman linearity = {}".format(((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free))))     
 
     #max_individual_event = max(MAX_EVENTS["hits"], MAX_EVENTS["homers"], MAX_EVENTS["steals"], MAX_EVENTS["chips"], MAX_EVENTS["meatballs"])
 
@@ -1324,8 +1517,7 @@ def minimize_func(parameters, *data):
     chips_error = batman_linearity_error["chips"] * linear_correction
     meatballs_error = batman_linearity_error["meatballs"] * linear_correction    
 
-    all_event_values.clear()
-    del all_event_values    
+    all_event_values.clear()    
             
     fail_points, linear_points = 10000000000.0, 10000000000.0    
     max_fail_rate, expected_average = 0.0, 0.25
@@ -1379,6 +1571,7 @@ def minimize_func(parameters, *data):
         weighted_best_error = errors["all"]
         linear_error += weighted_best_error                
     
+    #first, second, sollin_mi_alloc, sollin_mi_free = rtsys.get_allocation_stats()
     if not reject_solution:
         if len(win_loss) > 0:        
             #Remember to negate ev is when we can pass it through and make better results when EV is bigger
@@ -1513,117 +1706,99 @@ def minimize_func(parameters, *data):
                     linear_fail = linear_points     
     
     minimum_focused_error, min_factors_alls = 0.0, 0.0
-    if solution_regen:
-        publish_solution = True        
-        if CURRENT_ITERATION == 1:
-            factor_file = open(factorsdir, "rb")        
-            FACTORS = pickle.load(factor_file)        
-            factor_file.close()                    
-        for possible_focus in FACTORS:
-            if possible_focus == "all":
-                max_all = max(FACTORS["all"])
-                max_all_idx = FACTORS["all"].index(max_all)
-                continue
-            focused_values = List(FACTORS[possible_focus])
-            possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)
-            focused_result = errors[possible_focus] * (possible_result / possible_focused)
-            if (focused_result < minimum_focused_error) or (minimum_focused_error == 0.0):
-                minimum_focused_error = focused_result           
-    else:        
-        factor_file = open(factorsdir, "rb")        
-        FACTORS = pickle.load(factor_file)        
-        factor_file.close()
-        publish_solution = False
-        #print("Testing that this part works correctly: factors = {}".format(FACTORS))
-        last_possible_result, max_focused_error = 0.0, 0.0
-        for possible_focus in FACTORS:
-            if possible_focus == "all":
-                max_all = max(FACTORS["all"])
-                max_all_idx = FACTORS["all"].index(max_all)                
-                if linear_points < max_all:
-                    publish_solution = True
-                #print("Checking linear points {}, max_all {}, publish solution {}, logic check = {}".format(linear_points, max_all, publish_solution, linear_points < max_all))
-                continue
-            #print("Possible focus = {}".format(possible_focus))
-            focused_values = List(FACTORS[possible_focus])
-            possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                                    
-            focused_result = errors[possible_focus] * (possible_result / possible_focused)
-            if (focused_result < minimum_focused_error) or (minimum_focused_error == 0.0):
-                minimum_focused_error = focused_result
-            if (errors[possible_focus] < possible_focused) and (linear_points < possible_result):
-                publish_solution = True                
-            if possible_result >= last_possible_result:
-                focused_result = possible_focused
-                last_possible_result = possible_result
-                focus = possible_focus  
-            if (min_factors_alls == 0.0) or (min_factors_alls > possible_min_all):
-                min_factors_alls = possible_min_all
-        if max_all > min_factors_alls:
-            focus = "all"        
-        if CURRENT_ITERATION == 1:
-            BEST_RESULT = min(FACTORS["all"])    
-        #publish_solution = linear_fail < BEST_RESULT
+    possible_replacement_index = 0    
+    #first, second, factor_mi_alloc, factor_mi_free = rtsys.get_allocation_stats()
+    factor_file = open(factorsdir, "rb")        
+    FACTORS = pickle.load(factor_file)        
+    factor_file.close()
+    publish_solution = False
+    #print("Testing that this part works correctly: factors = {}".format(FACTORS))
+    last_possible_result, max_focused_error = 0.0, 0.0
+    for possible_focus in FACTORS:
+        if possible_focus == "all":
+            max_all = max(FACTORS["all"])
+            max_all_idx = FACTORS["all"].index(max_all)                
+            if linear_points < max_all:
+                publish_solution = True
+            #print("Checking linear points {}, max_all {}, publish solution {}, logic check = {}".format(linear_points, max_all, publish_solution, linear_points < max_all))
+            continue        
+        focused_values = np.array(FACTORS[possible_focus])
+        #first, second, pre_mi_alloc, pre_mi_free = rtsys.get_allocation_stats()    
+        possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                                    
+        #first, second, post_mi_alloc, post_mi_free = rtsys.get_allocation_stats()
+        #if ((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)) > 0:
+        #    print("Leak from get factor and best = {}".format(((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free))))         
+        focused_result = errors[possible_focus] * (possible_result / possible_focused)
+        if (focused_result < minimum_focused_error) or (minimum_focused_error == 0.0):
+            minimum_focused_error = focused_result
+        if (errors[possible_focus] < possible_focused) and (linear_points < possible_result):
+            publish_solution = True                
+        if possible_result >= last_possible_result:
+            focused_result = possible_focused
+            last_possible_result = possible_result
+            focus = possible_focus  
+        if (min_factors_alls == 0.0) or (min_factors_alls > possible_min_all):
+            min_factors_alls = possible_min_all
+    if max_all > min_factors_alls:
+        focus = "all"        
+    BEST_RESULT = min(FACTORS["all"])    
+    #if CURRENT_ITERATION == 1:        
+    #publish_solution = linear_fail < BEST_RESULT
 
     if CURRENT_ITERATION == 1: 
         SOLUTIONS_TO_FILL = popsize
+        BEST_RESULT = min(FACTORS["all"])    
         print("All Factors = {}".format(FACTORS))
         FAILED_SOLUTIONS = [BEST_RESULT] * popsize
-    elif focus != PREVIOUS_FOCUS:  
-        SOLUTIONS_TO_FILL = popsize
-        print("Previous focus = {}, current focus = {}".format(PREVIOUS_FOCUS, focus))
-        for idx in range(0, len(FAILED_SOLUTIONS)):
-            FAILED_SOLUTIONS[idx] = BEST_RESULT
+    #elif focus != PREVIOUS_FOCUS:  
+    #    SOLUTIONS_TO_FILL = popsize
+    #    print("Previous focus = {}, current focus = {}".format(PREVIOUS_FOCUS, focus))
+    #    for idx in range(0, len(FAILED_SOLUTIONS)):
+    #        FAILED_SOLUTIONS[idx] = BEST_RESULT
 
     population_member = CURRENT_ITERATION % popsize    
     #publish_solution = linear_fail < FAILED_SOLUTIONS[population_member]    
-    #if ((linear_fail < BEST_RESULT) and publish_solution and focus == "all") or (publish_solution and focus != "all") or solution_regen:     
+    #if ((linear_fail < BEST_RESULT) and publish_solution and focus == "all") or (publish_solution and focus != "all") or solution_regen:
+    #first, second, prepub_mi_alloc, prepub_mi_free = rtsys.get_allocation_stats()     
     if publish_solution or solution_regen:
         #if focus == "all":
-        BEST_RESULT = linear_fail                
+        #BEST_RESULT = linear_fail                
         #reported_focus = []       
         # 
         #commented out for dealing with init data
-        if not solution_regen:
-            factor_file = open(factorsdir, "rb")        
-            FACTORS = pickle.load(factor_file)
-            factor_file.close()        
-            factor_write_file = open(factorsdir, "wb")
-            for pot_focus in FACTORS:
-                if pot_focus == "all":
+        #if not solution_regen:
+        factor_file = open(factorsdir, "rb")        
+        FACTORS = pickle.load(factor_file)
+        factor_file.close()                    
+        for pot_focus in FACTORS:
+            if pot_focus == "all":
+                max_all = max(FACTORS["all"])
+                max_all_idx = FACTORS["all"].index(max_all)
+                if int(linear_points) < max_all:
+                    FACTORS["all"][max_all_idx] = int(linear_points)                        
                     max_all = max(FACTORS["all"])
-                    max_all_idx = FACTORS["all"].index(max_all)
-                    if linear_points < max_all:
-                        FACTORS["all"][max_all_idx] = linear_points
-                        pickle.dump(FACTORS, factor_write_file)
-                        max_all = max(FACTORS["all"])
-                    continue
-                focused_values = List(FACTORS[pot_focus])
-                possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                
-                if (errors[pot_focus] < possible_focused) and (linear_points < possible_result):
-                    #reported_focus.append(pot_focus)
-                    FACTORS[pot_focus][possible_replacement_index] = (int(errors[pot_focus]), int(linear_points))                        
-                    pickle.dump(FACTORS, factor_write_file)
-                    if pot_focus == focus:       
-                        focused_values = List(FACTORS[focus])
-                        new_result, new_focused, new_best_focus, new_replacement_index, possible_min_all = get_factor_and_best(focused_values)
-                focused_result = errors[pot_focus] * (possible_result / possible_focused)
-                if (focused_result < minimum_focused_error) or (minimum_focused_error == 0.0):
-                    minimum_focused_error = focused_result
-                focused_error = possible_factor * (possible_result / possible_focused)
-                max_focused_error = max(max_focused_error, focused_error, possible_result)
-            factor_write_file.close()         
-            if focus != "all":
-                BEST_RESULT = min(minimum_focused_error, BEST_RESULT)    
+                continue            
+            focused_values = np.array(FACTORS[pot_focus])
+            possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                
+            if errors[pot_focus] < possible_focused:                
+                FACTORS[pot_focus][possible_replacement_index] = (int(errors[pot_focus]), int(linear_points))                                    
+            focused_result = errors[pot_focus] * (possible_result / possible_focused)
+            if (focused_result < minimum_focused_error) or (minimum_focused_error == 0.0):
+                minimum_focused_error = focused_result
+            focused_error = possible_factor * (possible_result / possible_focused)
+            max_focused_error = max(max_focused_error, focused_error, possible_result)
+        factor_write_file = open(factorsdir, "wb")
+        pickle.dump(FACTORS, factor_write_file)
+        factor_write_file.close()   
+        BEST_RESULT = min(FACTORS["all"])    
+        #if focus != "all":
+        #    BEST_RESULT = min(minimum_focused_error, BEST_RESULT)    
                             
         PLUS_NAME = best_plusname
         WORST_MOD = new_worstmod                                          
         if len(win_loss) > 0:
-            BEST_FAIL_RATE = fail_rate            
-            if solve_for_ev:
-                BEST_FAILCOUNT = ev_neg_count
-                LAST_BEST = BEST_FAILCOUNT
-            else:                
-                LAST_BEST = new_worstmod_linear_error                               
+            BEST_FAIL_RATE = fail_rate                             
+            LAST_BEST = new_worstmod_linear_error                               
             if mod_mode:                                             
                 BEST_UNMOD = unmod_rate if (abs(unmod_rate - 25.0) < abs(BEST_UNMOD - 25.0)) else BEST_UNMOD                                
                 #BEST_MOD_RATES["error"] = (max_linear_error - min_linear_error) if ((max_linear_error - min_linear_error) < BEST_MOD_RATES["error"]) else BEST_MOD_RATES["error"]
@@ -1761,18 +1936,20 @@ def minimize_func(parameters, *data):
         else:
             FAILED_SOLUTIONS[population_member] = min(linear_fail, FAILED_SOLUTIONS[population_member])
 
-    #if CURRENT_ITERATION % 500 == 0:
+    #if CURRENT_ITERATION % 10 == 0:
+    #    print("Calling garbage collector")
     #    gc.collect()
     #    time.sleep(10)
+    #    print("Garbage collected")
 
     if (CURRENT_ITERATION % 10 == 0 and CURRENT_ITERATION <= 50) or (CURRENT_ITERATION % 100 == 0 and CURRENT_ITERATION < 1000) or (CURRENT_ITERATION % 500 == 0):
         if len(win_loss) > 0:                        
             worstmod_report = WORST_MOD + (" " + PLUS_NAME if (PLUS_NAME != "") else "")                                                             
             try:         
                 solutions_to_evaluate = FAILED_SOLUTIONS[:]
-                if focus == "all":
-                    if min(solutions_to_evaluate) == BEST_RESULT:
-                        solutions_to_evaluate.remove(BEST_RESULT)
+                #if focus == "all":
+                if min(solutions_to_evaluate) == BEST_RESULT:
+                    solutions_to_evaluate.remove(BEST_RESULT)
                 #else:
                 #    while min(solutions_to_evaluate) < BEST_RESULT:
                 #        remove_value = min(solutions_to_evaluate)
@@ -1788,14 +1965,55 @@ def minimize_func(parameters, *data):
             debug_print("Best so far - {:.2f}, iteration #{}, {}, {:.2f} seconds".format(BEST_RESULT, CURRENT_ITERATION, solutions_text, (now-LAST_ITERATION_TIME).total_seconds()), debug, now)   
             LAST_ITERATION_TIME = now
         else:
-            debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())
-    CURRENT_ITERATION += 1           
+            debug_print("Best so far - {:.4f}, iteration # {}".format(BEST_RESULT, CURRENT_ITERATION), debug, datetime.datetime.now())    
     now = datetime.datetime.now()          
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
-    PREVIOUS_FOCUS = focus
-    return_value = focused_fail if (focus != "all") else linear_fail                 
+    PREVIOUS_FOCUS = focus    
+    #if CURRENT_ITERATION > 1:                    
+    #    end_method = tracemalloc.take_snapshot()
+    #    end_method = end_method.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+    #    top_stats = end_method.compare_to(after_games, 'lineno')                                
+    #    if top_stats[0].size_diff > 0:                        
+    #        print("Increase between games end and method end: {}".format(top_stats[0]))
+    if CURRENT_ITERATION == 1:
+        SNAPSHOT = tracemalloc.take_snapshot()
+        SNAPSHOT = SNAPSHOT.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+        #SNAPSHOT = SNAPSHOT.filter_traces((tracemalloc.Filter(False, "*tracemalloc.py"),))        
+    elif CURRENT_ITERATION > 1:
+        new_snapshot = tracemalloc.take_snapshot()
+        new_snapshot = new_snapshot.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
+        #new_snapshot = new_snapshot.filter_traces((tracemalloc.Filter(False, "*tracemalloc.py"),))        
+        top_stats = new_snapshot.compare_to(SNAPSHOT, 'lineno')        
+        print("Iteration {}: {}".format(CURRENT_ITERATION, top_stats[0]))        
+        #for stat in top_stats:
+        #    if stat.size_diff > 10000:
+        #        print(stat)        
+        SNAPSHOT = new_snapshot   
+        if CURRENT_ITERATION == 3:
+            firehog = skiddlebumkin
+    CURRENT_ITERATION += 1           
+    #first, second, post_mi_alloc, post_mi_free = rtsys.get_allocation_stats()           
+    #if ((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)) > 0:
+    #    print("Leak from single iteration = {}".format(((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)))) 
+    #if ((post_mi_alloc - termlist_mi_alloc) - (post_mi_free - termlist_mi_free)) > 0:
+    #    print("Leak from termlists = {}".format(((post_mi_alloc - termlist_mi_alloc) - (post_mi_free - termlist_mi_free)))) 
+    #if ((post_mi_alloc - somev_mi_alloc) - (post_mi_free - somev_mi_free)) > 0:
+    #    print("Leak from before some early vars = {}".format(((post_mi_alloc - somev_mi_alloc) - (post_mi_free - somev_mi_free)))) 
+    #if ((post_mi_alloc - preg_mi_alloc) - (post_mi_free - preg_mi_free)) > 0:
+    #    print("Leak from just before games = {}".format(((post_mi_alloc - preg_mi_alloc) - (post_mi_free - preg_mi_free)))) 
+    #if ((post_mi_alloc - pgame_mi_alloc) - (post_mi_free - pgame_mi_free)) > 0:
+    #    print("Leak from just after games = {}".format(((post_mi_alloc - pgame_mi_alloc) - (post_mi_free - pgame_mi_free)))) 
+    #if ((post_mi_alloc - batlin_mi_alloc) - (post_mi_free - batlin_mi_free)) > 0:
+    #    print("Leak from batman linearity = {}".format(((post_mi_alloc - batlin_mi_alloc) - (post_mi_free - batlin_mi_free)))) 
+    #if ((post_mi_alloc - sollin_mi_alloc) - (post_mi_free - sollin_mi_free)) > 0:
+    #    print("Leak from odds linearity = {}".format(((post_mi_alloc - sollin_mi_alloc) - (post_mi_free - sollin_mi_free)))) 
+    #if ((post_mi_alloc - factor_mi_alloc) - (post_mi_free - factor_mi_free)) > 0:
+    #    print("Leak from factor updates = {}".format(((post_mi_alloc - factor_mi_alloc) - (post_mi_free - factor_mi_free)))) 
+    #if ((post_mi_alloc - prepub_mi_alloc) - (post_mi_free - prepub_mi_free)) > 0:
+    #    print("Leak from publishing = {}".format(((post_mi_alloc - prepub_mi_alloc) - (post_mi_free - prepub_mi_free))))     
+    #return_value = focused_fail if (focus != "all") else linear_fail            
     #return return_value
     #return BEST_RESULT
     return linear_fail
