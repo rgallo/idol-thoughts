@@ -2,7 +2,6 @@ import collections
 import csv
 import sys
 import time
-import random
 import datetime
 import json
 import pickle
@@ -13,13 +12,12 @@ import math
 import copy
 import mofo
 from numba import njit, float64
-from numba.typed import List
+#from numba.typed import List
 import numpy as np
 from glob import glob
 
-from helpers import StlatTerm, ParkTerm, get_weather_idx, WEATHERS
-from helpers import load_stat_data, load_stat_data_pid, adjust_by_pct, calculate_adjusted_stat_data
-from helpers import DEFENSE_STLATS, defense_stars, BATTING_STLATS, batting_stars, BASERUNNING_STLATS, baserunning_stars
+from helpers import StlatTerm, ParkTerm, get_weather_idx
+from helpers import load_stat_data_pid, calculate_adjusted_stat_data
 from statistics import fmean, StatisticsError
 
 #import gc
@@ -28,8 +26,8 @@ from statistics import fmean, StatisticsError
 #from numba.core.registry import cpu_target
 #cpu_target.target_context
 
-import tracemalloc
-tracemalloc.start()    
+#import tracemalloc
+#tracemalloc.start()    
 
 STAT_CACHE = {}
 BALLPARK_CACHE = {}
@@ -79,16 +77,16 @@ EXPECTED_MOD_RATES = {}
 HAS_GAMES = {}
 FAILED_SOLUTIONS = []
 LAST_ITERATION_TIME = datetime.datetime.now()
-SNAPSHOT = tracemalloc.take_snapshot()
+#SNAPSHOT = tracemalloc.take_snapshot()
 
 ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "A", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
-ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
+#ALLOWED_IN_BASE = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE", "0", "H20", "AAA", "AA", "ACIDIC", "FIERY", "PSYCHIC", "ELECTRIC", "SINKING_SHIP"}
 ALLOWED_IN_BASE_BATMAN = {"AFFINITY_FOR_CROWS", "GROWTH", "EXTRA_STRIKE", "LOVE", "O_NO", "BASE_INSTINCTS", "TRAVELING", "HIGH_PRESSURE"}
 FORCE_REGEN = {"AFFINITY_FOR_CROWS", "GROWTH", "TRAVELING", "SINKING_SHIP"}
 DIRECT_MOD_SOLVES = {"psychic", "a", "acidic", "base_instincts", "electric", "fiery", "love"}
 CALC_MOD_SUCCESS = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electric", "fiery", "love", "high_pressure", "a", "0", "o_no", "h20"}
-DIRECT_MOD_SOLVES = {"psychic", "acidic", "base_instincts", "electric", "fiery", "love"}
-CALC_MOD_SUCCESS = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electric", "fiery", "love", "high_pressure", "0", "o_no", "h20"}
+#DIRECT_MOD_SOLVES = {"psychic", "acidic", "base_instincts", "electric", "fiery", "love"}
+#CALC_MOD_SUCCESS = {"psychic", "aa", "acidic", "aaa", "base_instincts", "electric", "fiery", "love", "high_pressure", "0", "o_no", "h20"}
 
 BIRD_WEATHER = get_weather_idx("Birds")
 FLOOD_WEATHER = get_weather_idx("Flooding")
@@ -105,7 +103,7 @@ def jitclassed_stlatterms(parameters):
 
 def get_lists_from_loop(batter_order, team_stat_data, team):    
     playerAttrs = []
-    shelled = np.zeros((20), dtype=bool)
+    shelled = np.zeros(20, dtype=bool)
     defense_data, batting_data, running_data = np.zeros((20, 5)), np.zeros((20, 7)), np.zeros((20, 5))
     active_batter = 0
     for idx in range(0, len(batter_order)):
@@ -284,23 +282,22 @@ def debug_print(s, debug, run_id):
     if debug:
         print("{} - {}".format(run_id, s))
 
-@njit
+@njit(nogil=True)
 def get_factor_and_best(focused_values):  
     replacement_index = 6
     best_all, best_focused, max_value, min_all = 0.0, 0.0, 0.0, 0.0
     for idx in range(0, len(focused_values)):                
         if float(focused_values[idx][1]) > best_all:
-            best_all = float(focused_values[idx][1])
-            best_focused = float(focused_values[idx][0])
+            best_all = float(focused_values[idx][1])                       
         if float(focused_values[idx][0]) > max_value:
-            max_value = float(focused_values[idx][0])
             replacement_index = int(idx)
+            best_focused = float(focused_values[idx][0]) 
+            max_value = best_focused
         if (min_all == 0.0) or (float(focused_values[idx][1]) < min_all):
             min_all = float(focused_values[idx][1])
     return best_all, best_focused, max_value, replacement_index, min_all
 
-def calc_linear_unex_error(vals, wins_losses, modname=None):        
-    max_error_game = ""    
+def calc_linear_unex_error(vals, wins_losses, modname=None):
     exponent_check = modname == "psychic" or modname == "a" or modname == "acidic" or modname == "base_instincts" or modname == "electric" or modname == "fiery" or modname == "love" or modname == "overall"
     exponent = 4.0 if exponent_check else 6.0
     window_size, half_window = 100, 50                 
@@ -312,23 +309,23 @@ def calc_linear_unex_error(vals, wins_losses, modname=None):
     
     return error, max_error, min_error, max_error_val, min_error_val
 
-@njit
+@njit(nogil=True)
 def linear_unex_loop(window_size, half_window, vals, wins_losses, exponent, win_threshold):        
     error, max_error, min_error, max_error_val, min_error_val, current_error = 0.0, 0.0, 150.0, 0.0, 0.0, 0.0  
     for idx in range(window_size - 1, len(vals)):                     
         #wins.append(wins_losses[idx])                                        
         #wins_losses[(idx - (window_size - 1)):idx]
-        if (sum(wins_losses[(idx - (window_size - 1)):idx]) > 1):
+        if sum(wins_losses[(idx - (window_size - 1)):idx]) > 1:
             win_threshold = True            
         if win_threshold:            
             current_error = max(abs((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size)))), 1.0) - 1.0
             if (((float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size))) > 50.0) and ((vals[idx - half_window] * 100.0) < 50.0)) or (((float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size))) < 50.0) and ((vals[idx - half_window] * 100.0) > 50.0)):
                 current_error *= 2.0
             error += current_error ** exponent                               
-            if (((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size)))) > max_error):
+            if ((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size)))) > max_error:
                 max_error = ((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / window_size)))
                 max_error_val = (vals[idx - half_window] * 100.0)                                
-            if (((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size)))) < min_error):
+            if ((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size)))) < min_error:
                 min_error = ((vals[idx - half_window] * 100.0) - (float(sum(wins_losses[(idx - (window_size - 1)):idx])) * (100.0 / float(window_size))))
                 min_error_val = (vals[idx - half_window] * 100.0)                                               
         #del wins[0]
@@ -359,7 +356,7 @@ def calc_best_penalty(best_leader_score, solved_leader_score, solved_score, best
 
 #different idea for potential use later - gather and evaluate all solved scores within a particular value that are less than or equal to the average of the solved score of a previous value and evaluate thier linear penalty accordingly
 
-@njit
+@njit(nogil=True)
 def calc_batman_linear_penalty(logbase, scores, real_values, sorted_real_values, mean_event, exponent):
     penalty = 0.0      
     for idx in range(0, scores):                          
@@ -368,7 +365,7 @@ def calc_batman_linear_penalty(logbase, scores, real_values, sorted_real_values,
             penalty += (logtransform * 100.0) ** exponent     
     return penalty
 
-def sort_batman_linear_penalty(event, event_values, max_event):
+def sort_batman_linear_penalty(event, event_values):
     global CACHED_NONZERO_MEAN
     global CACHED_SORTED_REAL    
     unsorted_real_values, unsorted_solved_values = list(event_values["real_values"]), list(event_values["solved_values"])    
@@ -634,7 +631,7 @@ def minimize_func(parameters, *data):
     #global JITCLASSED_TUPLELIST
     #global STLAT_TERMS
     #global VALUES_OF_FOCUS
-    global SNAPSHOT                 
+    #global SNAPSHOT                 
     #if CURRENT_ITERATION > 1:                    
     #    start_method = tracemalloc.take_snapshot()
     #    start_method = start_method.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
@@ -958,8 +955,8 @@ def minimize_func(parameters, *data):
             #        print("Increase before games on day {}: {}".format(day, top_stats[0]))
             #trace_mem = (CURRENT_ITERATION == 1) and (int(day) == 1)
             for game in paired_games:               
-                #trace_mem = (CURRENT_ITERATION > 1) and (game["away"]["game_id"] in games_of_interest)                
-                trace_mem = True
+                trace_mem = (CURRENT_ITERATION > 1) and (game["away"]["game_id"] in games_of_interest)                
+                #trace_mem = True
                 #trace_day = (CURRENT_ITERATION > 1) and (int(day) in days_of_interest)                
                 trace_day = False
                 #trace_mem = (CURRENT_ITERATION > 1) and (int(day) in days_of_interest)
@@ -1131,33 +1128,39 @@ def minimize_func(parameters, *data):
                 #    #print("Stats\n Away def {}\n Away bat {}\n Away run {}\n Away pitch {}\n Home def {}\n Home bat {}\n Home run {}\n Home pitch {}\n".format(away_defense, away_batting, away_running, away_pitcher_stat_data, home_defense, home_batting, home_running, home_pitcher_stat_data))
                 #    print("Misc\n Away shelled {}\n Away aa {}\n Away aaa {}\n Away hp {}\n Home shelled {}\n Home aa {}\n Home aaa {}\n Home hp {}\n".format(away_shelled, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, home_shelled, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod))
                 #    print("Active vs total\n Away batters {}, Away active batters {}\n Home batters {}, Home active batters {}\n".format(len(away_batters), len(away_active_batters), len(home_batters), len(home_active_batters)))
-                if trace_mem or trace_day:            
-                    #print("\nDay {}, Game id: {}".format(day, game["away"]["game_id"])) 
-                    before = tracemalloc.take_snapshot()
-                    before = before.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))               
+                #if trace_mem or trace_day:            
+                #    #print("\nDay {}, Game id: {}".format(day, game["away"]["game_id"])) 
+                #    before = tracemalloc.take_snapshot()
+                #    before = before.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))               
                 #    
                 #if CURRENT_ITERATION == 1:
                 #    start = datetime.datetime.now()       
                 #    
-                gameid = str(game["away"]["game_id"])         
+                #gameid = str(game["away"]["game_id"])         
                     
-                game_game_counter, game_fail_counter, game_away_val, game_home_val, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = calc_func(gameid, trace_mem, game, awayAttrs, homeAttrs, away_batters, away_active_batters, home_batters, home_active_batters, away_pitcher_stat_data, home_pitcher_stat_data, awayPitcher, homePitcher, list_terms, mods, ballpark, ballpark_mods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, cachedAwayMods, cachedHomeMods, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs)                
+                game_game_counter, game_fail_counter, game_away_val, game_home_val, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = calc_func(game, awayAttrs, homeAttrs, away_batters, away_active_batters, home_batters, home_active_batters, away_pitcher_stat_data, home_pitcher_stat_data, awayPitcher, homePitcher, list_terms, mods, ballpark, ballpark_mods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, cachedAwayMods, cachedHomeMods, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs)                
 
                 #if CURRENT_ITERATION == 1:
                 #    end = datetime.datetime.now()                
                 #    if ((end-start).total_seconds()) > 1.0:
                 #        print("Game {} - {:.2f} seconds to process".format(game["away"]["game_id"], ((end-start).total_seconds())))
-                if trace_mem or trace_day:
-                    after = tracemalloc.take_snapshot()
-                    after = after.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
-                    top_stats = after.compare_to(before, 'lineno')                            
-                    if top_stats[0].size_diff > 0:                        
-                        print("Increase from day {}, game {}: {}".format(day, game["away"]["game_id"], top_stats[0]))                        
-                        #games_of_interest.append(game["away"]["game_id"])
-                        #print(games_of_interest)
-                    else:
-                        print("No increase from day {}, game {}: {}".format(day, game["away"]["game_id"], top_stats[0]))                        
-                        #print(games_of_interest)
+                #if trace_mem or trace_day:
+                #    after = tracemalloc.take_snapshot()
+                #    after = after.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
+                #    top_stats = after.compare_to(before, 'lineno')                            
+                #    if top_stats[0].size_diff > 0:                        
+                #        print("Increase from day {}, game {}:\n".format(day, game["away"]["game_id"]))                        
+                #        for idx in range(0, len(top_stats)):
+                #            if top_stats[idx].size_diff > 0:
+                #                print(top_stats[idx])                        
+                ##        #games_of_interest.append(game["away"]["game_id"])
+                ##        #print(games_of_interest)
+                #    else:
+                #        print("No increase from day {}, game {}:\n".format(day, game["away"]["game_id"]))                        
+                #        print(top_stats[0])          
+                #        #for idx in range(0, len(top_stats)):
+                #        #    print(top_stats[idx])          
+                #        #print(games_of_interest)
 
                 cachedParkAwayMods[game["home"]["team_id"]], cachedParkHomeMods[game["home"]["team_id"]] = cachedAwayMods[:], cachedHomeMods[:]
                 solved_hits, solved_homers = {**solved_hits, **away_hits, **home_hits}, {**solved_homers, **away_homers, **home_homers}
@@ -1500,7 +1503,7 @@ def minimize_func(parameters, *data):
     batman_linearity_error = {}
     
     for event in all_event_values:     
-        batman_linearity_error[event] = sort_batman_linear_penalty(event, all_event_values[event], MAX_EVENTS[event])    
+        batman_linearity_error[event] = sort_batman_linear_penalty(event, all_event_values[event])
     
     #first, second, post_mi_alloc, post_mi_free = rtsys.get_allocation_stats()
     #if ((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)) > 0:
@@ -1530,18 +1533,15 @@ def minimize_func(parameters, *data):
     max_mod_rates, mod_win_loss, mod_gameids, errors, sorted_win_loss, mod_vals = [], [], [], [], [], []
     other_errors, linear_by_mod = {}, {}
     linear_fail = 9000000000000000.0    
-    season_fail = 100000000.0
+
     calculate_solution = True
-    batman_score, correction_adjustment = 1.0, 1.0
-    if solve_batman_too:        
-        pickles_penalty, seedpickles_penalty, dogpickles_penalty, trifecta_penalty = 0.0, 0.0, 0.0, 0.0                
+    if solve_batman_too:
         #combine seed and dog events together into one        
         seeds_score = seeds_score_earned / seeds_score_max
         dogs_score = dogs_score_earned / dogs_score_max        
         seeddogs_score = seeddogs_score_earned / seeddogs_score_max
         chips_score = chips_score_earned / chips_score_max        
         meatballs_score = meatballs_score_earned / meatballs_score_max
-        allpitchresults_score = (chips_score + seeds_score + dogs_score + meatballs_score) / 4.0        
         chipsmeatballs_score = chipsmeatballs_score_earned / chipsmeatballs_score_max
         burgers_score, chipsburgers_score = 0.0, 0.0
         if burgers_score_max > 0.0:
@@ -1549,7 +1549,6 @@ def minimize_func(parameters, *data):
             chipsburgers_score = chipsburgers_score_earned / chipsburgers_score_max         
         if crimes_list is not None:
             pickles_score = pickles_score_earned / pickles_score_max
-            allhitspickles_score = ((seedpickles_score_earned / seedpickles_score_max) + (dogpickles_score_earned / dogpickles_score_max)) / 2.0            
             seedpickles_score = seedpickles_score_earned / seedpickles_score_max
             dogpickles_score = dogpickles_score_earned / dogpickles_score_max
             trifecta_score = trifecta_score_earned / trifecta_score_max                                    
@@ -1560,7 +1559,6 @@ def minimize_func(parameters, *data):
             print("Max pitching earnings = chips {:.0f}, burgers {:.0f}, meatballs {:.0f}, chips+burgers {:.0f}, chips+meatballs {:.0f}".format(chips_score_max, burgers_score_max, meatballs_score_max, chipsburgers_score_max, chipsmeatballs_score_max))
             print("{} Shutout pitchers, {} pitchers, {} batters".format(sho_pitchers, chips_pitchers, hitters))                                  
         best_error = seeds_error + dogs_error + pickles_error + chips_error + meatballs_error + burger_penalty
-        weighted_multiplier, unweighted_multiplier, pickles_multiplier = 3.0, 0.7, 1.0
         errors = {}
         errors["all"] = seeds_error + dogs_error + pickles_error + chips_error + meatballs_error + burger_penalty        
         errors["seeds"] = seeds_error
@@ -1575,7 +1573,6 @@ def minimize_func(parameters, *data):
     if not reject_solution:
         if len(win_loss) > 0:        
             #Remember to negate ev is when we can pass it through and make better results when EV is bigger
-            expected_val, mismatches, dadbets, web_ev, current_mofo_ev, current_web_ev = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0   
             pos_vals = [val for val in all_vals if val >= 0.5]
             #for val in all_vals:
             #    if val >= 0.5:
@@ -1621,7 +1618,6 @@ def minimize_func(parameters, *data):
                 mod_linear_error, mod_max_linear_error, mod_min_linear_error, mod_max_error_value, mod_min_error_value = calc_linear_unex_error(mod_vals, sorted_win_loss, modname)                
                 mod_pos_vals = [val for val in mod_vals if val >= 0.5]                            
                 if modname == "unmod":
-                    unmod_linear_error = mod_linear_error                        
                     mod_rate = unmod_rate
                 elif not new_plusname == "":
                     mod_rate = (mod_rates[modname] + mod_rates[new_plusname]) / 2.0                        
@@ -1631,8 +1627,7 @@ def minimize_func(parameters, *data):
                 mod_pos_vals.clear()
                 EXPECTED_MOD_RATES[modname] = mod_expected_average
                 if not new_plusname == "":
-                    EXPECTED_MOD_RATES[new_plusname] = mod_expected_average                    
-                linear_error_reduction = (1.0 - (abs(mod_rate - mod_expected_average) / 100.0)) * (100.0 - mod_expected_average)    
+                    EXPECTED_MOD_RATES[new_plusname] = mod_expected_average
                 #include batman modifier before subtraction, to make sure large batman errors don't inflate a large negative number                
                 mod_linear_error *= modcount if modname not in DIRECT_MOD_SOLVES else 1.0
                 #mod_linear_error *= 0.1
@@ -1676,7 +1671,6 @@ def minimize_func(parameters, *data):
                 new_worstmod_linear_error = overall_linear_error
                 new_worstmod = "overall"                   
                 best_plusname = ""
-            major_errors = 0.0                       
             linear_points = linear_error
             if not mod_mode:
                 fail_points = ((fail_rate * 1000.0) ** 2) * 2.5        
@@ -1686,12 +1680,9 @@ def minimize_func(parameters, *data):
                     if mod_games[name] > 0:                        
                         if abs(mod_rates[name] - 25.0) > max_fail_rate:
                             max_fail_rate = mod_rates[name]
-                            max_mod_unmod = name                                                                     
                 if unmod_games > 0:                                       
-                    unmod_rate = (unmod_fails / unmod_games) * 100.0                    
-                    if unmod_rate > max_fail_rate:
-                        max_fail_rate = unmod_rate
-                        max_mod_unmod = "unmod"                                                                               
+                    unmod_rate = (unmod_fails / unmod_games) * 100.0
+
                 if calculate_solution or solve_for_ev:                                                               
                     mod_error, aggregate_fail_rate = 0.0, 0.25
                     all_rates = [(mod_rates[name] / 100.0) for name in mod_rates]
@@ -1705,19 +1696,17 @@ def minimize_func(parameters, *data):
                     fail_points = ((aggregate_fail_rate * 1000.0) ** 2.0)                    
                     linear_fail = linear_points     
     
-    minimum_focused_error, min_factors_alls = 0.0, 0.0
-    possible_replacement_index = 0    
+    min_factors_alls = 0.0
     #first, second, factor_mi_alloc, factor_mi_free = rtsys.get_allocation_stats()
     factor_file = open(factorsdir, "rb")        
     FACTORS = pickle.load(factor_file)        
     factor_file.close()
     publish_solution = False
     #print("Testing that this part works correctly: factors = {}".format(FACTORS))
-    last_possible_result, max_focused_error = 0.0, 0.0
+    last_possible_result = 0.0
     for possible_focus in FACTORS:
         if possible_focus == "all":
             max_all = max(FACTORS["all"])
-            max_all_idx = FACTORS["all"].index(max_all)                
             if linear_points < max_all:
                 publish_solution = True
             #print("Checking linear points {}, max_all {}, publish solution {}, logic check = {}".format(linear_points, max_all, publish_solution, linear_points < max_all))
@@ -1727,10 +1716,7 @@ def minimize_func(parameters, *data):
         possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                                    
         #first, second, post_mi_alloc, post_mi_free = rtsys.get_allocation_stats()
         #if ((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)) > 0:
-        #    print("Leak from get factor and best = {}".format(((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free))))         
-        focused_result = errors[possible_focus] * (possible_result / possible_focused)
-        if (focused_result < minimum_focused_error) or (minimum_focused_error == 0.0):
-            minimum_focused_error = focused_result
+        #    print("Leak from get factor and best = {}".format(((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free))))
         if (errors[possible_focus] < possible_focused) and (linear_points < possible_result):
             publish_solution = True                
         if possible_result >= last_possible_result:
@@ -1775,24 +1761,16 @@ def minimize_func(parameters, *data):
                 max_all = max(FACTORS["all"])
                 max_all_idx = FACTORS["all"].index(max_all)
                 if int(linear_points) < max_all:
-                    FACTORS["all"][max_all_idx] = int(linear_points)                        
-                    max_all = max(FACTORS["all"])
+                    FACTORS["all"][max_all_idx] = int(linear_points)
                 continue            
             focused_values = np.array(FACTORS[pot_focus])
             possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                
-            if errors[pot_focus] < possible_focused:                
-                FACTORS[pot_focus][possible_replacement_index] = (int(errors[pot_focus]), int(linear_points))                                    
-            focused_result = errors[pot_focus] * (possible_result / possible_focused)
-            if (focused_result < minimum_focused_error) or (minimum_focused_error == 0.0):
-                minimum_focused_error = focused_result
-            focused_error = possible_factor * (possible_result / possible_focused)
-            max_focused_error = max(max_focused_error, focused_error, possible_result)
+            if (errors[pot_focus] < possible_focused) and ((int(linear_points) < possible_result) or solution_regen):                
+                FACTORS[pot_focus][possible_replacement_index] = (int(errors[pot_focus]), int(linear_points))
         factor_write_file = open(factorsdir, "wb")
         pickle.dump(FACTORS, factor_write_file)
         factor_write_file.close()   
-        BEST_RESULT = min(FACTORS["all"])    
-        #if focus != "all":
-        #    BEST_RESULT = min(minimum_focused_error, BEST_RESULT)    
+        BEST_RESULT = min(FACTORS["all"])            
                             
         PLUS_NAME = best_plusname
         WORST_MOD = new_worstmod                                          
@@ -1860,7 +1838,7 @@ def minimize_func(parameters, *data):
             #    override_failure += (chips_error / regen_overrides["chips"]) if (regen_overrides["chips"] <= chips_error) else 0
             #    override_failure += (meatballs_error / regen_overrides["meatballs"]) if (regen_overrides["meatballs"] <= meatballs_error) else 0
             #    linear_fail = override_failure * 10000.0
-            detailtext += "\nBest so far - Linear fail {:.0f} ({:.2f}% from best errors), worst mod = {}, {:.0f}, fail rate {:.2f}%, expected {:.2f}%".format(max(minimum_focused_error, linear_points), (best_error / linear_points) * 100.0, WORST_MOD, LAST_BEST, fail_rate * 100.0, (1.0 - expected_average) * 100.0)
+            detailtext += "\nBest so far - Linear fail {:.0f} ({:.2f}% from best errors), worst mod = {}, {:.0f}, fail rate {:.2f}%, expected {:.2f}%".format(linear_points, (best_error / linear_points) * 100.0, WORST_MOD, LAST_BEST, fail_rate * 100.0, (1.0 - expected_average) * 100.0)
             detailtext += "\nBest so far - modified    {:.0f}".format(linear_fail)
             #if solve_for_ev:
             #    detailtext += "\nNet EV = {:.4f}, web EV = {:.4f}, season EV = {:.4f}, mismatches = {:.4f}, dadbets = {:.4f}".format(expected_val, web_ev, (-1 * BEST_SEASON), mismatches, dadbets)                        
@@ -1887,8 +1865,8 @@ def minimize_func(parameters, *data):
                 if crimes_list is not None:
                     detailtext += "\nENOCH earnings (% of max possible) - Pickles {:.2f}%{} ({:.2f}% Perfect), Seeds+Pickles {:.2f}%{} ({:.2f}% Perfect), Dogs+Pickles {:.2f}%{} ({:.2f}% Perfect), Trifecta {:.2f}%{} ({:.2f}% Perfect)".format(pickles_score * 100.0, ("!" if pickles_score > thresholds["pickles"] else ""), (perfect_pickles / pickles_score_max) * 100.0, seedpickles_score * 100.0, ("!" if seedpickles_score > thresholds["seedpickles"] else ""), (perfect_seedpickles / seedpickles_score_max) * 100.0, dogpickles_score * 100.0, ("!" if dogpickles_score > thresholds["dogpickles"] else ""), (perfect_dogpickles / dogpickles_score_max) * 100.0, trifecta_score * 100.0, ("!" if trifecta_score > thresholds["trifecta"] else ""), (perfect_trifecta / trifecta_score_max) * 100.0)
                 detailtext += "\nPitcher earnings (% of max possible) - Chips {:.2f}% ({:.2f}% Perfect), Burgers {:.2f}%, Meatballs {:.2f}% ({:.2f}% Perfect), Chips+Burgers {:.2f}%, Chips+Meatballs {:.2f}% ({:.2f}% Perfect)".format(chips_score * 100.0, (perfect_chips / chips_score_max) * 100.0, burgers_score * 100.0, meatballs_score * 100.0, (perfect_meatballs / meatballs_score_max) * 100.0, chipsburgers_score * 100.0, chipsmeatballs_score * 100.0, (perfect_chipsmeatballs / chipsmeatballs_score_max) * 100.0)                    
-                if not solution_regen:
-                    detailtext += "\n{}-all factors: {}".format(run_id, FACTORS)
+                #if not solution_regen:
+                detailtext += "\n{}-all factors: {}".format(run_id, FACTORS)
                     #if len(reported_focus) > 0:
                     #    for report_focus in reported_focus:
                     #        detailtext += "\n{}-factors '{}': {}".format(run_id, report_focus, FACTORS[report_focus])
@@ -1902,28 +1880,11 @@ def minimize_func(parameters, *data):
             if sys.platform == "darwin":  # MacOS
                 os.system("""osascript -e 'display notification "Fail rate {:.4f}%" with title "New solution found!"'""".format(fail_rate * 100.0))                        
             debug_print("Iteration #{}".format(CURRENT_ITERATION), debug, run_id)            
-        else:
-            terms_output = "\n".join("{},{},{},{}".format(stat, a, b, c) for stat, (a, b, c) in zip(stlat_list, zip(*[iter(parameters[:(-len(special_cases) or None)])] * 3)))
-            special_case_output = "\n" + "\n".join("{},{}".format(name, val) for name, val in zip(special_case_list, special_cases)) if special_case_list else ""
-            if len(win_loss) > 0:
-                debug_print("Best so far - fail rate {:.4f}%, linear error {:.4f}, {} games\n".format(fail_rate * 100.0, linear_error, game_counter) + terms_output + special_case_output, debug, run_id)
-                debug_print("Max linear error {:.4f}% ({:.4f} actual, {:.4f} calculated), Min linear error {:.4f}%".format(max_linear_error, max_error_ratio, max_error_value, min_linear_error), debug, run_id)
-                if len(errors) > 0:
-                    errors_output = ", ".join(map(str, errors))
-                    debug_print("Major errors at: " + errors_output, debug, run_id)
-                else:
-                    debug_print("No major errors", debug, run_id)
-                if len(shape) > 0:
-                    shape_output = ", ".join(map(str, shape))
-                    debug_print("Notable errors: " + shape_output, debug, run_id)
-                else:
-                    debug_print("Somehow no errors", debug, run_id)
-                debug_print("{} games".format(game_counter), debug, run_id)
-                debug_print("Fail error points = {:.4f}, Linearity error points = {:.4f}, total = {:.4f}".format(fail_points, linear_points, linear_fail), debug, run_id)                        
+
         debug_print("-" * 20 + "\n", debug, run_id) 
         
     if focus != "all":
-        focused_fail = max(minimum_focused_error, linear_points)
+        focused_fail = linear_points
         if SOLUTIONS_TO_FILL > 0:
             FAILED_SOLUTIONS[population_member] = focused_fail
             SOLUTIONS_TO_FILL -= 1
@@ -1970,29 +1931,28 @@ def minimize_func(parameters, *data):
     debug_print("run fail rate {:.4f}%".format(fail_rate * 100.0), debug2, run_id)
     endtime = datetime.datetime.now()
     debug_print("func end: {}, run time {}".format(endtime, endtime-starttime), debug3, run_id)
-    PREVIOUS_FOCUS = focus    
-    #if CURRENT_ITERATION > 1:                    
-    #    end_method = tracemalloc.take_snapshot()
-    #    end_method = end_method.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
-    #    top_stats = end_method.compare_to(after_games, 'lineno')                                
-    #    if top_stats[0].size_diff > 0:                        
-    #        print("Increase between games end and method end: {}".format(top_stats[0]))
-    if CURRENT_ITERATION == 1:
-        SNAPSHOT = tracemalloc.take_snapshot()
-        SNAPSHOT = SNAPSHOT.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
-        #SNAPSHOT = SNAPSHOT.filter_traces((tracemalloc.Filter(False, "*tracemalloc.py"),))        
-    elif CURRENT_ITERATION > 1:
-        new_snapshot = tracemalloc.take_snapshot()
-        new_snapshot = new_snapshot.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
-        #new_snapshot = new_snapshot.filter_traces((tracemalloc.Filter(False, "*tracemalloc.py"),))        
-        top_stats = new_snapshot.compare_to(SNAPSHOT, 'lineno')        
-        print("Iteration {}: {}".format(CURRENT_ITERATION, top_stats[0]))        
-        #for stat in top_stats:
-        #    if stat.size_diff > 10000:
-        #        print(stat)        
-        SNAPSHOT = new_snapshot   
-        if CURRENT_ITERATION == 3:
-            firehog = skiddlebumkin
+    PREVIOUS_FOCUS = focus        
+    #if CURRENT_ITERATION == 1:
+    #    #mofo.inspect_types_numba_methods()
+    #    SNAPSHOT = tracemalloc.take_snapshot()
+    #    SNAPSHOT = SNAPSHOT.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
+    #    #SNAPSHOT = SNAPSHOT.filter_traces((tracemalloc.Filter(False, "*tracemalloc.py"),))        
+    #elif CURRENT_ITERATION > 1:
+    #    new_snapshot = tracemalloc.take_snapshot()
+    #    new_snapshot = new_snapshot.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
+    #    #new_snapshot = new_snapshot.filter_traces((tracemalloc.Filter(False, "*tracemalloc.py"),))        
+    #    top_stats = new_snapshot.compare_to(SNAPSHOT, 'lineno')        
+    #    print("Iteration {}: {}".format(CURRENT_ITERATION, top_stats[0]))        
+    #    #for stat in top_stats:
+    #    #    if stat.size_diff > 10000:
+    #    #        print(stat)        
+    #    SNAPSHOT = new_snapshot   
+    #    if CURRENT_ITERATION == 2:
+    #    #    print("Pausing to give time to delete files manually before we call for the recompile, to make sure it happens")
+    #    #    time.sleep(120)
+    #    #    mofo.recompile_nb_code()
+    #    #if CURRENT_ITERATION == 3:
+    #        firehog = skiddlebumkin
     CURRENT_ITERATION += 1           
     #first, second, post_mi_alloc, post_mi_free = rtsys.get_allocation_stats()           
     #if ((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)) > 0:

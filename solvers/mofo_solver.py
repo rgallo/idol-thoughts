@@ -5,21 +5,17 @@ import random
 import re
 import collections
 
-import numpy as np
 import math
 from scipy.optimize import differential_evolution
 import datetime
-import time
 import sys
 from dotenv import load_dotenv
 
 sys.path.append("..")
 import requests
 import numpy as np
-from numba import njit, float64
-from numba.typed import List
 from solvers import base_solver
-from helpers import parse_mods, adjust_by_pct, StlatTerm, ParkTerm
+from helpers import StlatTerm, ParkTerm
 from solvers.mofo_ballpark_terms import BALLPARK_TERMS
 from solvers.mofo_mod_terms import MOFO_MOD_TERMS
 from solvers.mofo_solver_terms import MOFO_TERMS
@@ -35,7 +31,7 @@ import helpers
 #from numba.core.registry import cpu_target
 #cpu_target.target_context
 
-def get_mofo_results(gameid, trace_mem, game, awayAttrs, homeAttrs, away_batters, away_active_batters, home_batters, home_active_batters, away_pitcher_stat_data, home_pitcher_stat_data, awayPitcher, homePitcher, terms, mods, ballpark, ballpark_mods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, awayMods, homeMods, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs):   
+def get_mofo_results(game, awayAttrs, homeAttrs, away_batters, away_active_batters, home_batters, home_active_batters, away_pitcher_stat_data, home_pitcher_stat_data, awayPitcher, homePitcher, terms, mods, ballpark, ballpark_mods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, awayMods, homeMods, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs):   
     #if trace_mem:
     #    before = tracemalloc.take_snapshot()
     #    before = before.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))
@@ -54,7 +50,7 @@ def get_mofo_results(gameid, trace_mem, game, awayAttrs, homeAttrs, away_batters
 
     #awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = mofo.get_mofo_playerbased(trace_mem, mods, awayPitcher, homePitcher, awayAttrs, homeAttrs, int(away_game["weather"]), away_pitcher_stat_data, home_pitcher_stat_data, terms, away_batters, home_batters, awayMods, homeMods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, away_shelled, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs, False)
     
-    awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = mofo.get_mofo_playerbased(gameid, trace_mem, mods, awayPitcher, homePitcher, awayAttrs, homeAttrs, int(away_game["weather"]), away_pitcher_stat_data, home_pitcher_stat_data, terms, away_batters, away_active_batters, home_batters, home_active_batters, awayMods, homeMods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs, False)
+    awayodds, homeodds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era = mofo.get_mofo_playerbased(mods, awayAttrs, homeAttrs, int(away_game["weather"]), away_pitcher_stat_data, home_pitcher_stat_data, terms, away_batters, away_active_batters, home_batters, home_active_batters, awayMods, homeMods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, adjustments, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs)
 
     #if trace_mem:
     #    after_gmpb = tracemalloc.take_snapshot()

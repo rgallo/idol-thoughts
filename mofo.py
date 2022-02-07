@@ -2,24 +2,33 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
-import copy
-import datetime
-import time
 
 import helpers
 import math
 import numpy as np
 
-from numba import njit, float64
-from numba.typed import List
-from helpers import StlatTerm, ParkTerm, geomean
+from numba import njit, float64, int64
+from numba.types import unicode_type, boolean, Tuple
+from numba.typed import List 
+from helpers import ParkTerm, geomean, StlatTerm
 import os
 #from numba.core.registry import cpu_target
 #from numba.core.unsafe.nrt import NRT_get_api
 #from numba.core.runtime.nrt import rtsys
 #cpu_target.target_context
-import tracemalloc
-tracemalloc.start()    
+#import tracemalloc
+#tracemalloc.start()    
+
+#import inspect
+#import sys
+
+#def recompile_nb_code():
+#    this_module = sys.modules[__name__]
+#    module_members = inspect.getmembers(this_module)
+
+#    for member_name, member in module_members:
+#        if hasattr(member, 'recompile') and hasattr(member, 'inspect_llvm'):
+#            member.recompile()
 
 MODS_CALCED_DIFFERENTLY = {"aaa", "aa", "a", "fiery", "base_instincts", "o_no", "electric", "h20", "0", "acidic", "love", "high_pressure", "psychic"}
 #GAMES_PROCESSED = 0
@@ -49,7 +58,7 @@ def calc_team(terms, termset, mods, skip_mods=False):
         total += term.calc(val) * multiplier
     return total
 
-#@njit
+#@njit(nogil=True)
 #def calc_player(term, stlatvalue, hype):     
 #    return float(term.calc(stlatvalue) * (1.0 * hype))    
 
@@ -103,17 +112,16 @@ def calc_player_stlatmod(name, player_data, stlatterm):
         multiplier = 20000000000.0
     return multiplier
 
-@njit
+@njit(nogil=True)
 def log_transform(value, base):                                
     return float64(1.0 / (1.0 + (base ** (-1.0 * value))))
 
-@njit
+@njit(nogil=True)
 def prob_adjust(prob, multiplier):   
-    if prob == 1.0:
-        return prob    
-    return float64(((prob / (1.0 - prob)) * (1.0 + multiplier)) / (1.0 + ((prob / (1.0 - prob)) * (1.0 + multiplier))))
+    return_value = float64(prob) if prob == 1.0 else float64(((prob / (1.0 - prob)) * (1.0 + multiplier)) / (1.0 + ((prob / (1.0 - prob)) * (1.0 + multiplier))))    
+    return return_value
 
-@njit
+@njit(nogil=True)
 def calc_strikeout_walked(strike_looking, strike_swinging, ball_chance, foul_ball_chance, strike_count, ball_count, base_hit_chance, caught_out_chance):               
     strikeout, walked, base_hit, caught_out = float64(0.0), float64(0.0), float64(0.0), float64(0.0)
     strikes = int(strike_count)
@@ -140,8 +148,8 @@ def calc_strikeout_walked(strike_looking, strike_swinging, ball_chance, foul_bal
     
     return strikeout, walked, base_hit, caught_out
 
-@njit
-def calc_probs_from_stats(mods, active_batters, event_mods, sorted_bat_values, sorted_run_values, opp_stat_data, pitcher_stat_data, pitcherAttrs, teamPlayerAttrs, battingAttrs, oppAttrs, adjustments, ruth_strike_adjust, blood_calc, outs):   
+@njit(nogil=True)
+def calc_probs_from_stats(mods, active_batters, event_mods, sorted_bat_values, sorted_run_values, opp_stat_data, pitcher_stat_data, pitcherAttrs, teamPlayerAttrs, battingAttrs, oppAttrs, adjustments, ruth_strike_adjust, blood_calc, outs):
     blood_count = float64(12.0)
     a_blood_multiplier = 1.0 / blood_count        
 
@@ -157,43 +165,31 @@ def calc_probs_from_stats(mods, active_batters, event_mods, sorted_bat_values, s
     
     parkmods = (event_mods[3], event_mods[1], event_mods[2], event_mods[7], event_mods[8], event_mods[6], event_mods[4], event_mods[5], event_mods[10], event_mods[9])    
 
-    steal_mod = np.zeros((20))
-    score_multiplier = np.zeros((20))
-    caught_out_chance = np.zeros((20))
-    walk_chance = np.zeros((20))
-    strike_out_chance = np.zeros((20))
+    steal_mod = np.zeros(active_batters)
+    score_multiplier = np.zeros(active_batters)
+    caught_out_chance = np.zeros(active_batters)
+    walk_chance = np.zeros(active_batters)
+    strike_out_chance = np.zeros(active_batters)
 
-    attempt_steal_chance = np.zeros((20))
-    caught_steal_base_chance = np.zeros((20))
-    caught_steal_home_chance = np.zeros((20))
+    attempt_steal_chance = np.zeros(active_batters)
+    caught_steal_base_chance = np.zeros(active_batters)
+    caught_steal_home_chance = np.zeros(active_batters)
 
-    homerun_chance = np.zeros((20))    
-    triple_chance = np.zeros((20))
-    double_chance = np.zeros((20))
-    single_chance = np.zeros((20))
-    caught_steal_outs = np.zeros((20))
-    on_base_chance = np.zeros((20))    
+    homerun_chance = np.zeros(active_batters)    
+    triple_chance = np.zeros(active_batters)
+    double_chance = np.zeros(active_batters)
+    single_chance = np.zeros(active_batters)
+    caught_steal_outs = np.zeros(active_batters)
+    on_base_chance = np.zeros(active_batters)    
 
-    sacrifice_chance = np.zeros((20))
-    runner_advance_chance = np.zeros((20))
-    average_on_first_position = np.zeros((20))
-    average_on_second_position = np.zeros((20))
-    average_on_third_position = np.zeros((20))
-
-    strike_count, ball_count, average_strikes, average_balls = float64(0.0), float64(0.0), float64(0.0), float64(0.0)    
-
-    swing_correct_chance, swing_strike_blood_factors, swing_strike_chance, swing_ball_chance, base_connect_chance = float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0)
-    connect_chance, base_hit_chance, strike_looking_chance, strike_swinging_chance, ball_chance, foul_ball_chance = float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0)
-    caught_out_prob, factor, strikeout, walked, base_hit, caught_out, no_balls, walked_psychic, attempt_steal_prob = float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0)
-    caught_steal_base_prob, caught_steal_home_prob, homerun_prob, triple_prob, double_prob, single_prob = float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0)               
+    sacrifice_chance = np.zeros(active_batters)
+    runner_advance_chance = np.zeros(active_batters)
+    average_on_first_position = np.zeros(active_batters)
+    average_on_second_position = np.zeros(active_batters)
+    average_on_third_position = np.zeros(active_batters)    
     
-    homerun_multipliers = np.ones((20))
-    hit_modifier = np.ones((20))
-
-    homerun_multipliers[19] = float64(-1.0 * cold_clutch_factor)
-    hit_modifier[19] = float64(-1.0)
-    score_multiplier[19] = float64(2.0)
-    steal_mod[19] = float64(20.0)
+    homerun_multipliers = np.ones(active_batters)
+    hit_modifier = np.ones(active_batters)    
     
     score_mult_pitcher = float64(1.0 * (2.0 if "magnify_2x" in pitcherAttrs else 1.0) * (3.0 if "magnify_3x" in pitcherAttrs else 1.0) * (4.0 if "magnify_4x" in pitcherAttrs else 1.0) * (5.0 if "magnify_5x" in pitcherAttrs else 1.0))    
     strike_mod = float64((fiery_multiplier if "fiery" in oppAttrs else 0.0) + (love_strikeout if "love" in oppAttrs else 0.0) + (((fiery_multiplier * a_blood_multiplier) + (love_strikeout * a_blood_multiplier)) if "a" in oppAttrs and not blood_calc else 0.0) - (electric_multiplier if "electric" in battingAttrs else 0.0) - ((electric_multiplier * a_blood_multiplier) if "a" in battingAttrs and not blood_calc else 0.0)  )
@@ -204,9 +200,11 @@ def calc_probs_from_stats(mods, active_batters, event_mods, sorted_bat_values, s
     walk_mod = float64((basic_multiplier if "base_instincts" in battingAttrs else 0.0) + ((basic_multiplier * a_blood_multiplier) if "a" in battingAttrs and not blood_calc else 0.0))
     
     for playerid in range(0, active_batters):                    
+        homerun_multipliers[playerid] = float64(1.0)
         homerun_multipliers[playerid] *= float64(-1.0 if "underhanded" in pitcherAttrs else 1.0)
         homerun_multipliers[playerid] *= float64(-1.0 if "subtractor" in teamPlayerAttrs[playerid] else 1.0)
         homerun_multipliers[playerid] *= float64(-1.0 if "underachiever" in teamPlayerAttrs[playerid] else 1.0)
+        hit_modifier[playerid] = float64(1.0)
         hit_modifier[playerid] *= float64(-1.0 if "subtractor" in teamPlayerAttrs[playerid] else 1.0)
         strike_count = float64(4.0 if (("extra_strike" in battingAttrs) or ("extra_strike" in teamPlayerAttrs[playerid])) else 3.0)
         strike_count -= float64(1.0 if "flinch" in teamPlayerAttrs[playerid] else float64(0.0))
@@ -347,39 +345,30 @@ def calc_probs_from_stats(mods, active_batters, event_mods, sorted_bat_values, s
 
     return runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, caught_steal_outs, on_base_chance, average_on_first_position, average_on_second_position, average_on_third_position, steal_mod, walk_mod
 
-@njit
-def simulate_game(active_batters, battingAttrs, teamPlayerAttrs, opp_score, is_home, outs, homerun_chance, triple_chance, double_chance, single_chance, walk_chance, walk_mod, sacrifice_chance, runner_advance_chance, average_on_first, average_on_second, average_on_third, reverb_weather, score_mod, strike_out_chance, caught_out_chance, caught_steal_base_chance, caught_steal_home_chance, attempt_steal_chance, homerun_multipliers, hit_modifier, steal_mod, score_multiplier):        
+@njit(nogil=True)
+def simulate_game(active_batters, battingAttrs, teamPlayerAttrs, opp_score, is_home, outs, homerun_chance, triple_chance, double_chance, single_chance, walk_chance, walk_mod, sacrifice_chance,
+                  runner_advance_chance, average_on_first, average_on_second, average_on_third, reverb_weather, score_mod, strike_out_chance, caught_out_chance, caught_steal_base_chance, caught_steal_home_chance, attempt_steal_chance, homerun_multipliers, hit_modifier, steal_mod, score_multiplier):
     maximum_inning_atbats = 25
     current_innings, atbats_in_inning = 0, 0      
     probable_atbat = float64(1.0)
     inning_score, inning_rbi = float64(0.0), float64(0.0)
     runners_on_first, runners_on_second, runners_on_third, runners_on_fourth = float64(0.0), float64(0.0), float64(0.0), float64(0.0)
     runner_advance_first, runner_advance_second, runner_advance_third, runner_advance_fourth = float64(0.0), float64(0.0), float64(0.0), float64(0.0)    
-    strikeouts, no_outs = float64(0.0), float64(1.0)
+    no_outs = float64(1.0)
     starting_player = 0        
-    team_score = float64(101.0 if ("home_field" in battingAttrs and is_home) else float64(1.0))
-    team_rbi = team_score            
+    team_score = float64(100.0 if ("home_field" in battingAttrs and is_home) else 0.0)
+    team_rbi = float64(100.0 if ("home_field" in battingAttrs and is_home) else 0.0)
     total_innings = 8 if is_home else 9
     game_complete = False
-    #inform the compiler that player_score could go negative?
-    player_score = float64(-1.0)
-    #inform the compiler that team_score could go negative?
-    team_score *= float64(-1.0)
-    #switch it back
-    team_score *= float64(-1.0)
-    team_score -= float64(1.0)
+
+    #stolen_bases, homers, hits = np.zeros(20), np.zeros(20), np.zeros(20)
+    stolen_bases, homers, hits = np.zeros(active_batters), np.zeros(active_batters), np.zeros(active_batters)
+    strikeouts = float64(0.0)
     
-    batter_atbats = 0        
+    steal_outs, current_batter_no_out, one_out, two_out = float64(0.0), float64(0.0), float64(0.0), float64(0.0)    
     
-    homerun_score, triple_runners_score, double_runners_score, single_runners_score, runners_advance_score, walking_score = float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0)
-    player_rbi, player_outs = float64(0.0), float64(0.0)
-    steal_runners_on_second, steal_runners_on_third, steal_runners_on_fourth, steal_base_success_rate, steal_home_success_rate = float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0)
-    steal_second_opportunities, steal_third_opportunities, steal_fourth_opportunities, steal_home_opportunities, steal_base_opportunities = float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0)
-    steal_outs, current_batter_no_out, current_batter_out, one_out, two_out = float64(0.0), float64(0.0), float64(0.0), float64(0.0), float64(0.0)    
+    one_outs, two_outs = List([1.0, 1.0]), List([1.0, 1.0])            
     
-    one_outs, two_outs = List([1.0, 1.0]), List([1.0, 1.0])        
-    
-    homers, hits, stolen_bases = np.zeros((20)), np.zeros((20)), np.zeros((20))
     while not game_complete:
         while current_innings < total_innings:                
             for playerid in range(starting_player, active_batters):                                                
@@ -406,8 +395,7 @@ def simulate_game(active_batters, battingAttrs, teamPlayerAttrs, opp_score, is_h
                 player_rbi = runners_advance_score + walking_score + homerun_score + triple_runners_score + double_runners_score + single_runners_score
                 player_score = (runners_advance_score + walking_score + (homerun_score * homerun_multipliers[playerid]) + ((triple_runners_score + double_runners_score + single_runners_score) * hit_modifier[playerid])) * score_multiplier[playerid]
                 homers[playerid] += homerun_chance[playerid] * probable_atbat
-                hits[playerid] += triple_chance[playerid] + double_chance[playerid] + single_chance[playerid] * probable_atbat            
-                player_outs = strike_out_chance[playerid] + caught_out_chance[playerid]
+                hits[playerid] += (triple_chance[playerid] + double_chance[playerid] + single_chance[playerid]) * probable_atbat
                 strikeouts += strike_out_chance[playerid] * probable_atbat            
                 steal_runners_on_second = min(runners_on_second, 1.0)
                 steal_runners_on_third = min(runners_on_third, 1.0)
@@ -519,48 +507,43 @@ def simulate_game(active_batters, battingAttrs, teamPlayerAttrs, opp_score, is_h
             game_complete = True
         elif (current_innings == 8) and not game_complete:
             total_innings = 9
+    #return team_score, stolen_bases[:active_batters], homers[:active_batters], hits[:active_batters], strikeouts, team_rbi
     return team_score, stolen_bases, homers, hits, strikeouts, team_rbi
 
-@njit
-def calc_team_score(mods, weather, active_batters, event_mods, away_home, team_bat_data, team_run_data, opp_stat_data, pitcher_stat_data, pitcherAttrs, teamPlayerAttrs, battingAttrs, oppAttrs, adjustments, ruth_strike_adjust, opp_score, outs):              
+@njit(nogil=True)
+def calc_team_score(mods, weather, active_batters, event_mods, away_home, team_bat_data, team_run_data, opp_stat_data, pitcher_stat_data, pitcherAttrs, teamPlayerAttrs, battingAttrs, oppAttrs,
+                    adjustments, ruth_strike_adjust, opp_score, outs, team_score, bases_stolen, homers_hit, hits_hit, strikeouts, team_rbi):
     (reverb_weather, sun_weather, bh_weather) = weather        
 
     blood_calc = "madJayEm" in battingAttrs
     
-    runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, caught_steal_outs, on_base_chance, average_on_first, average_on_second, average_on_third, steal_mod, walk_mod = calc_probs_from_stats(mods, active_batters, event_mods, team_bat_data, team_run_data, opp_stat_data, pitcher_stat_data, pitcherAttrs, teamPlayerAttrs, battingAttrs, oppAttrs, adjustments, ruth_strike_adjust, blood_calc, outs)    
-
-    #start = datetime.datetime.now()               
+    runner_advance_chance, caught_out_chance, sacrifice_chance, score_mod, hit_modifier, homerun_multipliers, score_multiplier, attempt_steal_chance, walk_chance, strike_out_chance, caught_steal_base_chance, caught_steal_home_chance, homerun_chance, triple_chance, double_chance, single_chance, caught_steal_outs, on_base_chance, average_on_first, average_on_second, average_on_third, steal_mod, walk_mod = calc_probs_from_stats(mods, active_batters, event_mods, team_bat_data, team_run_data, opp_stat_data, pitcher_stat_data, pitcherAttrs, teamPlayerAttrs, battingAttrs, oppAttrs, adjustments, ruth_strike_adjust, blood_calc, outs)        
     
-    team_score, bases_stolen, homers_hit, hits_hit, strikeouts, team_rbi = simulate_game(active_batters, battingAttrs, teamPlayerAttrs, opp_score, away_home, outs, homerun_chance, triple_chance, double_chance, single_chance, walk_chance, float64(walk_mod), sacrifice_chance, runner_advance_chance, average_on_first, average_on_second, average_on_third, reverb_weather, float64(score_mod), strike_out_chance, caught_out_chance, caught_steal_base_chance, caught_steal_home_chance, attempt_steal_chance, homerun_multipliers, hit_modifier, steal_mod, score_multiplier)                       
-
-    #end = datetime.datetime.now()                
-    #if ((end-start).total_seconds()) > 1.0:
-    #print("{} inputs:\n ab {}\n batatts {}\n teamPlayAtts {}\n opp_score {}\n outs {}\n hr {}\n trip {}\n double {}\n single {}\n walk {}\n wmod {}\n sac {}\n ra {}\n aof {}\n aos {}\n aot {}\n weather {}\n scoremod {}\n so {}\n co {}\n csb {}\n csh {}\n asc {}\n hrmult {}\n hitmod {}\n stealmod {}\n scoremult {}\n".format(away_home, active_batters, battingAttrs, teamPlayerAttrs, opp_score, outs, homerun_chance, triple_chance, double_chance, single_chance, walk_chance, walk_mod, sacrifice_chance, runner_advance_chance, average_on_first, average_on_second, average_on_third, reverb_weather, score_mod, strike_out_chance, caught_out_chance, caught_steal_base_chance, caught_steal_home_chance, attempt_steal_chance, homerun_multipliers, hit_modifier, steal_mod, score_multiplier))
-    
-    #print("{} outputs:\n score {}\n steals {}\n homers {}\n hits {}\n ks {}\n rbi {}\n".format(away_home, team_score, bases_stolen, homers_hit, hits_hit, strikeouts, team_rbi))
+    team_score, bases_stolen, homers_hit, hits_hit, strikeouts, team_rbi = simulate_game(active_batters, battingAttrs, teamPlayerAttrs, opp_score, away_home, outs, homerun_chance, triple_chance, double_chance, single_chance, walk_chance, float64(walk_mod), sacrifice_chance, runner_advance_chance, average_on_first, average_on_second, average_on_third, reverb_weather, float64(score_mod), strike_out_chance, caught_out_chance, caught_steal_base_chance, caught_steal_home_chance, attempt_steal_chance, homerun_multipliers, hit_modifier, steal_mod, score_multiplier, team_score, bases_stolen, homers_hit, hits_hit, strikeouts, team_rbi)                           
 
     if sun_weather or bh_weather:                        
         team_score = float64(team_score % 1000.0)
         
     return team_score, bases_stolen, homers_hit, hits_hit, strikeouts, team_rbi
 
-@njit
-def calc_runners_on(runners_on_base, runner_advance_base, runners_on_base_minus_one, runner_advance_base_minus_one, runners_on_base_minus_two, runner_advance_base_minus_two, runners_on_base_minus_three, runner_advance_base_minus_three, single_chance, double_chance, triple_chance, homerun_chance, sacrifice_chance, caught_out_chance, walk_chance, walk_mod, average_new_on_base, new_on_base_advance):
+@njit(nogil=True)
+def calc_runners_on(runners_on_base, runner_advance_base, runners_on_base_minus_one, runner_advance_base_minus_one, runners_on_base_minus_two, runner_advance_base_minus_two, runners_on_base_minus_three,
+                    runner_advance_base_minus_three, single_chance, double_chance, triple_chance, homerun_chance, sacrifice_chance, caught_out_chance, walk_chance, walk_mod, average_new_on_base, new_on_base_advance):
     runners_on = float64(max(runners_on_base + (runner_advance_base_minus_one * runners_on_base_minus_one * caught_out_chance) + ((runners_on_base_minus_one - runners_on_base) * single_chance) + ((runners_on_base_minus_one - runners_on_base) * sacrifice_chance) + ((runners_on_base_minus_two - runners_on_base) * double_chance) + ((runners_on_base_minus_three - runners_on_base) * triple_chance) - (runners_on_base * homerun_chance) + ((runners_on_base_minus_one - runners_on_base) * walk_chance * (1.0 - walk_mod)) + ((runners_on_base_minus_two + runners_on_base_minus_three - runners_on_base) * walk_chance * walk_mod) + average_new_on_base, float64(0.0)))
     
     runner_advance = float64(max(runner_advance_base + (runner_advance_base_minus_one * (runner_advance_base_minus_one * runners_on_base_minus_one * caught_out_chance)) + ((runner_advance_base_minus_one - runner_advance_base) * ((runners_on_base_minus_one - runners_on_base) * single_chance)) + ((runner_advance_base_minus_one - runner_advance_base) * ((runners_on_base_minus_one - runners_on_base) * sacrifice_chance)) + ((runner_advance_base_minus_two - runner_advance_base) * ((runners_on_base_minus_two - runners_on_base) * double_chance)) + ((runner_advance_base_minus_three - runner_advance_base) * ((runners_on_base_minus_three - runners_on_base) * triple_chance)) - (runner_advance_base * (runners_on_base * homerun_chance)) + ((runner_advance_base_minus_one - runner_advance_base) * ((runners_on_base_minus_one - runners_on_base) * walk_chance * (1.0 - walk_mod))) + ((runner_advance_base_minus_two + runner_advance_base_minus_three - runner_advance_base) * ((runners_on_base_minus_two + runners_on_base_minus_three - runners_on_base) * walk_chance * walk_mod)) + (average_new_on_base * new_on_base_advance), float64(0.0)))
     
     return runners_on, runner_advance
 
-@njit
-def calc_team_stlats(pitching_terms, defense_terms, batting_terms, running_terms, sorted_batters, pitching_mods, defense_mods, batting_mods, running_mods, defense, batting, running, pitcher_stat_data, adj_def, adj_bat, adj_run, shelled, aa_blood_impact, aaa_blood_impact, high_pressure_mod):        
-    lineup = float64(0.0)    
-    overperform_pct, def_overperform_pct = float64(0.0), float64(0.0)
+@njit(nogil=True)
+def calc_team_stlats(pitching_terms, defense_terms, batting_terms, running_terms, sorted_batters, pitching_mods, defense_mods, batting_mods, running_mods, defense, batting, running, pitcher_stat_data,
+                     adj_def, adj_bat, adj_run, shelled, aa_blood_impact, aaa_blood_impact, high_pressure_mod):
+    lineup = float64(0.0)
     blood_player = 0
-    team_batting = np.zeros((20, 9))
-    team_running = np.zeros((20, 10))
-    team_pitcher = np.zeros((7))
-    team_defense = np.zeros((7))
+    team_batting = np.zeros((sorted_batters, 9))
+    team_running = np.zeros((sorted_batters, 10))
+    team_pitcher = np.zeros(7)
+    team_defense = np.zeros(7)
     
     for playerid in range(0, sorted_batters):  
         if not shelled[playerid]:                        
@@ -614,23 +597,26 @@ def calc_team_stlats(pitching_terms, defense_terms, batting_terms, running_terms
 
     return team_batting, team_running, team_defense, team_pitcher
 
-@njit
-def calc_team_stlats_instantiate_impact(pitching_terms, defense_terms, batting_terms, running_terms, batters, pitching_mods, defense_mods, batting_mods, running_mods, defense, batting, running, pitcher_stat_data, adj_def, adj_bat, adj_run, shelled):
+@njit(nogil=True)
+def calc_team_stlats_instantiate_impact(pitching_terms, defense_terms, batting_terms, running_terms, batters, pitching_mods, defense_mods, batting_mods, running_mods, defense, batting, running,
+                                        pitcher_stat_data, adj_def, adj_bat, adj_run, shelled):
 
-    average_aa_impact = np.zeros((20))
-    average_aaa_impact = np.zeros((20))
-    high_pressure_mod = np.zeros((20))
+    average_aa_impact = np.zeros(20)
+    average_aaa_impact = np.zeros(20)
+    high_pressure_mod = np.zeros(20)
 
     team_batting, team_running, team_defense, team_pitcher = calc_team_stlats(pitching_terms, defense_terms, batting_terms, running_terms, batters, pitching_mods, defense_mods, batting_mods, running_mods, defense, batting, running, pitcher_stat_data, adj_def, adj_bat, adj_run, shelled, average_aa_impact, average_aaa_impact, high_pressure_mod)   
 
     return team_batting, team_running, team_defense, team_pitcher
 
-@njit
-def blood_impact_calc(pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, batters, active_batters, pitching_mods, defense_mods, batting_mods, running_mods, event_mods, defense, batting, running, pitcher_stat_data, teampitcherAttrs, teamPlayerAttrs, teamAttrs, adj_def, adj_bat, adj_run, shelled, opppitcherAttrs, oppAttrs, team_batting, team_running, opp_team_defense, oppPitcherStlats, adjustments, ruth_strike_adjust):
+@njit(nogil=True)
+def blood_impact_calc(pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, batters, active_batters, pitching_mods, defense_mods, batting_mods, running_mods,
+                      event_mods, defense, batting, running, pitcher_stat_data, teamPlayerAttrs, teamAttrs, adj_def, adj_bat, adj_run, shelled, opppitcherAttrs, oppAttrs,
+                      team_batting, team_running, opp_team_defense, oppPitcherStlats, adjustments, ruth_strike_adjust):
 
-    average_aa_impact = np.zeros((20))
-    average_aaa_impact = np.zeros((20))
-    high_pressure_mod = np.zeros((20))
+    average_aa_impact = np.zeros(20)
+    average_aaa_impact = np.zeros(20)
+    high_pressure_mod = np.zeros(20)
     innings = 9
     outs = float64(3.0)
     
@@ -643,7 +629,6 @@ def blood_impact_calc(pitching_terms, defense_terms, batting_terms, running_term
         if ("aa" in teamAttrs) or ("a" in teamAttrs):           
             for idx in range(0, active_batters):
                 x = 0.0
-                previous_blood_impact = float64(0.0)
                 average_aa_impact[idx] = float64(0.0)
                 if outs_per_lineup < 0.1:
                     average_aa_impact[idx] = float64(1.0)
@@ -661,20 +646,19 @@ def blood_impact_calc(pitching_terms, defense_terms, batting_terms, running_term
         if ("aaa" in teamAttrs) or ("a" in teamAttrs):                    
             for idx in range(0, active_batters):
                 x = 0.0
-                previous_blood_impact = float64(0.0)
-                average_aa_impact[idx] = float64(0.0)     
+                average_aaa_impact[idx] = float64(0.0)
                 if outs_per_lineup < 0.1:
-                    average_aa_impact[idx] = float64(1.0)
+                    average_aaa_impact[idx] = float64(1.0)
                 else:              
                     batter_atbats = 0.0
-                    while (x < (outs * float64(innings))) and (average_aa_impact[idx] < 1.0):                    
-                        previous_blood_impact = average_aa_impact[idx]
-                        average_aa_impact[idx] += float64(((triple_chance[idx] * ((1.0 - triple_chance[idx]) ** batter_atbats)) * (((outs * float64(innings)) - x) / (outs * float64(innings)))))
-                        if (average_aa_impact[idx] - previous_blood_impact) < 0.0001:
+                    while (x < (outs * float64(innings))) and (average_aaa_impact[idx] < 1.0):
+                        previous_blood_impact = average_aaa_impact[idx]
+                        average_aaa_impact[idx] += float64(((triple_chance[idx] * ((1.0 - triple_chance[idx]) ** batter_atbats)) * (((outs * float64(innings)) - x) / (outs * float64(innings)))))
+                        if (average_aaa_impact[idx] - previous_blood_impact) < 0.0001:
                             break
                         x += outs_per_lineup * ((outs - outs_per_lineup) if (outs_per_lineup < outs) else 1.0)      
                         batter_atbats += 1.0
-                    average_aa_impact[idx] = float64(min(average_aa_impact[idx], 1.0) * ((1.0 / 12.0) if blood_calc else 1.0))
+                    average_aaa_impact[idx] = float64(min(average_aaa_impact[idx], 1.0) * ((1.0 / 12.0) if blood_calc else 1.0))
 
     if ("high_pressure" in teamAttrs) and flooding:        
         high_pressure_mod[0] = float64(on_base_chance[active_batters - 1])
@@ -685,16 +669,27 @@ def blood_impact_calc(pitching_terms, defense_terms, batting_terms, running_term
     
     return team_batting, team_running, team_defense, teamPitcherStlats    
 
-@njit
-def get_mofo_pb_blood_launcher(away_blood, home_blood, pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, away_batters, away_active_batters, away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods, away_event_mods, away_defense, away_batting, away_running, away_pitcher_stat_data, awaypitcherAttrs, awayPlayerAttrs, awayAttrs, away_adj_def, away_adj_bat, away_adj_run, away_shelled, home_batters, home_active_batters, home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods, home_event_mods, home_defense, home_batting, home_running, home_pitcher_stat_data, homepitcherAttrs, homePlayerAttrs, homeAttrs, home_adj_def, home_adj_bat, home_adj_run, home_shelled, adjustments, ruth_strike_adjust, check_weather):
+@njit(nogil=True)
+def get_mofo_pb_blood_launcher(away_blood, home_blood, pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, away_batters, away_active_batters, away_pitching_mods,
+                               away_defense_mods, away_batting_mods, away_running_mods, away_event_mods, away_defense, away_batting, away_running, away_pitcher_stat_data, awaypitcherAttrs,
+                               awayPlayerAttrs, awayAttrs, away_adj_def, away_adj_bat, away_adj_run, away_shelled, home_batters, home_active_batters, home_pitching_mods, home_defense_mods,
+                               home_batting_mods, home_running_mods, home_event_mods, home_defense, home_batting, home_running, home_pitcher_stat_data, homepitcherAttrs, homePlayerAttrs,
+                               homeAttrs, home_adj_def, home_adj_bat, home_adj_run, home_shelled, adjustments, ruth_strike_adjust, check_weather, away_score, away_steals, away_home_runs,
+                               away_hit_balls, home_pitcher_ks, home_pitcher_era, home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era):
 
     #if trace_mem:
     #    before = tracemalloc.take_snapshot()
     #    before = before.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))                
 
-    away_team_batting, away_team_running, away_team_defense, awayPitcherStlats = calc_team_stlats_instantiate_impact(pitching_terms, defense_terms, batting_terms, running_terms, away_batters, away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods, away_defense, away_batting, away_running, away_pitcher_stat_data, away_adj_def, away_adj_bat, away_adj_run, away_shelled)
+    away_team_batting, away_team_running, away_team_defense, awayPitcherStlats = calc_team_stlats_instantiate_impact(pitching_terms, defense_terms, batting_terms, running_terms, away_batters,
+                                                                                                                     away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods,
+                                                                                                                     away_defense, away_batting, away_running, away_pitcher_stat_data, away_adj_def,
+                                                                                                                     away_adj_bat, away_adj_run, away_shelled)
 
-    home_team_batting, home_team_running, home_team_defense, homePitcherStlats = calc_team_stlats_instantiate_impact(pitching_terms, defense_terms, batting_terms, running_terms, home_batters, home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods, home_defense, home_batting, home_running, home_pitcher_stat_data, home_adj_def, home_adj_bat, home_adj_run, home_shelled)
+    home_team_batting, home_team_running, home_team_defense, homePitcherStlats = calc_team_stlats_instantiate_impact(pitching_terms, defense_terms, batting_terms, running_terms, home_batters,
+                                                                                                                     home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods,
+                                                                                                                     home_defense, home_batting, home_running, home_pitcher_stat_data, home_adj_def,
+                                                                                                                     home_adj_bat, home_adj_run, home_shelled)
 
     #if trace_mem:
     #    after_stats = tracemalloc.take_snapshot()
@@ -709,10 +704,18 @@ def get_mofo_pb_blood_launcher(away_blood, home_blood, pitching_terms, defense_t
     outs = float64(10.0) if "madJayEm" in awayAttrs else float64(3.0)        
 
     if away_blood:
-        away_team_batting, away_team_running, away_team_defense, awayPitcherStlats = blood_impact_calc(pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, away_batters, away_active_batters, away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods, away_event_mods, away_defense, away_batting, away_running, away_pitcher_stat_data, awaypitcherAttrs, awayPlayerAttrs, awayAttrs, away_adj_def, away_adj_bat, away_adj_run, away_shelled, homepitcherAttrs, homeAttrs, away_team_batting, away_team_running, home_team_defense, homePitcherStlats, adjustments, ruth_strike_adjust)        
+        away_team_batting, away_team_running, away_team_defense, awayPitcherStlats = blood_impact_calc(pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, away_batters,
+                                                                                                       away_active_batters, away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods,
+                                                                                                       away_event_mods, away_defense, away_batting, away_running, away_pitcher_stat_data,
+                                                                                                       awayPlayerAttrs, awayAttrs, away_adj_def, away_adj_bat, away_adj_run, away_shelled, homepitcherAttrs,
+                                                                                                       homeAttrs, away_team_batting, away_team_running, home_team_defense, homePitcherStlats, adjustments, ruth_strike_adjust)
 
     if home_blood:
-        home_team_batting, home_team_running, home_team_defense, homePitcherStlats = blood_impact_calc(pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, home_batters, home_active_batters, home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods, home_event_mods, home_defense, home_batting, home_running, home_pitcher_stat_data, homepitcherAttrs, homePlayerAttrs, homeAttrs, home_adj_def, home_adj_bat, home_adj_run, home_shelled, awaypitcherAttrs, awayAttrs, home_team_batting, home_team_running, away_team_defense, awayPitcherStlats, adjustments, ruth_strike_adjust)            
+        home_team_batting, home_team_running, home_team_defense, homePitcherStlats = blood_impact_calc(pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, home_batters,
+                                                                                                       home_active_batters, home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods,
+                                                                                                       home_event_mods, home_defense, home_batting, home_running, home_pitcher_stat_data,
+                                                                                                       homePlayerAttrs, homeAttrs, home_adj_def, home_adj_bat, home_adj_run, home_shelled, awaypitcherAttrs,
+                                                                                                       awayAttrs, home_team_batting, home_team_running, away_team_defense, awayPitcherStlats, adjustments, ruth_strike_adjust)
     
     #if trace_mem:
     #    after_blood = tracemalloc.take_snapshot()
@@ -723,15 +726,21 @@ def get_mofo_pb_blood_launcher(away_blood, home_blood, pitching_terms, defense_t
     #    else:
     #        print("No increase from blood {}".format(top_stats[0]))
 
-    away_home = ("madJayEm" in awayAttrs)
+    away_home = ("madJayEm" in awayAttrs)    
 
-    away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era = calc_team_score(mods, check_weather, away_active_batters, away_event_mods, away_home, away_team_batting, away_team_running, home_team_defense, homePitcherStlats, homepitcherAttrs, awayPlayerAttrs, awayAttrs, homeAttrs, adjustments, ruth_strike_adjust, blank_score, outs)
+    away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era = calc_team_score(mods, check_weather, away_active_batters, away_event_mods, away_home, away_team_batting,
+                                                                                                                 away_team_running, home_team_defense, homePitcherStlats, homepitcherAttrs, awayPlayerAttrs,
+                                                                                                                 awayAttrs, homeAttrs, adjustments, ruth_strike_adjust, blank_score, outs, away_score, away_steals,
+                                                                                                                 away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era)
 
     away_home = not ("madJayEm" in awayAttrs)
 
     ##start = datetime.datetime.now()
     
-    home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era = calc_team_score(mods, check_weather, home_active_batters, home_event_mods, away_home, home_team_batting, home_team_running, away_team_defense, awayPitcherStlats, awaypitcherAttrs, homePlayerAttrs, homeAttrs, awayAttrs, adjustments, ruth_strike_adjust, away_score, outs)   
+    home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era = calc_team_score(mods, check_weather, home_active_batters, home_event_mods, away_home, home_team_batting,
+                                                                                                                 home_team_running, away_team_defense, awayPitcherStlats, awaypitcherAttrs, homePlayerAttrs,
+                                                                                                                 homeAttrs, awayAttrs, adjustments, ruth_strike_adjust, away_score, outs, home_score, home_steals,
+                                                                                                                 home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era)
     
     #if trace_mem:
     #    after_score = tracemalloc.take_snapshot()
@@ -748,11 +757,122 @@ def get_mofo_pb_blood_launcher(away_blood, home_blood, pitching_terms, defense_t
     #if ((end-start).total_seconds()) > 1.0:
     #    print("{} inputs:\n batting {}\n running {}\n defense {}\n pitcher {}\n pitch attrs {}\n play attrs {}\n team attrs {}\n opp attrs {}\n opp score {}\n".format(away_home, home_team_batting, home_team_running, away_team_defense, awayPitcherStlats, awaypitcherAttrs, homePlayerAttrs, homeAttrs, awayAttrs, away_score))
 
-    return away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era, home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era
-   
-def get_mofo_playerbased(gameid, trace_mem, dict_mods, awayPitcher, homePitcher, awayAttrs, homeAttrs, weather, away_pitcher_stat_data, home_pitcher_stat_data, terms, away_batter_order, away_active_batters, home_batter_order, home_active_batters, awayMods, homeMods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, dict_adjustments, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs, skip_mods):                          
-    #if trace_mem:
-    #    first, second, preall_mi_alloc, preall_mi_free = rtsys.get_allocation_stats()      
+    #return_tuple = (away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era, home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era) 
+
+    #yield away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era, home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era
+    return away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era, home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era       
+
+@njit(nogil=True)
+def blood_impact_shallow(strike_out_chance, caught_steal_outs, caught_out_chance, double_chance, triple_chance, on_base_chance, flooding, teamAttrs, active_batters, average_aa_impact, average_aaa_impact, high_pressure_mod):
+    
+    innings = 9
+    outs = float64(3.0)
+    blood_calc = "a" in teamAttrs
+    
+    outs_per_lineup = float64(sum(strike_out_chance) + sum(caught_steal_outs) + sum(caught_out_chance))    
+
+    if ("aa" in teamAttrs) or ("a" in teamAttrs) or ("aaa" in teamAttrs):                                    
+        if ("aa" in teamAttrs) or ("a" in teamAttrs):           
+            for idx in range(0, active_batters):                
+                if outs_per_lineup < 0.1:
+                    average_aa_impact[idx] = float64(1.0)
+                else:  
+                    x = 0.0                
+                    average_aa_impact[idx] = float64(0.0)
+                    batter_atbats = 0.0
+                    while (x < (outs * float64(innings))) and (average_aa_impact[idx] < 1.0):                    
+                        previous_blood_impact = average_aa_impact[idx]
+                        average_aa_impact[idx] += float64(((double_chance[idx] * ((1.0 - double_chance[idx]) ** batter_atbats)) * (((outs * float64(innings)) - x) / (outs * float64(innings)))))
+                        if (average_aa_impact[idx] - previous_blood_impact) < 0.0001:                                
+                            break
+                        x += outs_per_lineup * ((outs - outs_per_lineup) if (outs_per_lineup < outs) else 1.0)     
+                        batter_atbats += 1.0
+                    average_aa_impact[idx] = float64(min(average_aa_impact[idx], 1.0) * ((1.0 / 12.0) if blood_calc else 1.0))
+            
+        if ("aaa" in teamAttrs) or ("a" in teamAttrs):                    
+            for idx in range(0, active_batters):                
+                if outs_per_lineup < 0.1:
+                    average_aaa_impact[idx] = float64(1.0)
+                else:  
+                    x = 0.0                
+                    average_aaa_impact[idx] = float64(0.0)
+                    batter_atbats = 0.0
+                    while (x < (outs * float64(innings))) and (average_aaa_impact[idx] < 1.0):
+                        previous_blood_impact = average_aaa_impact[idx]
+                        average_aaa_impact[idx] += float64(((triple_chance[idx] * ((1.0 - triple_chance[idx]) ** batter_atbats)) * (((outs * float64(innings)) - x) / (outs * float64(innings)))))
+                        if (average_aaa_impact[idx] - previous_blood_impact) < 0.0001:
+                            break
+                        x += outs_per_lineup * ((outs - outs_per_lineup) if (outs_per_lineup < outs) else 1.0)      
+                        batter_atbats += 1.0
+                    average_aaa_impact[idx] = float64(min(average_aaa_impact[idx], 1.0) * ((1.0 / 12.0) if blood_calc else 1.0))
+
+    if ("high_pressure" in teamAttrs) and flooding:        
+        high_pressure_mod[0] = float64(on_base_chance[active_batters - 1])
+        for idx in range(1, active_batters):
+            high_pressure_mod[idx] = float64(on_base_chance[idx-1])
+    
+    return average_aa_impact, average_aa_impact, high_pressure_mod
+
+@njit(nogil=True)
+def get_mofo_shallow_launcher(away_blood, home_blood, pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, away_batters, away_active_batters, away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods, away_event_mods, away_defense, away_batting, away_running, away_pitcher_stat_data, awaypitcherAttrs, awayPlayerAttrs, awayAttrs, away_adj_def, away_adj_bat, away_adj_run, away_shelled, home_batters, home_active_batters, home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods, home_event_mods, home_defense, home_batting, home_running, home_pitcher_stat_data, homepitcherAttrs, homePlayerAttrs, homeAttrs, home_adj_def, home_adj_bat, home_adj_run, home_shelled, adjustments, ruth_strike_adjust, check_weather):   
+    
+    (reverb_weather, sun_weather, bh_weather) = check_weather
+    away_average_aa_impact = np.zeros(away_active_batters)
+    away_average_aaa_impact = np.zeros(away_active_batters)
+    away_high_pressure_mod = np.zeros(away_active_batters)
+
+    away_team_batting, away_team_running, away_team_defense, awayPitcherStlats = calc_team_stlats(pitching_terms, defense_terms, batting_terms, running_terms, away_batters, away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods, away_defense, away_batting, away_running, away_pitcher_stat_data, away_adj_def, away_adj_bat, away_adj_run, away_shelled, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod)
+
+    home_average_aa_impact = np.zeros(home_active_batters)
+    home_average_aaa_impact = np.zeros(home_active_batters)
+    home_high_pressure_mod = np.zeros(home_active_batters)
+
+    home_team_batting, home_team_running, home_team_defense, homePitcherStlats = calc_team_stlats(pitching_terms, defense_terms, batting_terms, running_terms, home_batters, home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods, home_defense, home_batting, home_running, home_pitcher_stat_data, home_adj_def, home_adj_bat, home_adj_run, home_shelled, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod)                         
+
+    blank_score = float64(10.0) if "madJayEm" in awayAttrs else float64(1.01)    
+    outs = float64(10.0) if "madJayEm" in awayAttrs else float64(3.0)        
+
+    if away_blood:
+        blood_calc = "a" in awayAttrs
+
+        away_runner_advance_chance, away_caught_out_chance, away_sacrifice_chance, away_score_mod, away_hit_modifier, away_homerun_multipliers, away_score_multiplier, away_attempt_steal_chance, away_walk_chance, away_strike_out_chance, away_caught_steal_base_chance, away_caught_steal_home_chance, away_homerun_chance, away_triple_chance, away_double_chance, away_single_chance, away_caught_steal_outs, away_on_base_chance, away_average_on_first, away_average_on_second, away_average_on_third, away_steal_mod, away_walk_mod = calc_probs_from_stats(mods, away_active_batters, away_event_mods, away_team_batting, away_team_running, home_team_defense, homePitcherStlats, homepitcherAttrs, awayPlayerAttrs, awayAttrs, homeAttrs, adjustments, ruth_strike_adjust, blood_calc, outs)
+
+    if home_blood:
+        blood_calc = "a" in homeAttrs
+
+        home_runner_advance_chance, home_caught_out_chance, home_sacrifice_chance, home_score_mod, home_hit_modifier, home_homerun_multipliers, home_score_multiplier, home_attempt_steal_chance, home_walk_chance, home_strike_out_chance, home_caught_steal_base_chance, home_caught_steal_home_chance, home_homerun_chance, home_triple_chance, home_double_chance, home_single_chance, home_caught_steal_outs, home_on_base_chance, home_average_on_first, home_average_on_second, home_average_on_third, home_steal_mod, home_walk_mod = calc_probs_from_stats(mods, home_active_batters, home_event_mods, home_team_batting, home_team_running, away_team_defense, awayPitcherStlats, awaypitcherAttrs, homePlayerAttrs, homeAttrs, homeAttrs, adjustments, ruth_strike_adjust, blood_calc, outs)
+
+    if away_blood:
+        away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod = blood_impact_shallow(away_strike_out_chance, away_caught_steal_outs, away_caught_out_chance, away_double_chance, away_triple_chance, away_on_base_chance, flooding, awayAttrs, away_active_batters, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod)
+
+        away_team_batting, away_team_running, away_team_defense, awayPitcherStlats = calc_team_stlats(pitching_terms, defense_terms, batting_terms, running_terms, away_batters, away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods, away_defense, away_batting, away_running, away_pitcher_stat_data, away_adj_def, away_adj_bat, away_adj_run, away_shelled, away_average_aa_impact, away_average_aaa_impact, away_high_pressure_mod)
+        
+    if home_blood:
+        home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod = blood_impact_shallow(home_strike_out_chance, home_caught_steal_outs, home_caught_out_chance, home_double_chance, home_triple_chance, home_on_base_chance, flooding, homeAttrs, home_active_batters, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod)
+
+        home_team_batting, home_team_running, home_team_defense, homePitcherStlats = calc_team_stlats(pitching_terms, defense_terms, batting_terms, running_terms, home_batters, home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods, home_defense, home_batting, home_running, home_pitcher_stat_data, home_adj_def, home_adj_bat, home_adj_run, home_shelled, home_average_aa_impact, home_average_aaa_impact, home_high_pressure_mod)
+    
+    blood_calc = "madJayEm" in awayAttrs
+    away_home = "madJayEm" in awayAttrs
+
+    away_runner_advance_chance, away_caught_out_chance, away_sacrifice_chance, away_score_mod, away_hit_modifier, away_homerun_multipliers, away_score_multiplier, away_attempt_steal_chance, away_walk_chance, away_strike_out_chance, away_caught_steal_base_chance, away_caught_steal_home_chance, away_homerun_chance, away_triple_chance, away_double_chance, away_single_chance, away_caught_steal_outs, away_on_base_chance, away_average_on_first, away_average_on_second, away_average_on_third, away_steal_mod, away_walk_mod = calc_probs_from_stats(mods, away_active_batters, away_event_mods, away_team_batting, away_team_running, home_team_defense, homePitcherStlats, homepitcherAttrs, awayPlayerAttrs, awayAttrs, homeAttrs, adjustments, ruth_strike_adjust, blood_calc, outs)              
+    
+    away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era = simulate_game(away_active_batters, awayAttrs, awayPlayerAttrs, blank_score, away_home, outs, away_homerun_chance, away_triple_chance, away_double_chance, away_single_chance, away_walk_chance, float64(away_walk_mod), away_sacrifice_chance, away_runner_advance_chance, away_average_on_first, away_average_on_second, away_average_on_third, reverb_weather, float64(away_score_mod), away_strike_out_chance, away_caught_out_chance, away_caught_steal_base_chance, away_caught_steal_home_chance, away_attempt_steal_chance, away_homerun_multipliers, away_hit_modifier, away_steal_mod, away_score_multiplier)                           
+    
+    away_score = float64(away_score % 1000.0) if (sun_weather or bh_weather) else away_score    
+
+    blood_calc = "madJayEm" in homeAttrs
+    away_home = not ("madJayEm" in awayAttrs)
+
+    home_runner_advance_chance, home_caught_out_chance, home_sacrifice_chance, home_score_mod, home_hit_modifier, home_homerun_multipliers, home_score_multiplier, home_attempt_steal_chance, home_walk_chance, home_strike_out_chance, home_caught_steal_base_chance, home_caught_steal_home_chance, home_homerun_chance, home_triple_chance, home_double_chance, home_single_chance, home_caught_steal_outs, home_on_base_chance, home_average_on_first, home_average_on_second, home_average_on_third, home_steal_mod, home_walk_mod = calc_probs_from_stats(mods, home_active_batters, home_event_mods, home_team_batting, home_team_running, away_team_defense, awayPitcherStlats, awaypitcherAttrs, homePlayerAttrs, homeAttrs, homeAttrs, adjustments, ruth_strike_adjust, blood_calc, outs)               
+
+    home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era = simulate_game(home_active_batters, homeAttrs, homePlayerAttrs, away_score, away_home, outs, home_homerun_chance, home_triple_chance, home_double_chance, home_single_chance, home_walk_chance, float64(home_walk_mod), home_sacrifice_chance, home_runner_advance_chance, home_average_on_first, home_average_on_second, home_average_on_third, reverb_weather, float64(home_score_mod), home_strike_out_chance, home_caught_out_chance, home_caught_steal_base_chance, home_caught_steal_home_chance, home_attempt_steal_chance, home_homerun_multipliers, home_hit_modifier, home_steal_mod, home_score_multiplier)                           
+
+    home_score = float64(home_score % 1000.0) if (sun_weather or bh_weather) else home_score            
+
+    return away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era, home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era    
+
+def get_mofo_playerbased(dict_mods, awayAttrs, homeAttrs, weather, away_pitcher_stat_data, home_pitcher_stat_data, terms, away_batter_order, away_active_batters, home_batter_order, home_active_batters, awayMods, homeMods, away_adj_def, away_adj_bat, away_adj_run, home_adj_def, home_adj_bat, home_adj_run, dict_adjustments, away_shelled, away_defense, away_batting, away_running, awayPlayerAttrs, awaypitcherAttrs, home_shelled, home_defense, home_batting, home_running, homePlayerAttrs, homepitcherAttrs):         
     polarity_plus, polarity_minus, flood_weather = helpers.get_weather_idx("Polarity +"), helpers.get_weather_idx("Polarity -"), helpers.get_weather_idx("Flooding")    
 
     flooding = weather == flood_weather
@@ -769,85 +889,24 @@ def get_mofo_playerbased(gameid, trace_mem, dict_mods, awayPitcher, homePitcher,
     home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods, home_event_mods = tuple(homeMods[0]), tuple(homeMods[1]), tuple(homeMods[2]), tuple(homeMods[3]), tuple(homeMods[4])
 
     away_batters, home_batters = len(away_batter_order), len(home_batter_order)
+    away_active, home_active = len(away_active_batters), len(home_active_batters)
     away_blood = "aaa" in awayAttrs or "aa" in awayAttrs or "a" in awayAttrs or ("high_pressure" in awayAttrs and flooding)
-    home_blood = "aaa" in homeAttrs or "aa" in homeAttrs or "a" in homeAttrs or ("high_pressure" in homeAttrs and flooding)        
-
-    #if trace_mem:
-    #    print(" Away player attrs {}\n Home player attrs {}".format(awayPlayerAttrs, homePlayerAttrs))
-    #    print(" Away pitcher attrs {}\n Home pitcher attrs {}".format(awaypitcherAttrs, homepitcherAttrs))
-    #    print(" Away team attrs {}\n Home team attrs {}".format(awayAttrs, homeAttrs))
-
-    #if away_blood or home_blood:
-
-    #if trace_mem:
-    #    before = tracemalloc.take_snapshot()
-    #    before = before.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))     
-
-    away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era, home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era = get_mofo_pb_blood_launcher(away_blood, home_blood, pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, away_batters, away_active_batters, away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods, away_event_mods, away_defense, away_batting, away_running, away_pitcher_stat_data, awaypitcherAttrs, awayPlayerAttrs, awayAttrs, away_adj_def, away_adj_bat, away_adj_run, away_shelled, home_batters, home_active_batters, home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods, home_event_mods, home_defense, home_batting, home_running, home_pitcher_stat_data, homepitcherAttrs, homePlayerAttrs, homeAttrs, home_adj_def, home_adj_bat, home_adj_run, home_shelled, adjustments, ruth_strike_adjust, check_weather)
-
-    #if trace_mem:
-    #    after_score = tracemalloc.take_snapshot()
-    #    after_score = after_score.filter_traces((tracemalloc.Filter(True, "*dispatcher.py"),))        
-    #    top_stats = after_score.compare_to(before, 'lineno')                            
-    #    if top_stats[0].size_diff > 0:                        
-    #        print("Increase from score {}".format(top_stats[0]))         
-    #        #output_string = " Away player attrs {}\n Home player attrs {}".format(awayPlayerAttrs, homePlayerAttrs)
-    #        #output_string += "\n Away pitcher attrs {}\n Home pitcher attrs {}".format(awaypitcherAttrs, homepitcherAttrs)
-    #        #output_string += "\n Away team attrs {}\n Home team attrs {}".format(awayAttrs, homeAttrs)
-    #        #output_string += "\n Away shelled {}\n Home shelled {}".format(away_shelled, home_shelled)            
-    #        #filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\' + gameid + 'playerinfo.txt'
-    #        #log_file = open(filename, 'w')
-    #        #log_file.write(output_string)
-    #        #log_file.close()
-    #        #filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\' + gameid + '_get_mofo_pb_blood_launcher.txt'
-    #        #log_file = open(filename, 'w')
-    #        #get_mofo_pb_blood_launcher.inspect_types(file=log_file)        
-    #        #log_file.close()
-    #        #filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\' + gameid + '_calc_probs_from_stats.txt'
-    #        #log_file = open(filename, 'w')
-    #        #calc_probs_from_stats.inspect_types(file=log_file)        
-    #        #log_file.close()
-    #        #filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\' + gameid + '_simulate_game.txt'
-    #        #log_file = open(filename, 'w')
-    #        #simulate_game.inspect_types(file=log_file)        
-    #        #log_file.close()
-    #        #filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\' + gameid + '_calc_team_score.txt'
-    #        #log_file = open(filename, 'w')
-    #        #calc_team_score.inspect_types(file=log_file)        
-    #        #log_file.close()
-    #        #filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\' + gameid + '_blood_impact_calc.txt'
-    #        #log_file = open(filename, 'w')
-    #        #blood_impact_calc.inspect_types(file=log_file)        
-    #        #log_file.close()            
-    #    else:
-    #        print("No increase from score {}".format(top_stats[0]))    
-        
-    #else:
-    #    away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era, home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era = get_mofo_pb_launcher(pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, away_batters, away_active_batters, away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods, away_event_mods, away_defense, away_batting, away_running, away_pitcher_stat_data, awaypitcherAttrs, awayPlayerAttrs, awayAttrs, away_adj_def, away_adj_bat, away_adj_run, away_shelled, home_batters, home_active_batters, home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods, home_event_mods, home_defense, home_batting, home_running, home_pitcher_stat_data, homepitcherAttrs, homePlayerAttrs, homeAttrs, home_adj_def, home_adj_bat, home_adj_run, home_shelled, adjustments, ruth_strike_adjust, check_weather)
+    home_blood = "aaa" in homeAttrs or "aa" in homeAttrs or "a" in homeAttrs or ("high_pressure" in homeAttrs and flooding)          
     
+    #first, second, preall_mi_alloc, preall_mi_free = rtsys.get_allocation_stats()        
 
-    #if trace_mem:
-    #    print("Away results:\n Score {}\n Steals {}\n Homers {}\n Hits {}\n Home Ks {}\n Home era {}\n".format(away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era))
-    #    print("Home results:\n Score {}\n Steals {}\n Homers {}\n Hits {}\n Home Ks {}\n Home era {}\n".format(home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era))
+    away_score, away_steals, away_home_runs, away_hit_balls, home_pitcher_ks, home_pitcher_era, home_score, home_steals, home_home_runs, home_hit_balls, away_pitcher_ks, away_pitcher_era = get_mofo_shallow_launcher(away_blood, home_blood, pitching_terms, defense_terms, batting_terms, running_terms, mods, flooding, away_batters, away_active, away_pitching_mods, away_defense_mods, away_batting_mods, away_running_mods, away_event_mods, away_defense, away_batting, away_running, away_pitcher_stat_data, awaypitcherAttrs, awayPlayerAttrs, awayAttrs, away_adj_def, away_adj_bat, away_adj_run, away_shelled, home_batters, home_active, home_pitching_mods, home_defense_mods, home_batting_mods, home_running_mods, home_event_mods, home_defense, home_batting, home_running, home_pitcher_stat_data, homepitcherAttrs, homePlayerAttrs, homeAttrs, home_adj_def, home_adj_bat, home_adj_run, home_shelled, adjustments, ruth_strike_adjust, check_weather)        
 
-    away_stolen_bases, away_homers, away_hits = {}, {}, {}
-    home_stolen_bases, home_homers, home_hits = {}, {}, {}
-    
-    active_away_batter, active_home_batter = 0, 0
+    away_stolen_bases = dict(zip(away_active_batters, away_steals))
+    away_homers = dict(zip(away_active_batters, away_home_runs))
+    away_hits = dict(zip(away_active_batters, away_hit_balls))
+    home_stolen_bases = dict(zip(home_active_batters, home_steals))
+    home_homers = dict(zip(home_active_batters, home_home_runs))
+    home_hits = dict(zip(home_active_batters, home_hit_balls))
 
-    for batter in range(0, max(away_batters, home_batters)):
-        if batter < away_batters:
-            if not away_shelled[batter]:
-                away_stolen_bases[away_batter_order[batter]] = away_steals[active_away_batter]
-                away_homers[away_batter_order[batter]] = away_home_runs[active_away_batter]
-                away_hits[away_batter_order[batter]] = away_hit_balls[active_away_batter] 
-                active_away_batter += 1
-        if batter < home_batters:
-            if not home_shelled[batter]:
-                home_stolen_bases[home_batter_order[batter]] = home_steals[active_home_batter]
-                home_homers[home_batter_order[batter]] = home_home_runs[active_home_batter]
-                home_hits[home_batter_order[batter]] = home_hit_balls[active_home_batter]
-                active_home_batter += 1    
+    del away_steals, away_home_runs, away_hit_balls, home_steals, home_home_runs, home_hit_balls
+
+    #print("Away steals {}\nHome steals {}".format(away_stolen_bases, home_stolen_bases))
 
     if away_score < 0:
         away_score += abs(away_score) * 2.0
@@ -859,13 +918,10 @@ def get_mofo_playerbased(gameid, trace_mem, dict_mods, awayPitcher, homePitcher,
     numerator = away_score - home_score
     denominator = away_score + home_score              
 
-    #if (helpers.get_weather_idx("Sun 2") == weather) or (helpers.get_weather_idx("Black Hole") == weather):
-    #    print("Away score = {}, home_score = {}".format(away_score, home_score))
-
     #first, second, postall_mi_alloc, postall_mi_free = rtsys.get_allocation_stats()    
     #if ((postall_mi_alloc - preall_mi_alloc) - (postall_mi_free - preall_mi_free)) > 0:
     #    print("Leak from entire getplayerbased = {}".format(((postall_mi_alloc - preall_mi_alloc) - (postall_mi_free - preall_mi_free))))   
-    
+        
     if not denominator or weather == polarity_plus or weather == polarity_minus:                
         return .5, .5, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
     
@@ -876,6 +932,31 @@ def get_mofo_playerbased(gameid, trace_mem, dict_mods, awayPitcher, homePitcher,
         
     return away_odds, 1.0 - away_odds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
     
+def inspect_types_numba_methods():
+    filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\get_mofo_shallow_launcher.txt'
+    log_file = open(filename, 'w')    
+    get_mofo_shallow_launcher.inspect_types(log_file)
+    log_file.close()
+
+    filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\blood_impact_shallow.txt'
+    log_file = open(filename, 'w')
+    blood_impact_shallow.inspect_types(log_file)
+    log_file.close()
+
+    filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\calc_team_stlats.txt'
+    log_file = open(filename, 'w')
+    calc_team_stlats.inspect_types(log_file)    
+    log_file.close()
+
+    filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\calc_probs_from_stats.txt'
+    log_file = open(filename, 'w')
+    calc_probs_from_stats.inspect_types(log_file)
+    log_file.close()
+
+    filename = 'C:\\Users\\milicic\\Downloads\\Blaseball\\Modeling\\AutoOutput\\simulate_game.txt'
+    log_file = open(filename, 'w')
+    simulate_game.inspect_types(log_file)
+    log_file.close()
 
 def get_park_mods(ballpark, ballpark_mods):
     awayMods, homeMods = collections.defaultdict(lambda: []), collections.defaultdict(lambda: [])  
@@ -1012,18 +1093,18 @@ def setup(weather, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePi
     awayMods, homeMods = get_mods(mods, awayAttrs, homeAttrs, awayTeam, homeTeam, awayPitcher, homePitcher, weather, ballpark, ballpark_mods, team_stat_data, pitcher_stat_data)
     return terms, awayMods, homeMods
 
-def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods,
-             skip_mods=False):
-    away_offense = abs(team_offense(terms, awayTeam, awayMods, team_stat_data, skip_mods=skip_mods))
-    away_defense = abs(team_defense(terms, awayPitcher, awayTeam, awayMods, team_stat_data, pitcher_stat_data,
-                                    skip_mods=skip_mods))
-    home_offense = abs(team_offense(terms, homeTeam, homeMods, team_stat_data, skip_mods=skip_mods))
-    home_defense = abs(team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data,
-                                    skip_mods=skip_mods))
-    numerator = (away_offense - home_defense) - (home_offense - away_defense)
-    denominator = abs((away_offense - home_defense) + (home_offense - away_defense))
-    if not denominator:
-        return .5, .5    
-    away_formula = numerator / denominator    
-    away_odds = log_transform(away_formula, 100.0)    
-    return away_odds, 1.0 - away_odds
+#def get_mofo(awayPitcher, homePitcher, awayTeam, homeTeam, team_stat_data, pitcher_stat_data, terms, awayMods, homeMods,
+#             skip_mods=False):
+#    away_offense = abs(team_offense(terms, awayTeam, awayMods, team_stat_data, skip_mods=skip_mods))
+#    away_defense = abs(team_defense(terms, awayPitcher, awayTeam, awayMods, team_stat_data, pitcher_stat_data,
+#                                    skip_mods=skip_mods))
+#    home_offense = abs(team_offense(terms, homeTeam, homeMods, team_stat_data, skip_mods=skip_mods))
+#    home_defense = abs(team_defense(terms, homePitcher, homeTeam, homeMods, team_stat_data, pitcher_stat_data,
+#                                    skip_mods=skip_mods))
+#    numerator = (away_offense - home_defense) - (home_offense - away_defense)
+#    denominator = abs((away_offense - home_defense) + (home_offense - away_defense))
+#    if not denominator:
+#        return .5, .5    
+#    away_formula = numerator / denominator    
+#    away_odds = log_transform(away_formula, 100.0)    
+#    return away_odds, 1.0 - away_odds

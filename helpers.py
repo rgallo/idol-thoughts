@@ -18,7 +18,6 @@ from discord_webhook import DiscordWebhook, DiscordEmbed
 from blaseball_stat_csv import blaseball_stat_csv
 import numpy as np
 from numba import njit, float64
-from numba.typed import List
 from numba.experimental import jitclass
 
 #from numba.core.unsafe.nrt import NRT_get_api
@@ -471,7 +470,7 @@ def calc_adjustments_per_team(attrs, team, team_stat_data):
     sorted_batters = dict(sorted(batter_order.items(), key=lambda item: item[1]))
     batters = list(sorted_batters.keys())
     adjusted_defense_data, adjusted_batting_data, adjusted_running_data = np.zeros((20, 5)), np.zeros((20, 7)), np.zeros((20, 5))
-    active_batters = 0
+    active_batters = []
 
     blood = ("a" in attrs) or ("aa" in attrs) or ("aaa" in attrs)
     high_pressure = "high_pressure" in attrs    
@@ -493,11 +492,11 @@ def calc_adjustments_per_team(attrs, team, team_stat_data):
         if not team_stat_data[team][playerid]["shelled"]:
             adjusted_batting_values = list(adjusted_batting_stlats.values())
             for vidx in range(0, 7):
-                adjusted_batting_data[active_batters, vidx] = float64(adjusted_batting_values[vidx]) if float64(adjusted_batting_values[vidx]) >= 0.01 else float64(0.0)
+                adjusted_batting_data[len(active_batters), vidx] = float64(adjusted_batting_values[vidx]) if float64(adjusted_batting_values[vidx]) >= 0.01 else float64(0.0)
             adjusted_running_values = list(adjusted_running_stlats.values())
             for vidx in range(0, 5):
-                adjusted_running_data[active_batters, vidx] = float64(adjusted_running_values[vidx])        
-            active_batters += 1
+                adjusted_running_data[len(active_batters), vidx] = float64(adjusted_running_values[vidx])        
+            active_batters.append(playerid)
     
     return adjusted_defense_data, adjusted_batting_data, adjusted_running_data, batters, active_batters
 
