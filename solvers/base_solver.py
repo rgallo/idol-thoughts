@@ -59,6 +59,7 @@ MIN_SEASON = 22
 MAX_SEASON = 23
 
 BEST_RESULT = 22687498004247900
+AVERAGE_WORST_ALL = 0.0
 BEST_FAIL_RATE = 1.0
 SOLUTIONS_TO_FILL = 0
 MIN_DAY = 1
@@ -1704,6 +1705,15 @@ def minimize_func(parameters, *data):
     publish_solution = False
     #print("Testing that this part works correctly: factors = {}".format(FACTORS))
     last_possible_result = 0.0
+    if CURRENT_ITERATION == 1:
+        for possible_focus in FACTORS:
+            if possible_focus == "all":            
+                continue        
+            focused_values = np.array(FACTORS[possible_focus])
+            #first, second, pre_mi_alloc, pre_mi_free = rtsys.get_allocation_stats()    
+            possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                                    
+            AVERAGE_WORST_ALL += possible_result / 5.0
+
     for possible_focus in FACTORS:
         if possible_focus == "all":
             max_all = max(FACTORS["all"])
@@ -1716,8 +1726,8 @@ def minimize_func(parameters, *data):
         possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                                    
         #first, second, post_mi_alloc, post_mi_free = rtsys.get_allocation_stats()
         #if ((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)) > 0:
-        #    print("Leak from get factor and best = {}".format(((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free))))
-        if (errors[possible_focus] < possible_focused) and (linear_points < possible_result):
+        #    print("Leak from get factor and best = {}".format(((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free))))        
+        if (errors[possible_focus] < possible_focused) and (linear_points < AVERAGE_WORST_ALL):
             publish_solution = True                
         if possible_result >= last_possible_result:
             focused_result = possible_focused
@@ -1756,6 +1766,7 @@ def minimize_func(parameters, *data):
         factor_file = open(factorsdir, "rb")        
         FACTORS = pickle.load(factor_file)
         factor_file.close()                    
+        new_average_worst_all = AVERAGE_WORST_ALL
         for pot_focus in FACTORS:
             if pot_focus == "all":
                 max_all = max(FACTORS["all"])
@@ -1765,8 +1776,10 @@ def minimize_func(parameters, *data):
                 continue            
             focused_values = np.array(FACTORS[pot_focus])
             possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                
-            if (errors[pot_focus] < possible_focused) and ((int(linear_points) < possible_result) or solution_regen):                
+            if (errors[pot_focus] < possible_focused) and ((int(linear_points) < AVERAGE_WORST_ALL) or solution_regen):                
                 FACTORS[pot_focus][possible_replacement_index] = (int(errors[pot_focus]), int(linear_points))
+                new_average_worst_all = new_average_worst_all - (possible_result / 5.0) + (errors[pot_focus] / 5.0)
+        AVERAGE_WORST_ALL = new_average_worst_all
         factor_write_file = open(factorsdir, "wb")
         pickle.dump(FACTORS, factor_write_file)
         factor_write_file.close()   
