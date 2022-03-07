@@ -916,7 +916,7 @@ def get_mofo_playerbased(dict_mods, awayAttrs, homeAttrs, weather, away_pitcher_
         home_score += abs(home_score) * 2.0
 
     numerator = away_score - home_score
-    denominator = away_score + home_score              
+    denominator = ((away_score + 1000.0) + (home_score + 1000.0)) / math.e
 
     #first, second, postall_mi_alloc, postall_mi_free = rtsys.get_allocation_stats()    
     #if ((postall_mi_alloc - preall_mi_alloc) - (postall_mi_free - preall_mi_free)) > 0:
@@ -927,7 +927,8 @@ def get_mofo_playerbased(dict_mods, awayAttrs, homeAttrs, weather, away_pitcher_
     
     away_formula = numerator / denominator           
     
-    log_transform_base = 10.0
+    #log_transform_base = 10.0
+    log_transform_base = math.e
     away_odds = log_transform(away_formula, log_transform_base)                   
         
     return away_odds, 1.0 - away_odds, away_hits, home_hits, away_homers, home_homers, away_stolen_bases, home_stolen_bases, away_pitcher_ks, home_pitcher_ks, away_pitcher_era, home_pitcher_era
