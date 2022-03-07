@@ -629,6 +629,7 @@ def minimize_func(parameters, *data):
     global FACTORS
     global PREVIOUS_FOCUS
     global SOLUTIONS_TO_FILL
+    global AVERAGE_WORST_ALL
     #global JITCLASSED_TUPLELIST
     #global STLAT_TERMS
     #global VALUES_OF_FOCUS
