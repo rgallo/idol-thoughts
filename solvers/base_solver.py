@@ -59,6 +59,7 @@ MIN_SEASON = 22
 MAX_SEASON = 23
 
 BEST_RESULT = 22687498004247900
+AVERAGE_WORST_ALL = 0.0
 BEST_FAIL_RATE = 1.0
 SOLUTIONS_TO_FILL = 0
 MIN_DAY = 1
@@ -282,19 +283,24 @@ def debug_print(s, debug, run_id):
     if debug:
         print("{} - {}".format(run_id, s))
 
+#max_value now needs to represent the next-highest all value in the set
 @njit(nogil=True)
 def get_factor_and_best(focused_values):  
     replacement_index = 6
-    best_all, best_focused, max_value, min_all = 0.0, 0.0, 0.0, 0.0
-    for idx in range(0, len(focused_values)):                
+    best_all, best_focused, max_value, min_all, average_focused = 0.0, 0.0, 0.0, 0.0, 0.0
+    for idx in range(0, len(focused_values)):                        
+        average_focused += float(focused_values[idx][0]) / 5.0
         if float(focused_values[idx][1]) > best_all:
-            best_all = float(focused_values[idx][1])                       
-        if float(focused_values[idx][0]) > max_value:
+            max_value = float(best_all)
+            best_all = float(focused_values[idx][1])            
+        if (float(focused_values[idx][1]) < best_all) and (float(focused_values[idx][1]) > max_value):
+            max_value = float(focused_values[idx][1])
+        if float(focused_values[idx][0]) > best_focused:                        
             replacement_index = int(idx)
-            best_focused = float(focused_values[idx][0]) 
-            max_value = best_focused
+            best_focused = float(focused_values[idx][0])        
         if (min_all == 0.0) or (float(focused_values[idx][1]) < min_all):
-            min_all = float(focused_values[idx][1])
+            min_all = float(focused_values[idx][1])    
+    best_focused = average_focused
     return best_all, best_focused, max_value, replacement_index, min_all
 
 def calc_linear_unex_error(vals, wins_losses, modname=None):
@@ -628,7 +634,7 @@ def minimize_func(parameters, *data):
     global FACTORS
     global PREVIOUS_FOCUS
     global SOLUTIONS_TO_FILL
-    average_worst_all = 0.0    
+    global AVERAGE_WORST_ALL
     #global JITCLASSED_TUPLELIST
     #global STLAT_TERMS
     #global VALUES_OF_FOCUS
@@ -686,7 +692,7 @@ def minimize_func(parameters, *data):
 
     if CURRENT_ITERATION == 1:
         if solution_regen:
-            FACTORS = {'seeds': [(9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999)], 'dogs': [(9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999)], 'pickles': [(9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999)], 'chips': [(9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999)], 'meatballs': [(9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999), (9999999999999999, 99999999999999999)], 'all': [99999999999999999, 99999999999999999, 99999999999999999, 99999999999999999, 99999999999999999]}
+            FACTORS = {'seeds': [(9999999999999999, 99999999999999999), (9999999999999998, 88999999999999998), (9999999999999997, 77999999999999997), (9999999999999999, 76999999999999996), (9999999999999995, 70999999999999995)], 'dogs': [(9999999999999999, 99999999999999999), (9999999999999998, 88999999999999998), (9999999999999997, 77999999999999997), (9999999999999999, 76999999999999996), (9999999999999995, 70999999999999995)], 'pickles': [(9999999999999999, 99999999999999999), (9999999999999998, 88999999999999998), (9999999999999997, 77999999999999997), (9999999999999999, 76999999999999996), (9999999999999995, 70999999999999995)], 'chips': [(9999999999999999, 99999999999999999), (9999999999999998, 88999999999999998), (9999999999999997, 77999999999999997), (9999999999999999, 76999999999999996), (9999999999999995, 70999999999999995)], 'meatballs': [(9999999999999999, 99999999999999999), (9999999999999998, 88999999999999998), (9999999999999997, 77999999999999997), (9999999999999999, 76999999999999996), (9999999999999995, 70999999999999995)], 'all': [99999999999999999, 99999999999999998, 99999999999999997, 99999999999999996, 99999999999999995]}
             factor_write_file = open(factorsdir, "wb")
             pickle.dump(FACTORS, factor_write_file)
             factor_write_file.close()
@@ -1705,13 +1711,14 @@ def minimize_func(parameters, *data):
     publish_solution = False
     #print("Testing that this part works correctly: factors = {}".format(FACTORS))
     last_possible_result = 0.0    
-    for possible_focus in FACTORS:
-        if possible_focus == "all":            
-            continue        
-        focused_values = np.array(FACTORS[possible_focus])
-        #first, second, pre_mi_alloc, pre_mi_free = rtsys.get_allocation_stats()    
-        possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                                    
-        average_worst_all += possible_result / 5.0    
+    if CURRENT_ITERATION == 1:
+        for possible_focus in FACTORS:
+            if possible_focus == "all":            
+                continue        
+            focused_values = np.array(FACTORS[possible_focus])
+            #first, second, pre_mi_alloc, pre_mi_free = rtsys.get_allocation_stats()    
+            possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                                    
+            AVERAGE_WORST_ALL += possible_result / 5.0    
 
     for possible_focus in FACTORS:
         if possible_focus == "all":
@@ -1726,7 +1733,7 @@ def minimize_func(parameters, *data):
         #first, second, post_mi_alloc, post_mi_free = rtsys.get_allocation_stats()
         #if ((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free)) > 0:
         #    print("Leak from get factor and best = {}".format(((post_mi_alloc - pre_mi_alloc) - (post_mi_free - pre_mi_free))))        
-        if (errors[possible_focus] < possible_focused) and (linear_points < average_worst_all):
+        if (errors[possible_focus] < possible_focused) and (linear_points < AVERAGE_WORST_ALL):
             publish_solution = True                
         if possible_result >= last_possible_result:
             focused_result = possible_focused
@@ -1736,7 +1743,7 @@ def minimize_func(parameters, *data):
             min_factors_alls = possible_min_all
     if max_all > min_factors_alls:
         focus = "all"        
-    BEST_RESULT = min(FACTORS["all"])    
+    BEST_RESULT = min(FACTORS["all"])        
     #if CURRENT_ITERATION == 1:        
     #publish_solution = linear_fail < BEST_RESULT
 
@@ -1755,17 +1762,16 @@ def minimize_func(parameters, *data):
     #publish_solution = linear_fail < FAILED_SOLUTIONS[population_member]    
     #if ((linear_fail < BEST_RESULT) and publish_solution and focus == "all") or (publish_solution and focus != "all") or solution_regen:
     #first, second, prepub_mi_alloc, prepub_mi_free = rtsys.get_allocation_stats()     
-    if publish_solution or solution_regen:
+    if (publish_solution and (CURRENT_ITERATION > popsize)) or solution_regen:
         #if focus == "all":
         #BEST_RESULT = linear_fail                
-        #reported_focus = []       
-        # 
+        #reported_focus = []
         #commented out for dealing with init data
         #if not solution_regen:
         factor_file = open(factorsdir, "rb")        
         FACTORS = pickle.load(factor_file)
         factor_file.close()                    
-        new_average_worst_all = average_worst_all
+        new_average_worst_all = AVERAGE_WORST_ALL
         for pot_focus in FACTORS:
             if pot_focus == "all":
                 max_all = max(FACTORS["all"])
@@ -1775,10 +1781,15 @@ def minimize_func(parameters, *data):
                 continue            
             focused_values = np.array(FACTORS[pot_focus])
             possible_result, possible_focused, possible_factor, possible_replacement_index, possible_min_all = get_factor_and_best(focused_values)                
-            #if (errors[pot_focus] < possible_focused) and ((int(linear_points) < average_worst_all) or solution_regen):                
-            if (errors[pot_focus] < possible_focused) and (int(linear_points) < average_worst_all):
+            #if (errors[pot_focus] < possible_focused) and ((int(linear_points) < average_worst_all) or solution_regen):   
+            #print("{} linear points = {:.0f}; average worst all = {:.0f}; focused error = {:.0f}; possible focused = {:.0f}".format(pot_focus, linear_points, AVERAGE_WORST_ALL, errors[pot_focus], possible_focused))             
+            #print("{} linear points = {:.0f}; average worst all = {:.0f}; focused error = {:.0f}; possible focused = {:.0f}, worst all in set = {:.0f}, second worst all in set = {:.0f}".format(pot_focus, linear_points, AVERAGE_WORST_ALL, errors[pot_focus], possible_focused, possible_result, possible_factor))
+            #if (errors[pot_focus] < possible_focused) and (linear_points < AVERAGE_WORST_ALL or solution_regen):
+            if (errors[pot_focus] < possible_focused) and (linear_points < AVERAGE_WORST_ALL):
+                if float(FACTORS[pot_focus][possible_replacement_index][1]) >= possible_result:
+                    new_average_worst_all = new_average_worst_all - (possible_result / 5.0) + (possible_factor / 5.0)
                 FACTORS[pot_focus][possible_replacement_index] = (int(errors[pot_focus]), int(linear_points))
-                new_average_worst_all = new_average_worst_all - (possible_result / 5.0) + (errors[pot_focus] / 5.0)            
+                
         AVERAGE_WORST_ALL = new_average_worst_all
         factor_write_file = open(factorsdir, "wb")
         pickle.dump(FACTORS, factor_write_file)
@@ -1887,9 +1898,9 @@ def minimize_func(parameters, *data):
             debug_print(detailtext, debug, run_id)
             if outputdir:
                 write_file(outputdir, run_id, "details.txt", detailtext)
-                if solution_regen:
-                    solutiontext = "{}-details,{},{},{},{},{},{}\n".format(run_id, int(seeds_error), int(dogs_error), int(pickles_error), int(chips_error), int(meatballs_error), int(linear_points))
-                    write_to_file(outputdir, "solutions.txt", solutiontext)
+                #if solution_regen:
+                solutiontext = "{}-details,{},{},{},{},{},{}\n".format(run_id, int(seeds_error), int(dogs_error), int(pickles_error), int(chips_error), int(meatballs_error), int(linear_points))
+                write_to_file(outputdir, "solutions.txt", solutiontext)
             if sys.platform == "darwin":  # MacOS
                 os.system("""osascript -e 'display notification "Fail rate {:.4f}%" with title "New solution found!"'""".format(fail_rate * 100.0))                        
             debug_print("Iteration #{}".format(CURRENT_ITERATION), debug, run_id)            
